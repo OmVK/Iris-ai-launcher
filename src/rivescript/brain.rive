@@ -1,0 +1,349 @@
+! version = 2.0
+
+! var name = Iris
+
+// Substitutions
+! sub i'm = i am
+! sub i'd = i would
+! sub i've = i have
+! sub i'll = i will
+! sub don't = do not
+! sub isn't = is not
+! sub you'd = you would
+! sub you're = you are
+! sub you've = you have
+! sub you'll = you will
+! sub what's = what is
+! sub whats = what is
+! sub what're = what are
+! sub what've = what have
+! sub what'll = what will
+! sub who's = who is
+
+// Flashlight
++ * flashlight *
+- <call>set_flashlight true</call> Done.
+
++ flashlight
+- <call>set_flashlight toggle</call> Done.
+
++ turn on flashlight
+- <call>set_flashlight true</call> Flashlight on.
+
++ turn off flashlight
+- <call>set_flashlight false</call> Flashlight off.
+
++ enable flashlight
+- <call>set_flashlight true</call> Flashlight on.
+
++ disable flashlight
+- <call>set_flashlight false</call> Flashlight off.
+
++ switch on flashlight
+- <call>set_flashlight true</call> Flashlight on.
+
++ switch off flashlight
+- <call>set_flashlight false</call> Flashlight off.
+
+// WiFi
++ turn on wifi
+- <call>set_wifi true</call> Wi-Fi enabled.
+
++ turn off wifi
+- <call>set_wifi false</call> Wi-Fi disabled.
+
++ enable wifi
+- <call>set_wifi true</call> Wi-Fi enabled.
+
++ disable wifi
+- <call>set_wifi false</call> Wi-Fi disabled.
+
++ switch on wifi
+- <call>set_wifi true</call> Wi-Fi enabled.
+
++ switch off wifi
+- <call>set_wifi false</call> Wi-Fi disabled.
+
++ wifi on
+- <call>set_wifi true</call> Wi-Fi enabled.
+
++ wifi off
+- <call>set_wifi false</call> Wi-Fi disabled.
+
+// Bluetooth
++ turn on bluetooth
+- <call>set_bluetooth true</call> Bluetooth on.
+
++ turn off bluetooth
+- <call>set_bluetooth false</call> Bluetooth off.
+
++ enable bluetooth
+- <call>set_bluetooth true</call> Bluetooth on.
+
++ disable bluetooth
+- <call>set_bluetooth false</call> Bluetooth off.
+
++ switch on bluetooth
+- <call>set_bluetooth true</call> Bluetooth on.
+
++ switch off bluetooth
+- <call>set_bluetooth false</call> Bluetooth off.
+
+// Volume
++ volume up
+- <call>set_volume up</call> Volume up.
+
++ volume down
+- <call>set_volume down</call> Volume down.
+
++ increase volume
+- <call>set_volume up</call> Volume up.
+
++ decrease volume
+- <call>set_volume down</call> Volume down.
+
++ louder
+- <call>set_volume up</call> Volume up.
+
++ quieter
+- <call>set_volume down</call> Volume down.
+
++ mute
+- <call>set_volume mute</call> Muted.
+
++ unmute
+- <call>set_volume unmute</call> Unmuted.
+
+// Battery
++ battery
+- <call>check_battery</call>
+
++ battery level
+- <call>check_battery</call>
+
++ what is my battery level
+- <call>check_battery</call>
+
++ how much battery
+- <call>check_battery</call>
+
++ battery percentage
+- <call>check_battery</call>
+
+// Apps
++ open *
+- <call>launch_app <star></call> Opening <star>.
+
++ launch *
+- <call>launch_app <star></call> Opening <star>.
+
++ start *
+- <call>launch_app <star></call> Starting <star>.
+
++ run *
+- <call>launch_app <star></call> Running <star>.
+
+// Calls
++ call *
+- <call>make_call <star></call> Calling <star>.
+
++ dial *
+- <call>make_call <star></call> Dialing <star>.
+
++ phone *
+- <call>make_call <star></call> Calling <star>.
+
+// Timers
++ set timer for *
+- <call>set_timer <star></call> Timer set.
+
++ set a timer for *
+- <call>set_timer <star></call> Timer set.
+
++ timer for *
+- <call>set_timer <star></call> Timer set.
+
+// Alarms
++ set alarm for *
+- <call>set_alarm <star></call> Alarm set for <star>.
+
++ set an alarm for *
+- <call>set_alarm <star></call> Alarm set for <star>.
+
++ wake me up at *
+- <call>set_alarm <star></call> Alarm set for <star>.
+
++ alarm at *
+- <call>set_alarm <star></call> Alarm set for <star>.
+
+// Weather
++ weather
+- <call>check_weather local</call>
+
++ what is the weather
+- <call>check_weather local</call>
+
++ how is the weather
+- <call>check_weather local</call>
+
++ weather in *
+- <call>check_weather <star></call>
+
+// Notes
++ take a note *
+- <call>take_note <star></call> Note saved.
+
++ note *
+- <call>take_note <star></call> Note saved.
+
++ remember *
+- <call>take_note <star></call> I will remember that.
+
++ read my notes
+- <call>read_notes</call>
+
++ what are my notes
+- <call>read_notes</call>
+
++ show my notes
+- <call>read_notes</call>
+
+// DND
++ turn on do not disturb
+- <call>set_dnd true</call> Do not disturb on.
+
++ turn off do not disturb
+- <call>set_dnd false</call> Do not disturb off.
+
++ enable do not disturb
+- <call>set_dnd true</call> Do not disturb on.
+
++ disable do not disturb
+- <call>set_dnd false</call> Do not disturb off.
+
+// Camera
++ open camera
+- <call>open_camera false</call> Opening camera.
+
++ take a selfie
+- <call>open_camera true</call> Opening selfie camera.
+
++ open selfie camera
+- <call>open_camera true</call> Opening selfie camera.
+
+// Notifications
++ notifications
+- <call>show_notifications</call>
+
++ show notifications
+- <call>show_notifications</call>
+
++ what are my notifications
+- <call>show_notifications</call>
+
+// Settings
++ open settings
+- <call>open_settings main</call>
+
++ open wifi settings
+- <call>open_settings wifi</call>
+
++ open bluetooth settings
+- <call>open_settings bluetooth</call>
+
++ open display settings
+- <call>open_settings display</call>
+
++ open sound settings
+- <call>open_settings sound</call>
+
+// Conversational
++ hello
+- Hello. What can I do for you?
+- Hi there. How can I help?
+- Hey. What do you need?
+
++ hi
+- Hello. What can I do for you?
+- Hi there. How can I help?
+- Hey. What do you need?
+
++ hey
+- Hello. What can I do for you?
+- Hi there. How can I help?
+- Hey. What do you need?
+
++ how are you
+- All systems running smooth. What do you need?
+- Doing great. How can I help?
+
++ what is your name
+- I am Iris, your personal assistant.
+
++ who are you
+- I am Iris. I control your phone and answer questions.
+
++ what can you do
+- I can open apps, make calls, toggle settings, set alarms, check the weather, take notes, and more.
+
++ tell me a joke
+- Why do programmers prefer dark mode? Because light attracts bugs.
+- There are only 10 types of people in the world: those who understand binary and those who do not.
+- Why did the phone go to therapy? Because it had too many contacts.
+
++ make me laugh
+- Why do programmers prefer dark mode? Because light attracts bugs.
+- I would tell you a chemistry joke, but I know I would not get a reaction.
+
++ what time is it
+- <call>get_time</call>
+
++ what is the time
+- <call>get_time</call>
+
++ tell me the time
+- <call>get_time</call>
+
++ what day is it
+- <call>get_date</call>
+
++ what is today
+- <call>get_date</call>
+
++ what is the date
+- <call>get_date</call>
+
++ my name is *
+- <set name=<star>>Nice to meet you, <get name>.
+
++ what is my name
+* <get name> == undefined => You have not told me your name yet.
+- Your name is <get name>.
+
++ who am i
+* <get name> == undefined => You have not told me your name yet.
+- You are <get name>.
+
++ thanks
+- You're welcome.
+- No problem.
+
++ thank you
+- You're welcome.
+- Anytime.
+
++ yes
+- Okay.
+
++ no
+- Alright.
+
++ ok
+- Got it.
+
++ okay
+- Got it.
+
++ *
+- I can help with that. Try saying open an app, turn on flashlight, or what time is it.
+- I am not sure about that. Try asking me to open an app or change a setting.

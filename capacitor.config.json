@@ -1,0 +1,19 @@
+{
+  "appId": "com.stitch.iris.launcher",
+  "appName": "IRIS Cybernetic Launcher",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "backgroundColor": "#020617",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "Keyboard": {
+      "resize": "None",
+      "style": "dark",
+      "displayMode": "none"
+    }
+  }
+}

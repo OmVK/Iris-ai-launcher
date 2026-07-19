@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+    <title>IRIS Cybernetic OS Launcher</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-[#0a0e17] text-[#dfe2ef] font-body-md min-h-screen overflow-hidden select-none">
+    <script>
+      if (typeof process === 'undefined') {
+        window.process = { env: {}, browser: true, platform: 'browser', version: '', argv: [], exit: function(){}, stdout: null, stderr: null, stdin: null };
+      }
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
