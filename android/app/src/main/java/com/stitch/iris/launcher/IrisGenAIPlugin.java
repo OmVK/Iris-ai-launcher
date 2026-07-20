@@ -20,15 +20,24 @@ public class IrisGenAIPlugin extends Plugin {
     private static final String TAG = "IrisGenAI";
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private boolean isModelReady = false;
+    private Object modelClient = null;
 
     @PluginMethod
     public void checkAvailability(PluginCall call) {
         executor.execute(() -> {
             try {
                 boolean available = isGenAIAvailable();
+                if (available && modelClient == null) {
+                    modelClient = initializeModelClient();
+                }
                 JSObject result = new JSObject();
-                result.put("available", available);
+                result.put("available", available && modelClient != null);
                 result.put("deviceInfo", getDeviceInfo());
+                if (!available) {
+                    result.put("error", "ML Kit GenAI not available on this device");
+                } else if (modelClient == null) {
+                    result.put("error", "Failed to initialize model client");
+                }
                 call.resolve(result);
             } catch (Exception e) {
                 Log.w(TAG, "GenAI availability check failed", e);
@@ -45,12 +54,16 @@ public class IrisGenAIPlugin extends Plugin {
         String modelName = call.getString("model", "gemini-nano");
         executor.execute(() -> {
             try {
-                isModelReady = isGenAIAvailable();
+                boolean available = isGenAIAvailable();
+                if (available) {
+                    modelClient = initializeModelClient();
+                }
+                isModelReady = available && modelClient != null;
                 JSObject result = new JSObject();
                 result.put("initialized", isModelReady);
                 result.put("model", modelName);
                 if (!isModelReady) {
-                    result.put("error", "On-device GenAI not available on this device");
+                    result.put("error", "On-device GenAI not available. Requires Pixel 9+, Samsung S24+ with Android AICore.");
                 }
                 call.resolve(result);
             } catch (Exception e) {
@@ -78,7 +91,20 @@ public class IrisGenAIPlugin extends Plugin {
 
         executor.execute(() -> {
             try {
-                String response = runInference(prompt, systemInstruction, temperature, maxTokens);
+                if (modelClient == null) {
+                    modelClient = initializeModelClient();
+                }
+                if (modelClient == null) {
+                    call.reject("Model not initialized. Check device compatibility.");
+                    return;
+                }
+
+                String fullPrompt = prompt;
+                if (systemInstruction != null && !systemInstruction.isEmpty()) {
+                    fullPrompt = systemInstruction + "\n\n" + prompt;
+                }
+
+                String response = runInference(fullPrompt, temperature, maxTokens);
                 JSObject result = new JSObject();
                 result.put("text", response);
                 result.put("model", "gemini-nano");
@@ -93,30 +119,7 @@ public class IrisGenAIPlugin extends Plugin {
 
     @PluginMethod
     public void generateTextStream(PluginCall call) {
-        String prompt = call.getString("prompt");
-        String systemInstruction = call.getString("systemInstruction", "");
-        double temperature = call.getDouble("temperature", 0.7);
-        int maxTokens = call.getInt("maxTokens", 2048);
-
-        if (prompt == null || prompt.isEmpty()) {
-            call.reject("No prompt provided");
-            return;
-        }
-
-        executor.execute(() -> {
-            try {
-                String response = runInference(prompt, systemInstruction, temperature, maxTokens);
-                JSObject result = new JSObject();
-                result.put("text", response);
-                result.put("model", "gemini-nano");
-                result.put("provider", "on-device");
-                result.put("streaming", false);
-                call.resolve(result);
-            } catch (Exception e) {
-                Log.e(TAG, "Streaming inference failed", e);
-                call.reject("On-device inference failed: " + e.getMessage(), e);
-            }
-        });
+        generateText(call);
     }
 
     @PluginMethod
@@ -128,72 +131,86 @@ public class IrisGenAIPlugin extends Plugin {
 
     private boolean isGenAIAvailable() {
         try {
-            Class.forName("com.google.firebase.ai.ondevice.FirebaseAIOnDevice");
+            Class.forName("com.google.mlkit.genai.prompt.Generation");
             return true;
         } catch (ClassNotFoundException e) {
-            try {
-                Class.forName("com.google.mlkit.genai.common.GenAI");
-                return true;
-            } catch (ClassNotFoundException e2) {
-                Log.w(TAG, "ML Kit GenAI not available on this device");
-                return false;
-            }
+            Log.w(TAG, "ML Kit GenAI Prompt API not available", e);
+            return false;
         }
     }
 
-    private String runInference(String prompt, String systemInstruction, double temperature, int maxTokens) throws Exception {
-        StringBuilder fullPrompt = new StringBuilder();
-        if (systemInstruction != null && !systemInstruction.isEmpty()) {
-            fullPrompt.append(systemInstruction).append("\n\n");
-        }
-        fullPrompt.append(prompt);
-
+    private Object initializeModelClient() {
         try {
-            return runGenAIPrompt(fullPrompt.toString(), temperature, maxTokens);
+            Class<?> generationClass = Class.forName("com.google.mlkit.genai.prompt.Generation");
+            Object instance = generationClass.getField("INSTANCE").get(null);
+            Method getClientMethod = generationClass.getMethod("getClient");
+            return getClientMethod.invoke(instance);
         } catch (Exception e) {
-            Log.e(TAG, "GenAI Prompt API failed", e);
-            throw e;
+            Log.e(TAG, "Failed to initialize model client", e);
+            return null;
         }
     }
 
-    private String runGenAIPrompt(String prompt, double temperature, int maxTokens) throws Exception {
+    private String runInference(String prompt, double temperature, int maxTokens) throws Exception {
         try {
-            Class<?> genAiClass = Class.forName("com.google.mlkit.genai.common.GenerationConfig");
-            Object builder = genAiClass.getMethod("builder").invoke(null);
+            Class<?> textPartClass = Class.forName("com.google.mlkit.genai.prompt.TextPart");
+            Object textPart = textPartClass.getConstructor(String.class).newInstance(prompt);
 
-            Method setTemp = genAiClass.getMethod("setTemperature", float.class);
-            builder = setTemp.invoke(builder, (float) temperature);
+            Class<?> reqBuilderClass = Class.forName("com.google.mlkit.genai.prompt.GenerateContentRequest$Builder");
+            Object reqBuilder = reqBuilderClass.getConstructor(Class.forName("com.google.mlkit.genai.prompt.Part")).newInstance(textPart);
 
-            Method setTopP = genAiClass.getMethod("setTopP", float.class);
-            builder = setTopP.invoke(builder, 0.95f);
+            Class<?> genConfigClass = Class.forName("com.google.mlkit.genai.prompt.GenerationConfig");
+            Object configBuilder = genConfigClass.getMethod("builder").invoke(null);
 
-            Method setMaxOut = genAiClass.getMethod("setMaxOutputTokens", int.class);
-            builder = setMaxOut.invoke(builder, maxTokens);
-
-            Method build = genAiClass.getMethod("build");
-            Object config = build.invoke(builder);
-
-            Class<?> promptReqClass = Class.forName("com.google.mlkit.genai.prompt.PromptRequest");
-            Object reqBuilder = promptReqClass.getMethod("builder", String.class).invoke(null, prompt);
-
-            Method setConfig = promptReqClass.getMethod("setGenerationConfig", genAiClass);
-            reqBuilder = setConfig.invoke(reqBuilder, config);
-
-            Object request = promptReqClass.getMethod("build").invoke(reqBuilder);
-
-            Class<?> promptApiClass = Class.forName("com.google.mlkit.genai.prompt.Prompt");
-            Object client = promptApiClass.getMethod("getClient").invoke(null);
-
-            Method runMethod = null;
-            for (Method m : client.getClass().getMethods()) {
-                if (m.getName().equals("runInference") && m.getParameterCount() == 1) {
-                    runMethod = m;
+            Method setTemp = null;
+            for (Method m : genConfigClass.getMethods()) {
+                if (m.getName().equals("setTemperature") && m.getParameterCount() == 1) {
+                    setTemp = m;
                     break;
                 }
             }
-            if (runMethod == null) throw new Exception("runInference method not found");
+            if (setTemp != null) {
+                configBuilder = setTemp.invoke(configBuilder, (float) temperature);
+            }
 
-            Object task = runMethod.invoke(client, request);
+            Method setMaxTokens = null;
+            for (Method m : genConfigClass.getMethods()) {
+                if (m.getName().equals("setMaxOutputTokens") && m.getParameterCount() == 1) {
+                    setMaxTokens = m;
+                    break;
+                }
+            }
+            if (setMaxTokens != null) {
+                configBuilder = setMaxTokens.invoke(configBuilder, maxTokens);
+            }
+
+            Object config = genConfigClass.getMethod("build").invoke(configBuilder);
+
+            Method setGenConfig = null;
+            for (Method m : reqBuilderClass.getMethods()) {
+                if (m.getName().equals("setGenerationConfig") && m.getParameterCount() == 1) {
+                    setGenConfig = m;
+                    break;
+                }
+            }
+            if (setGenConfig != null) {
+                reqBuilder = setGenConfig.invoke(reqBuilder, config);
+            }
+
+            Object request = reqBuilderClass.getMethod("build").invoke(reqBuilder);
+
+            Method generateMethod = null;
+            for (Method m : modelClient.getClass().getMethods()) {
+                if (m.getName().equals("generateContent") && m.getParameterCount() == 1) {
+                    generateMethod = m;
+                    break;
+                }
+            }
+            if (generateMethod == null) {
+                throw new Exception("generateContent method not found");
+            }
+
+            Object task = generateMethod.invoke(modelClient, request);
 
             final String[] resultText = new String[1];
             final CountDownLatch latch = new CountDownLatch(1);
@@ -210,8 +227,9 @@ public class IrisGenAIPlugin extends Plugin {
             }
 
             return resultText[0];
-        } catch (ClassNotFoundException e) {
-            throw new Exception("ML Kit GenAI SDK not available. Requires Pixel 9+, Samsung S24+ with Android AICore.");
+        } catch (Exception e) {
+            Log.e(TAG, "Inference error", e);
+            throw e;
         }
     }
 
@@ -232,8 +250,12 @@ public class IrisGenAIPlugin extends Plugin {
                 new Class<?>[]{ Class.forName("com.google.android.gms.tasks.OnSuccessListener") },
                 (proxy, m, args) -> {
                     Object response = args[0];
-                    Method getText = response.getClass().getMethod("getText");
-                    resultText[0] = (String) getText.invoke(response);
+                    try {
+                        Method getText = response.getClass().getMethod("getText");
+                        resultText[0] = (String) getText.invoke(response);
+                    } catch (Exception e) {
+                        resultText[0] = response.toString();
+                    }
                     latch.countDown();
                     return null;
                 }

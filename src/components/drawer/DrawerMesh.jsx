@@ -74,6 +74,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
   const dirtyRef = useRef(true)
   const rafRef = useRef(null)
   const camVelRef = useRef(false)
+  const timeRef = useRef(0)
 
   const edges = useMemo(() => {
     if (filteredApps.length < 2) return []
@@ -195,47 +196,49 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       if (isDragging) dirtyRef.current = true
 
       let hasMovingNodes = false
-      if (isDragging || camMoving) {
-        const simSpeed = isDragging ? 0.5 : 0.25
-        const nLen = nodes.length
-        const dragIdx = isDragging ? dragRef.current.nodeIdx : -1
-        for (let i = 0; i < nLen; i++) {
-          const node = nodes[i]
-          if (i === dragIdx) continue
-          let fx = 0, fy = 0
-          for (let j = 0; j < nLen; j++) {
-            if (i === j) continue
-            const dx = node.x - nodes[j].x
-            const dy = node.y - nodes[j].y
-            const distSq = dx * dx + dy * dy
-            if (distSq > 40000 || distSq < 1) continue
-            const invDist = 1 / Math.sqrt(distSq)
-            fx += dx * invDist * 900 * invDist * invDist
-            fy += dy * invDist * 900 * invDist * invDist
-          }
-          for (let e = 0; e < edgeList.length; e++) {
-            const edge = edgeList[e]
-            let other = -1
-            if (edge.a === i) other = edge.b
-            else if (edge.b === i) other = edge.a
-            if (other === -1) continue
-            const dx = nodes[other].x - node.x
-            const dy = nodes[other].y - node.y
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1
-            const force = (dist - 80) * 0.012
-            fx += (dx / dist) * force
-            fy += (dy / dist) * force
-          }
-          fx += -node.x * 0.004
-          fy += -node.y * 0.004
-          node.vx = (node.vx + fx * simSpeed) * 0.78
-          node.vy = (node.vy + fy * simSpeed) * 0.78
-          node.x += node.vx
-          node.y += node.vy
-          if (Math.abs(node.vx) > 0.05 || Math.abs(node.vy) > 0.05) hasMovingNodes = true
+      const simSpeed = isDragging ? 0.5 : 0.15
+      const nLen = nodes.length
+      const dragIdx = isDragging ? dragRef.current.nodeIdx : -1
+      timeRef.current += 0.016
+      for (let i = 0; i < nLen; i++) {
+        const node = nodes[i]
+        if (i === dragIdx) continue
+        let fx = 0, fy = 0
+        for (let j = 0; j < nLen; j++) {
+          if (i === j) continue
+          const dx = node.x - nodes[j].x
+          const dy = node.y - nodes[j].y
+          const distSq = dx * dx + dy * dy
+          if (distSq > 40000 || distSq < 1) continue
+          const invDist = 1 / Math.sqrt(distSq)
+          fx += dx * invDist * 900 * invDist * invDist
+          fy += dy * invDist * 900 * invDist * invDist
         }
-        if (hasMovingNodes) dirtyRef.current = true
+        for (let e = 0; e < edgeList.length; e++) {
+          const edge = edgeList[e]
+          let other = -1
+          if (edge.a === i) other = edge.b
+          else if (edge.b === i) other = edge.a
+          if (other === -1) continue
+          const dx = nodes[other].x - node.x
+          const dy = nodes[other].y - node.y
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+          const force = (dist - 80) * 0.012
+          fx += (dx / dist) * force
+          fy += (dy / dist) * force
+        }
+        fx += -node.x * 0.004
+        fy += -node.y * 0.004
+        const idlePhase = timeRef.current + i * 0.7
+        fx += Math.sin(idlePhase * 0.5) * 0.8
+        fy += Math.cos(idlePhase * 0.7) * 0.6
+        node.vx = (node.vx + fx * simSpeed) * 0.82
+        node.vy = (node.vy + fy * simSpeed) * 0.82
+        node.x += node.vx
+        node.y += node.vy
+        if (Math.abs(node.vx) > 0.02 || Math.abs(node.vy) > 0.02) hasMovingNodes = true
       }
+      dirtyRef.current = true
 
       orb.pulse += 0.04
 
