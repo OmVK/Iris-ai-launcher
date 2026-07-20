@@ -2,6 +2,7 @@ import SettingsSection from './SettingsSection'
 import PowerSaveManager, { MODES, detectDeviceTier } from '../../utils/PowerSaveManager'
 
 export default function PowerSaveSection({ expandedSections, toggleSection, powerSaveMode, setPowerSaveMode }) {
+  const deviceTier = detectDeviceTier()
   return (
     <SettingsSection title="POWER SAVE MODE" icon="battery_saver" sectionKey="powerSave" expandedSections={expandedSections} toggleSection={toggleSection}>
       <div className="text-[8px] text-on-surface-variant/40 uppercase">REDUCE CPU/GPU LOAD TO EXTEND BATTERY LIFE</div>
@@ -9,7 +10,7 @@ export default function PowerSaveSection({ expandedSections, toggleSection, powe
       <div className="flex items-center justify-between">
         <div>
           <p className="text-[9px] text-on-surface-variant/60 uppercase">DEVICE TIER (AUTO)</p>
-          <p className="text-[8px] text-primary-fixed-dim mt-0.5">{detectDeviceTier() === 'LOW' ? 'LOW-END' : detectDeviceTier() === 'MEDIUM' ? 'MID-RANGE' : 'HIGH-END'}</p>
+          <p className="text-[8px] text-primary-fixed-dim mt-0.5">{deviceTier === 'LOW' ? 'LOW-END' : deviceTier === 'MEDIUM' ? 'MID-RANGE' : 'HIGH-END'}</p>
         </div>
         <span className="material-symbols-outlined text-sm text-primary-fixed-dim/40">auto_awesome</span>
       </div>

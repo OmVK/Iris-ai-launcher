@@ -17,6 +17,7 @@ import SignalWidget from './widgets/SignalWidget'
 import CustomWidget from './widgets/CustomWidget'
 
 export default function Widgets({ isAppActive = true, activePage = 'widgets', powerSaveMode }) {
+  const pendingTimers = useRef([])
   const [activeWidgetIds, setActiveWidgetIds] = useState(() => {
     try {
       const cached = localStorage.getItem('iris_active_widgets')
@@ -85,8 +86,13 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
       const battery = await Device.getBatteryInfo()
       if (battery.batteryLevel !== undefined) { setBatteryLevel(Math.round(battery.batteryLevel * 100)); setIsCharging(battery.isCharging) }
     } catch (_e) { /* battery info unavailable */ }
-    setTimeout(() => setIsDiagnosticRunning(false), 1500)
+    const id = setTimeout(() => setIsDiagnosticRunning(false), 1500)
+    pendingTimers.current.push(id)
   }, [isDiagnosticRunning])
+
+  useEffect(() => {
+    return () => { pendingTimers.current.forEach(id => clearTimeout(id)); pendingTimers.current = [] }
+  }, [])
 
   // Weather state
   const [weatherCity, setWeatherCity] = useState(() => localStorage.getItem('iris_weather_city') || 'Neo Tokyo')
@@ -131,7 +137,7 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
   }, [isAppActive, activePage, powerSaveMode])
 
   // Tasks state
-  const [tasks, setTasks] = useState(() => { const cached = localStorage.getItem('iris_day_tasks'); return cached ? JSON.parse(cached) : [] })
+  const [tasks, setTasks] = useState(() => { try { const cached = localStorage.getItem('iris_day_tasks'); return cached ? JSON.parse(cached) : [] } catch { return [] } })
   const [newTaskText, setNewTaskText] = useState('')
   const [newTaskTime, setNewTaskTime] = useState('')
   useEffect(() => { localStorage.setItem('iris_day_tasks', JSON.stringify(tasks)) }, [tasks])

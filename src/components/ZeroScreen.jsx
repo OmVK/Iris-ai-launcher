@@ -23,39 +23,52 @@ export default function ZeroScreen({ onNavigate, isAppActive, installedApps, onT
   const refreshAll = useCallback(async () => {
     setRefreshing(true)
     try {
-      const weatherData = await fetchCurrentWeather()
-      if (weatherData) {
-        setWeather(weatherData.displayString)
-        localStorage.setItem('iris_cached_weather_string', weatherData.displayString)
+      try {
+        const weatherData = await fetchCurrentWeather()
+        if (weatherData) {
+          setWeather(weatherData.displayString)
+          localStorage.setItem('iris_cached_weather_string', weatherData.displayString)
+        }
+      } catch (e) {
+        console.error('Weather fetch failed:', e)
       }
 
-      const quotes = await fetch('https://dummyjson.com/quotes/random?limit=1')
-        .then(r => r.json())
-        .then(data => {
-          if (data && data[0]) return `"${data[0].quote}" — ${data[0].author}`
-          throw new Error()
-        })
-        .catch(() => FALLBACK_QUOTES[Math.floor(Math.random() * FALLBACK_QUOTES.length)])
-      setQuote(quotes)
+      try {
+        const quotes = await fetch('https://dummyjson.com/quotes/random?limit=1')
+          .then(r => r.json())
+          .then(data => {
+            if (data && data[0]) return `"${data[0].quote}" — ${data[0].author}`
+            throw new Error()
+          })
+          .catch(() => FALLBACK_QUOTES[Math.floor(Math.random() * FALLBACK_QUOTES.length)])
+        setQuote(quotes)
+      } catch (e) {
+        setQuote(FALLBACK_QUOTES[Math.floor(Math.random() * FALLBACK_QUOTES.length)])
+      }
 
-      const apiKey = useAIStore.getState().geminiKey
-      if (apiKey) {
-        const time = new Date().toLocaleTimeString()
-        const location = localStorage.getItem('iris_weather_city') || 'Unknown Location'
-        const prompt = `You are Iris, a futuristic AI assistant. Write a short, highly personalized, and aesthetic daily briefing for the user. Current time: ${time}. Location: ${location}. Keep it under 50 words.`
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        })
-        const data = await res.json()
-        if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-          setBriefing(data.candidates[0].content.parts[0].text)
+      try {
+        const apiKey = useAIStore.getState().geminiKey
+        if (apiKey) {
+          const time = new Date().toLocaleTimeString()
+          const location = localStorage.getItem('iris_weather_city') || 'Unknown Location'
+          const prompt = `You are Iris, a futuristic AI assistant. Write a short, highly personalized, and aesthetic daily briefing for the user. Current time: ${time}. Location: ${location}. Keep it under 50 words.`
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          })
+          const data = await res.json()
+          if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+            setBriefing(data.candidates[0].content.parts[0].text)
+          } else {
+            setBriefing("Neural link degraded. Unable to fetch daily briefing.")
+          }
         } else {
-          setBriefing("Neural link degraded. Unable to fetch daily briefing.")
+          setBriefing("AI Briefing unavailable. Please configure Gemini API key in Settings.")
         }
-      } else {
-        setBriefing("AI Briefing unavailable. Please configure Gemini API key in Settings.")
+      } catch (e) {
+        console.error('Briefing fetch failed:', e)
+        setBriefing("Neural link degraded. Unable to fetch daily briefing.")
       }
     } catch {
       setBriefing("Neural link degraded. Unable to fetch daily briefing.")

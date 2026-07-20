@@ -129,7 +129,7 @@ class PowerSaveManager {
 
   getFeature(feature) {
     if (feature in this._overrides) return this._overrides[feature]
-    const tier = this._getEffectiveTierRaw()
+    const tier = this.getEffectiveTier()
     const preset = FEATURE_PRESETS[tier]
     return preset ? preset[feature] : false
   }
@@ -160,7 +160,7 @@ class PowerSaveManager {
   }
 
   getAllFeatures() {
-    const tier = this._getEffectiveTierRaw()
+    const tier = this.getEffectiveTier()
     const preset = FEATURE_PRESETS[tier] || FEATURE_PRESETS.MEDIUM
     const result = {}
     for (const [key, defaultVal] of Object.entries(preset)) {
@@ -170,7 +170,7 @@ class PowerSaveManager {
   }
 
   isEnabled() {
-    return this._getEffectiveTierRaw() !== 'HIGH'
+    return this.getEffectiveTier() !== 'HIGH'
   }
 
   shouldDisable(feature) {
@@ -193,14 +193,14 @@ class PowerSaveManager {
   }
 
   getPollingMultiplier() {
-    const tier = this._getEffectiveTierRaw()
+    const tier = this.getEffectiveTier()
     if (tier === 'LOW') return 3
     if (tier === 'MEDIUM') return 2
     return 1
   }
 
   getIconSizeMultiplier() {
-    const tier = this._getEffectiveTierRaw()
+    const tier = this.getEffectiveTier()
     if (tier === 'LOW') return 0.5
     if (tier === 'MEDIUM') return 0.75
     return 1
@@ -217,10 +217,6 @@ class PowerSaveManager {
     }
   }
 
-  _getEffectiveTierRaw() {
-    if (this._mode === MODES.AUTO) return detectDeviceTier()
-    return this._mode
-  }
 }
 
 const instance = new PowerSaveManager()

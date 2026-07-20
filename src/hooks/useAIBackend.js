@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useEffect } from 'react'
 import { useAssistantStore } from '../stores/assistantStore'
 import { useAIStore } from '../stores/aiStore'
 import { searchRAG } from '../components/RagEngine'
@@ -80,10 +80,26 @@ export default function useAIBackend(speakTextFn) {
   const { voiceEnabled } = useAIStore()
   const isGeneratingRef = useRef(false)
   const abortControllerRef = useRef(null)
+  const mountedRef = useRef(true)
+  const sseReaderRef = useRef(null)
+  const lastSetChatLogTimeRef = useRef(0)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (sseReaderRef.current) {
+        try { sseReaderRef.current.cancel() } catch {}
+        sseReaderRef.current = null
+      }
+    }
+  }, [])
 
   const fetchWebSearch = async (query) => {
     try {
       const controller = new AbortController()
+      if (abortControllerRef.current) {
+        abortControllerRef.current.signal.addEventListener('abort', () => controller.abort())
+      }
       const timeout = setTimeout(() => controller.abort(), 5000)
       const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
         signal: controller.signal,
@@ -123,6 +139,7 @@ export default function useAIBackend(speakTextFn) {
 
   const streamSSE = async (res, loadingId) => {
     const reader = res.body.getReader()
+    sseReaderRef.current = reader
     const decoder = new TextDecoder("utf-8")
     let partialText = ''
     while (true) {
@@ -138,11 +155,18 @@ export default function useAIBackend(speakTextFn) {
           const text = parsed?.choices?.[0]?.delta?.content || parsed?.candidates?.[0]?.content?.parts?.[0]?.text
           if (text) {
             partialText += text
-            setChatLog(prev => prev.map(item => item.id === loadingId ? { ...item, text: partialText } : item))
+            const now = Date.now()
+            if (now - lastSetChatLogTimeRef.current >= 100) {
+              lastSetChatLogTimeRef.current = now
+              if (mountedRef.current) {
+                setChatLog(prev => prev.map(item => item.id === loadingId ? { ...item, text: partialText } : item))
+              }
+            }
           }
         } catch {}
       }
     }
+    sseReaderRef.current = null
     return partialText
   }
 
@@ -345,11 +369,13 @@ export default function useAIBackend(speakTextFn) {
 
     if (abortControllerRef.current?.signal.aborted) return
 
-    setChatLog(prev => prev.filter(item => item.id !== loadingId).concat({
-      time: timeStr, sender: "IRIS", text: cleanedResponse, type: "system"
-    }))
-    setActiveUserTranscript('')
-    setActiveAiResponse('')
+    if (mountedRef.current) {
+      setChatLog(prev => prev.filter(item => item.id !== loadingId).concat({
+        time: timeStr, sender: "IRIS", text: cleanedResponse, type: "system"
+      }))
+      setActiveUserTranscript('')
+      setActiveAiResponse('')
+    }
     isGeneratingRef.current = false
 
     const { isLiveVoice } = useAssistantStore.getState()

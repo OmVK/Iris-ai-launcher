@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import { expandNotificationPanel } from '../components/LauncherPlugin'
 
 let contextMenuOpen = false
@@ -14,6 +14,16 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   const touchStartY = useRef(null)
   const touchEndX = useRef(null)
   const touchEndY = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (tripleTapTimerRef) {
+        clearTimeout(tripleTapTimerRef)
+        tripleTapTimerRef = null
+      }
+      tapCountRef = 0
+    }
+  }, [])
 
   const handleTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX
@@ -40,7 +50,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   }, [])
 
   const handleTouchEnd = useCallback(() => {
-    if (!touchStartX.current || !touchEndX.current) return
+    if (touchStartX.current === null || touchEndX.current === null) return
     const deltaX = touchEndX.current - touchStartX.current
     const deltaY = touchEndY.current - touchStartY.current
     const absDeltaY = Math.abs(deltaY)

@@ -4,28 +4,32 @@ export const TOOLS = [
       { key: 'length', label: 'LENGTH', placeholder: '24', type: 'number', defaultVal: '24' },
     ],
     execute: async (vals) => {
-      const len = Math.min(Math.max(parseInt(vals.length) || 24, 4), 128)
+      const rawLen = parseInt(vals.length) || 24
+      if (rawLen < 4 || rawLen > 128) return { error: 'Length must be between 4 and 128' }
+      const len = Math.min(Math.max(rawLen, 4), 128)
       const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
       const lower = 'abcdefghijklmnopqrstuvwxyz'
       const digits = '0123456789'
       const symbols = '!@#$%^&*()-_=+[]{}|;:,.<>?'
       const all = upper + lower + digits + symbols
-      const arr = new Uint32Array(len)
-      crypto.getRandomValues(arr)
-      let pw = ''
-      pw += upper[arr[0] % upper.length]
-      pw += lower[arr[1] % lower.length]
-      pw += digits[arr[2] % digits.length]
-      pw += symbols[arr[3] % symbols.length]
-      for (let i = 4; i < len; i++) pw += all[arr[i] % all.length]
-      const shuffled = pw.split('')
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const rnd = new Uint32Array(1)
-        crypto.getRandomValues(rnd)
-        const j = rnd[0] % (i + 1)
-        ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+      function secureIndex(max) {
+        const limit = Math.floor(256 / max) * max
+        let rnd
+        do { const buf = new Uint8Array(1); crypto.getRandomValues(buf); rnd = buf[0] } while (rnd >= limit)
+        return rnd % max
       }
-      return { password: shuffled.join('') }
+      const pw = new Array(len)
+      pw[0] = upper[secureIndex(upper.length)]
+      pw[1] = lower[secureIndex(lower.length)]
+      pw[2] = digits[secureIndex(digits.length)]
+      pw[3] = symbols[secureIndex(symbols.length)]
+      for (let i = 4; i < len; i++) pw[i] = all[secureIndex(all.length)]
+      for (let i = pw.length - 1; i > 0; i--) {
+        const buf = new Uint8Array(1); crypto.getRandomValues(buf)
+        const j = buf[0] % (i + 1);
+        [pw[i], pw[j]] = [pw[j], pw[i]]
+      }
+      return { password: pw.join('') }
     }
   },
   { id: 'hash_gen', name: 'Hash Generator', icon: 'token', desc: 'SHA-256 / SHA-1 any text', color: 'rgba(251,146,60,0.15)', borderColor: 'rgba(251,146,60,0.3)', accent: '#fb923c',

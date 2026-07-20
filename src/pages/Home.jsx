@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
 import { Device } from '@capacitor/device'
 import IrisVisualizer from '../components/IrisVisualizer'
 import { launchApp, expandNotificationPanel, getSystemStats } from '../components/LauncherPlugin'
@@ -14,6 +14,7 @@ import AppContextMenu from '../components/AppContextMenu'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { routeAppClick } from '../utils/appClickRouter'
 import useAppSuggestions, { trackAppLaunch } from '../hooks/useAppSuggestions'
+import { useThemeStore } from '../stores/themeStore'
 
 export default function Home({ 
   onNavigate, 
@@ -21,14 +22,6 @@ export default function Home({
   onTriggerVault,
   isVaultUnlocked,
   
-  // Customization
-  gridColumns = 5,
-  gridRows = 5,
-  homeIconSize = 100,
-  homeTextSize = 100,
-  layoutStyle = 'CENTERED',
-  setLayoutStyle,
-
   // Elevated apps state from App.jsx
   installedApps = [],
   setInstalledApps,
@@ -46,12 +39,11 @@ export default function Home({
   // Battery Optimization
   isAppActive = true,
 
-  // Orb Visibility Toggle
-  showHomeOrb = true,
-
   // Power Save Mode (reactive)
   powerSaveMode
 }) {
+  const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, showHomeOrb } = useThemeStore()
+  
   const [weather, setWeather] = useState(() => {
     return localStorage.getItem('iris_cached_weather_string') || 'SYNCHRONIZING_METEO...'
   })
@@ -122,7 +114,11 @@ export default function Home({
   useEffect(() => {
     if (!isAppActive) return
 
+    let lastUpdate = 0
     const handleOrientation = (event) => {
+      const now = Date.now()
+      if (now - lastUpdate < 16) return
+      lastUpdate = now
       // gamma is the left-to-right tilt in degrees, where right is positive
       // beta is the front-to-back tilt in degrees, where front is positive
       let x = event.gamma || 0;
@@ -185,7 +181,7 @@ export default function Home({
     }
   }
 
-  const handleAppClick = (e, app) => {
+  const handleAppClick = useCallback((e, app) => {
     if (activeContextMenu) {
       setActiveContextMenu(null)
       e.preventDefault()
@@ -195,7 +191,7 @@ export default function Home({
 
     trackAppLaunch(app.packageId)
     routeAppClick(app, { onTriggerChronoLock, onTriggerVault, onNavigate, launchApp })
-  }
+  }, [activeContextMenu, onTriggerChronoLock, onTriggerVault, onNavigate])
 
   // --- Context Menu Actions ---
   const handleRemoveFromHome = (app) => {
@@ -204,7 +200,7 @@ export default function Home({
     setTimeout(() => setActiveContextMenu(null), 250)
   }
 
-  const homeGridProps = {
+  const homeGridProps = useMemo(() => ({
     installedApps,
     lockedApps,
     isVaultUnlocked,
@@ -220,7 +216,7 @@ export default function Home({
     IRIS_ICON_PACK,
     HudIcon,
     HudFallbackIcon
-  }
+  }), [installedApps, lockedApps, isVaultUnlocked, globalIconTheme, showAppLabels, homeIconSize, homeTextSize, gridColumns, gridRows, tilt, handleAppClick, handleContextMenu])
 
   return (
     <div 
@@ -286,10 +282,6 @@ export default function Home({
       )}
 
 
-      {/* ======================================================== */}
-      {/* 4. ANDROID FLOATING LONG-PRESS CONTEXT MENU OVERLAY      */}
-      {/* ======================================================== */}
-      
       {/* ======================================================== */}
       {/* 4. ANDROID FLOATING LONG-PRESS CONTEXT MENU OVERLAY      */}
       {/* ======================================================== */}

@@ -24,46 +24,54 @@ export function getCoords() {
 }
 
 export async function fetchCurrentWeather() {
-  const { lat, lon } = getCoords()
-  const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
-  )
-  const data = await res.json()
-  if (!data?.current_weather) return null
-  const temp = Math.round(data.current_weather.temperature)
-  const condition = codeToCondition(data.current_weather.weathercode)
-  const city = (localStorage.getItem('iris_weather_city') || 'Neo Tokyo').toUpperCase().replace(/\s+/g, '_')
-  return { temp, condition, city, displayString: `${city} // ${temp}°C // ${condition}` }
+  try {
+    const { lat, lon } = getCoords()
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
+    )
+    const data = await res.json()
+    if (!data?.current_weather) return null
+    const temp = Math.round(data.current_weather.temperature)
+    const condition = codeToCondition(data.current_weather.weathercode)
+    const city = (localStorage.getItem('iris_weather_city') || 'Neo Tokyo').toUpperCase().replace(/\s+/g, '_')
+    return { temp, condition, city, displayString: `${city} // ${temp}°C // ${condition}` }
+  } catch (e) {
+    return null
+  }
 }
 
 export async function fetchDetailedWeather() {
-  const { lat, lon } = getCoords()
-  const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,uv_index,weather_code&daily=temperature_2m_max,weather_code&timezone=auto`
-  )
-  const data = await res.json()
-  if (!data?.current) return null
-  const temp = Math.round(data.current.temperature_2m)
-  const condition = codeToCondition(data.current.weather_code)
-  const forecast = []
-  if (data.daily?.time) {
-    for (let i = 1; i <= 3; i++) {
-      forecast.push({
-        day: new Date(data.daily.time[i]).toLocaleDateString([], { weekday: 'short' }).toUpperCase(),
-        temp: Math.round(data.daily.temperature_2m_max[i]),
-        cond: codeToCondition(data.daily.weather_code[i]),
-      })
+  try {
+    const { lat, lon } = getCoords()
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,uv_index,weather_code&daily=temperature_2m_max,weather_code&timezone=auto`
+    )
+    const data = await res.json()
+    if (!data?.current) return null
+    const temp = Math.round(data.current.temperature_2m)
+    const condition = codeToCondition(data.current.weather_code)
+    const forecast = []
+    if (data.daily?.time) {
+      for (let i = 1; i <= 3; i++) {
+        forecast.push({
+          day: new Date(data.daily.time[i]).toLocaleDateString([], { weekday: 'short' }).toUpperCase(),
+          temp: Math.round(data.daily.temperature_2m_max[i]),
+          cond: codeToCondition(data.daily.weather_code[i]),
+        })
+      }
     }
-  }
-  return {
-    temp, condition,
-    humidity: data.current.relative_humidity_2m ?? 50,
-    wind: Math.round(data.current.wind_speed_10m),
-    uv: Math.round(data.current.uv_index ?? 3),
-    forecast: forecast.length > 0 ? forecast : [
-      { day: 'TOMORROW', temp: temp - 1, cond: condition },
-      { day: 'NEXT_DAY', temp: temp - 2, cond: 'PARTLY_CLOUDY' },
-      { day: 'THIRD_DAY', temp: temp + 1, cond: 'CLEAR' },
-    ],
+    return {
+      temp, condition,
+      humidity: data.current.relative_humidity_2m ?? 50,
+      wind: Math.round(data.current.wind_speed_10m),
+      uv: Math.round(data.current.uv_index ?? 3),
+      forecast: forecast.length > 0 ? forecast : [
+        { day: 'TOMORROW', temp: temp - 1, cond: condition },
+        { day: 'NEXT_DAY', temp: temp - 2, cond: 'PARTLY_CLOUDY' },
+        { day: 'THIRD_DAY', temp: temp + 1, cond: 'CLEAR' },
+      ],
+    }
+  } catch (e) {
+    return null
   }
 }

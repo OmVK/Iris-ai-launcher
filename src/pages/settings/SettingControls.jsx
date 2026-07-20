@@ -41,9 +41,18 @@ export function SettingSlider({ label, value, onChange, min, max, step, unit, de
   )
 }
 
+const GRID_COL_CLASSES = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+  6: 'grid-cols-6',
+}
+
 export function SettingOptionGrid({ options, value, onChange, columns = 3 }) {
   return (
-    <div className={`grid grid-cols-${columns} gap-2`}>
+    <div className={`grid ${GRID_COL_CLASSES[columns] || 'grid-cols-3'} gap-2`}>
       {options.map(opt => (
         <button
           key={opt.id}

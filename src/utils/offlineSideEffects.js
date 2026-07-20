@@ -42,6 +42,7 @@ export async function handleSideEffect(effect, deps) {
 
     case 'notes_result': {
       const notes = effect.params.notes
+      if (!Array.isArray(notes)) { responseText = 'No notes saved.'; break }
       responseText = notes.length > 0
         ? `You have ${notes.length} notes. Latest: ${notes[notes.length - 1].text}`
         : 'No notes saved.'
@@ -87,7 +88,8 @@ export async function handleSideEffect(effect, deps) {
 
     case 'set_brightness':
       try {
-        const level = effect.params?.level || 50
+        const rawLevel = effect.params?.level ?? 50
+        const level = Math.max(0, Math.min(255, Math.round(rawLevel)))
         await LauncherPlugin.setBrightness({ level })
         responseText = `Brightness set to ${level} percent.`
       } catch (e) {
@@ -211,7 +213,7 @@ export async function handleSideEffect(effect, deps) {
             {
               title: "Iris Reminder",
               body: effect.params.task,
-              id: new Date().getTime(),
+              id: Date.now() + Math.floor(Math.random() * 10000),
               schedule: { at: triggerTime }
             }
           ]

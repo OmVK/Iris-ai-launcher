@@ -17,14 +17,19 @@ export default function ApiKeysSection({ expandedSections, toggleSection, gemini
   }, [])
 
   const handleSaveKeys = async () => {
-    await Promise.all([
+    const results = await Promise.allSettled([
       SecureStorage.setItem('gemini_api_key', geminiKey),
       SecureStorage.setItem('groq_api_key', groqKey),
       SecureStorage.setItem('cartesia_api_key', cartesiaKey.trim()),
       SecureStorage.setItem('nvidia_api_key', nvidiaKey.trim()),
     ])
-    localStorage.setItem('cartesia_voice_id', cartesiaVoiceId.trim())
-    setSaveStatus('CREDENTIALS ENCRYPTED & SAVED SECURELY')
+    const failures = results.filter(r => r.status === 'rejected')
+    if (failures.length > 0) {
+      setSaveStatus(`SAVED (${4 - failures.length}/4) — ${failures.length} FAILED`)
+    } else {
+      localStorage.setItem('cartesia_voice_id', cartesiaVoiceId.trim())
+      setSaveStatus('CREDENTIALS ENCRYPTED & SAVED SECURELY')
+    }
     setTimeout(() => setSaveStatus(''), 3000)
   }
 

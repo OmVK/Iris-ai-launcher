@@ -41,6 +41,10 @@ self.onmessage = async (e) => {
 
   if (type === 'INIT') {
     await initSession();
+    if (!session) {
+      self.postMessage({ type: 'INIT_ERROR', error: 'Failed to initialize Piper TTS session' });
+      return;
+    }
     self.postMessage({ type: 'INIT_DONE' });
   } else if (type === 'SPEAK') {
     if (!session) {

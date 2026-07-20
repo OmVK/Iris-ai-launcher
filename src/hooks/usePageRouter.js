@@ -4,7 +4,7 @@ export default function usePageRouter({ setActivePage, setChronoTarget, setShowC
   const handleLaunchApp = (app) => {
     if (app.path) {
       setActivePage(app.path)
-    } else {
+    } else if (app.packageId) {
       launchApp(app.packageId, app.label)
     }
   }

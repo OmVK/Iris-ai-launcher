@@ -11,7 +11,9 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
 
     if (isNative) {
       let backHandle, stateHandle
+      let isMounted = true
       import('@capacitor/app').then(({ App: CapacitorApp }) => {
+        if (!isMounted) return
         backHandle = CapacitorApp.addListener('backButton', () => {
           setShowChronoLock(false); setShowVaultExplorer(false); setIsVaultUnlocked(false); setShowLiveConfigModal(false)
           const cur = useAppStore.getState().activePage
@@ -22,7 +24,10 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
           if (isActive) { restartKeepAlive(); loadNativeApps() }
         })
       })
-      return () => { backHandle?.then(h => h.remove()); stateHandle?.then(h => h.remove()) }
+      return () => {
+        isMounted = false
+        backHandle?.then(h => h.remove()); stateHandle?.then(h => h.remove())
+      }
     }
   }, [fullscreenActive])
 

@@ -44,11 +44,14 @@ export default function useVoiceEngine() {
 
   const { llmBackend, voiceEnabled, setLlmBackend, voicePitch, voiceRate } = useAIStore()
 
+  const mountedRef = useRef(true)
   const isLiveVoiceRef = useRef(isLiveVoice)
   const isListeningRef = useRef(isListening)
   const isSpeakingRef = useRef(isSpeaking)
   const isPrivateSessionRef = useRef(isPrivateSession)
   const lastTtsTextRef = useRef('')
+  const restartTimerRef = useRef(null)
+  const finishSpeakingTimerRef = useRef(null)
 
   useEffect(() => { isLiveVoiceRef.current = isLiveVoice }, [isLiveVoice])
   useEffect(() => { isListeningRef.current = isListening }, [isListening])
@@ -65,6 +68,9 @@ export default function useVoiceEngine() {
   // Cleanup private sessions on unmount
   useEffect(() => {
     return () => {
+      mountedRef.current = false
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current)
+      if (finishSpeakingTimerRef.current) clearTimeout(finishSpeakingTimerRef.current)
       if (isPrivateSessionRef.current) {
         setChatLog([{ time: "00:00:00", sender: "IRIS", text: "PRIVATE_SESSION_ENDED // CHATLOG LOGS COMPROMISED AND SELF-DESTRUCTED.", type: "error" }])
       }
@@ -114,7 +120,9 @@ export default function useVoiceEngine() {
       isListeningRef.current = false
       if (isLiveVoiceRef.current && !backendIsGeneratingRef.current?.current) {
         const delay = isSpeakingRef.current ? 300 : 100
-        setTimeout(() => {
+        if (restartTimerRef.current) clearTimeout(restartTimerRef.current)
+        restartTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return
           try {
             if (isLiveVoiceRef.current && !isListeningRef.current) {
               recognition.start()
@@ -182,7 +190,9 @@ export default function useVoiceEngine() {
       setIsSpeaking(false)
       lastTtsTextRef.current = ''
       if (isLiveVoiceRef.current && recognition && !isListeningRef.current) {
-        setTimeout(() => {
+        if (finishSpeakingTimerRef.current) clearTimeout(finishSpeakingTimerRef.current)
+        finishSpeakingTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return
           try {
             if (isLiveVoiceRef.current && !isSpeakingRef.current && !isListeningRef.current) {
               recognition.start()
@@ -220,6 +230,7 @@ export default function useVoiceEngine() {
           })
           if (res.ok) {
             const arrayBuffer = await res.arrayBuffer()
+            if (!mountedRef.current) return
             const audioContext = new (window.AudioContext || window.webkitAudioContext)()
             const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
             const source = audioContext.createBufferSource()

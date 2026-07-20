@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 
 export default function PrivateVault() {
@@ -6,6 +6,7 @@ export default function PrivateVault() {
   const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState(null)
   const [loadedCount, setLoadedCount] = useState(20)
+  const scrollRef = useRef(null)
 
   const loadImages = async () => {
     try {
@@ -18,16 +19,26 @@ export default function PrivateVault() {
       
       const loadedImages = []
       for (const file of imageFiles) {
-        const fileData = await Filesystem.readFile({
-          path: `silent_captures/${file.name}`,
-          directory: Directory.Data
-        })
         loadedImages.push({
           name: file.name,
-          data: `data:image/jpeg;base64,${fileData.data}`
+          data: null,
+          loaded: false
         })
       }
       setImages(loadedImages.reverse()) // newest first
+
+      // Load thumbnails for first 20
+      const thumbnailsToLoad = loadedImages.slice(0, 20)
+      for (const img of thumbnailsToLoad) {
+        try {
+          const fileData = await Filesystem.readFile({
+            path: `silent_captures/${img.name}`,
+            directory: Directory.Data
+          })
+          const dataUrl = `data:image/jpeg;base64,${fileData.data}`
+          setImages(prev => prev.map(i => i.name === img.name ? { ...i, data: dataUrl, loaded: true } : i))
+        } catch (e) { /* skip failed thumbnails */ }
+      }
     } catch (e) {
       console.log('No silent_captures directory yet or read error:', e)
     } finally {
@@ -39,13 +50,35 @@ export default function PrivateVault() {
     loadImages()
   }, [])
 
+  const loadMoreImages = useCallback(async () => {
+    const unloaded = images.filter(img => !img.loaded).slice(0, 20)
+    for (const img of unloaded) {
+      try {
+        const fileData = await Filesystem.readFile({
+          path: `silent_captures/${img.name}`,
+          directory: Directory.Data
+        })
+        const dataUrl = `data:image/jpeg;base64,${fileData.data}`
+        setImages(prev => prev.map(i => i.name === img.name ? { ...i, data: dataUrl, loaded: true } : i))
+      } catch (e) { /* skip failed images */ }
+    }
+  }, [images])
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200 && images.some(img => !img.loaded)) {
+      loadMoreImages()
+    }
+  }, [images, loadMoreImages])
+
   const deleteImage = async (name) => {
     try {
       await Filesystem.deleteFile({
         path: `silent_captures/${name}`,
         directory: Directory.Data
       })
-      setImages(images.filter(img => img.name !== name))
+      setImages(prev => prev.filter(img => img.name !== name))
     } catch (e) {
       alert("Failed to delete image: " + e.message)
     }
@@ -82,7 +115,7 @@ export default function PrivateVault() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#020617] text-white p-4 pt-20 overflow-y-auto">
+    <div ref={scrollRef} onScroll={handleScroll} className="flex-1 flex flex-col h-full bg-[#020617] text-white p-4 pt-20 overflow-y-auto">
       <div className="flex justify-between items-center mb-6 border-b border-primary-fixed-dim/20 pb-4">
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-primary-fixed-dim text-3xl">visibility_off</span>
@@ -118,9 +151,13 @@ export default function PrivateVault() {
             <div 
               key={img.name} 
               className="relative group rounded overflow-hidden border border-outline-variant/20 aspect-square bg-black/50 flex items-center justify-center cursor-pointer"
-              onClick={() => setSelectedImage(img)}
+              onClick={() => img.data && setSelectedImage(img)}
             >
-              <img src={img.data} alt={img.name} className="object-cover w-full h-full pointer-events-none" />
+              {img.data ? (
+                <img src={img.data} alt={img.name} className="object-cover w-full h-full pointer-events-none" />
+              ) : (
+                <span className="material-symbols-outlined text-primary-fixed-dim animate-pulse text-2xl">image</span>
+              )}
               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                 <span className="material-symbols-outlined text-white text-3xl">fullscreen</span>
               </div>
@@ -131,7 +168,7 @@ export default function PrivateVault() {
           ))}
           {loadedCount < images.length && (
             <button
-              onClick={() => setLoadedCount(prev => Math.min(prev + 20, images.length))}
+              onClick={() => { setLoadedCount(prev => Math.min(prev + 20, images.length)); loadMoreImages() }}
               className="col-span-2 md:col-span-3 py-2 text-[10px] font-label-caps tracking-widest text-primary-fixed-dim/60 border border-primary-fixed-dim/20 rounded hover:bg-primary-fixed-dim/10 transition-colors mt-2"
             >
               LOAD MORE ({images.length - loadedCount})

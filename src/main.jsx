@@ -45,14 +45,18 @@ async function initApp() {
     const originalSetItem = localStorage.setItem
     localStorage.setItem = function(key, value) {
       if (key.startsWith('CapacitorStorage')) {
-        try { originalSetItem.apply(this, arguments) } catch (e) {}
+        try { originalSetItem.apply(this, arguments) } catch (e) { if (e.name !== 'QuotaExceededError' && e.code !== 22 && e.code !== 1014) console.warn('CapacitorStorage setItem error:', e) }
         return
       }
       
       try {
         originalSetItem.apply(this, arguments)
       } catch (e) {
-        console.warn('LocalStorage Quota Exceeded or Error:', e)
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+          console.warn('LocalStorage Quota Exceeded:', e)
+        } else {
+          console.warn('LocalStorage setItem error:', e)
+        }
       }
 
       // DO NOT send massive images over the native bridge, it will crash Android SharedPreferences!

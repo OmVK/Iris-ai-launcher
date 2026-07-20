@@ -10,6 +10,7 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     let animId
+    let lastOrientationTime = 0
 
     const getW = () => Math.max(window.innerWidth, window.screen.width || 0)
     const getH = () => Math.max(window.innerHeight, window.screen.height || 0)
@@ -240,14 +241,26 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
     }
 
     if (isAppActive) {
-      draw()
+      animId = requestAnimationFrame(draw)
     }
+
+    const handleOrientation = (e) => {
+      const now = Date.now()
+      if (now - lastOrientationTime < 16) return
+      lastOrientationTime = now
+      if (e.gamma != null) {
+        mouseRef.current.targetX = Math.max(0, Math.min(window.innerWidth, window.innerWidth / 2 + e.gamma * 3))
+        mouseRef.current.targetY = Math.max(0, Math.min(window.innerHeight, window.innerHeight / 2 + (e.beta || 0) * 3))
+      }
+    }
+    window.addEventListener('deviceorientation', handleOrientation)
 
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', resizeCanvas)
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('deviceorientation', handleOrientation)
     }
   }, [mode, activePage, isAppActive])
 

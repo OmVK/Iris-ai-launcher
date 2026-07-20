@@ -11,10 +11,14 @@ export default function AboutSection({ expandedSections, toggleSection, onTrigge
 
   useEffect(() => {
     const load = async () => {
-      const oem = await getDeviceOemInfo()
-      let sysInfo = null
-      if (isNative) sysInfo = await getSystemInfo()
-      setDeviceInfo({ ...oem, sysInfo })
+      try {
+        const oem = await getDeviceOemInfo()
+        let sysInfo = null
+        if (isNative) sysInfo = await getSystemInfo()
+        setDeviceInfo({ ...oem, sysInfo })
+      } catch (e) {
+        console.warn('Failed to load device info:', e)
+      }
     }
     load()
   }, [])

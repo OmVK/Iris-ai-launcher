@@ -27,7 +27,7 @@ export default function LayoutConfigSection({ expandedSections, toggleSection, d
       <div className="space-y-2">
         <label className="text-[9px] text-on-surface-variant block">DRAWER_LAYOUT_MODE</label>
         <div className="grid grid-cols-4 gap-2">
-          {[{ id: 'GRID', label: 'Grid', icon: 'grid_view' }, { id: 'RING', label: 'Ring', icon: 'public' }, { id: 'LIST', label: 'List', icon: 'view_list' }, { id: 'CATEGORIES', label: 'Folders', icon: 'folder_open' }].map(layout => (
+          {[{ id: 'GRID', label: 'Grid', icon: 'grid_view' }, { id: 'MESH', label: 'Mesh', icon: 'hub' }, { id: 'LIST', label: 'List', icon: 'view_list' }, { id: 'CATEGORIES', label: 'Folders', icon: 'folder_open' }].map(layout => (
             <button key={layout.id} onClick={() => setDrawerLayout(layout.id)} className={`py-1.5 px-1 rounded border text-[9px] truncate transition-all active:scale-95 ${drawerLayout === layout.id ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim' : 'bg-black/20 border-outline-variant/30 text-on-surface-variant/70 hover:text-white'}`}>
               <span className="material-symbols-outlined text-[11px] block mb-0.5">{layout.icon}</span>
               {layout.label}

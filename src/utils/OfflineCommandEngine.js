@@ -45,6 +45,7 @@ import brainRive from '../rivescript/brain.rive?raw'
 
 let rs = null
 let rsReady = false
+let commandQueue = Promise.resolve()
 
 // Pattern-based command matcher — used for high-speed system commands
 const rules = [
@@ -159,6 +160,7 @@ function matchCommand(text) {
 }
 
 export async function processCommand(text) {
+  const run = async () => {
   const result = {
     success: true,
     response: '',
@@ -217,10 +219,6 @@ export async function processCommand(text) {
       result.response = `Are you sure you want to uninstall ${match.app}? Say yes to confirm.`
       result.keepListening = true
       break
-    case 'uninstall':
-      result.commands.push({ action: 'uninstall', params: { app: match.app } })
-      result.response = `Uninstalling ${match.app}.`
-      break
     case 'app_info':
       result.commands.push({ action: 'app_info', params: { app: match.app } })
       result.response = `Opening app info for ${match.app}.`
@@ -246,9 +244,6 @@ export async function processCommand(text) {
       result.requireMoreContext = 'WAITING_FOR_CLEAR_NOTES_CONFIRM'
       result.response = 'Are you sure you want to delete all notes? Say yes to confirm.'
       result.keepListening = true
-      break
-    case 'clear_notes':
-      result.sideEffects.push({ action: 'clear_notes' })
       break
     case 'delete_last_note':
       result.sideEffects.push({ action: 'delete_last_note' })
@@ -371,6 +366,10 @@ export async function processCommand(text) {
   }
 
   return result
+  }
+  return new Promise(resolve => {
+    commandQueue = commandQueue.then(() => run().then(resolve))
+  })
 }
 
 export async function initEngine() {
@@ -464,6 +463,8 @@ export async function initEngine() {
     return true
   } catch (e) {
     console.error('Failed to initialize RiveScript:', e)
+    rs = null
+    rsReady = false
     return false
   }
 }

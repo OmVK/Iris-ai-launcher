@@ -40,7 +40,8 @@ export default class CyberSynth {
     this.init()
     if (this.isPlaying) return
     
-    // Resume audio context if suspended (browser security block)
+    if (this._disconnectTimer) { clearTimeout(this._disconnectTimer); this._disconnectTimer = null }
+    
     if (this.ctx.state === 'suspended') {
       this.ctx.resume()
     }
@@ -113,12 +114,18 @@ export default class CyberSynth {
     if (!this.isPlaying) return
     this.isPlaying = false
 
-    if (this.masterGain) {
-      this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime)
-      this.masterGain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.4) // Clean fade-out
+    if (this.sequenceTimer) {
+      clearTimeout(this.sequenceTimer)
+      this.sequenceTimer = null
     }
 
-    setTimeout(() => {
+    if (this.masterGain) {
+      this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime)
+      this.masterGain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.4)
+    }
+
+    this._disconnectTimer = setTimeout(() => {
+      this._disconnectTimer = null
       try {
         if (this.droneOsc) {
           this.droneOsc.stop()
@@ -133,10 +140,6 @@ export default class CyberSynth {
         if (this.droneGain) {
           this.droneGain.disconnect()
           this.droneGain = null
-        }
-        if (this.sequenceTimer) {
-          clearTimeout(this.sequenceTimer)
-          this.sequenceTimer = null
         }
       } catch (e) {}
     }, 450)

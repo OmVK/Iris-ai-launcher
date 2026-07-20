@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import TopAppBar from './components/TopAppBar'
 import BottomNavBar from './components/BottomNavBar'
 import ChronoPinLock from './components/ChronoPinLock'
@@ -39,7 +39,7 @@ import usePageRouter from './hooks/usePageRouter'
 
 export default function App() {
   const { activePage, setActivePage, showChronoLock, setShowChronoLock, chronoTarget, setChronoTarget, isVaultUnlocked, setIsVaultUnlocked, showVaultExplorer, setShowVaultExplorer, vaultTab, setVaultTab, lockedApps, toggleAppLock, showArcSearch, setShowArcSearch, isAppActive, setIsAppActive, setupComplete, setSetupComplete, showVpnBrowser, setShowVpnBrowser, vpnBrowserUrl, setVpnBrowserUrl } = useAppStore()
-  const { themeColor, glassOpacity, wallpaper, hasCustomWallpaper, dpiScale, gridColumns, gridRows, homeIconSize, homeTextSize, drawerIconSize, drawerTextSize, layoutStyle, drawerLayout, showAppLabels, showDrawerSearch, showHomeOrb, use24HourClock, globalIconTheme, activeLiveWallpaper, pageTransitionEffect, pageTransitionSpeed, pageTransitionEasing, fullscreenActive, setThemeColor, setGlassOpacity } = useThemeStore()
+  const { themeColor, glassOpacity, wallpaper, hasCustomWallpaper, dpiScale, showAppLabels, use24HourClock, globalIconTheme, activeLiveWallpaper, pageTransitionEffect, pageTransitionSpeed, pageTransitionEasing, fullscreenActive, darkGlassTheme, setThemeColor, setGlassOpacity } = useThemeStore()
   const { llmBackend, setLlmBackend, geminiKey, geminiModel, groqKey, voiceEnabled, setVoiceEnabled, voicePitch, voiceRate } = useAIStore()
   const { isLiveVoice, isListening, isPrivateSession, setIsPrivateSession, showLiveConfigModal, setShowLiveConfigModal, liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey, sessions, setSessions, activeSessionId, setActiveSessionId, chatLog, setChatLog, textPrompt, setTextPrompt } = useAssistantStore()
   const { installedApps, setInstalledApps, loadNativeApps, resetToDefaults } = useAppsStore()
@@ -80,70 +80,47 @@ export default function App() {
   }
 
   const renderActivePage = () => {
-    const pageProps = { onTriggerChronoLock: handleTriggerChronoLock, isVaultUnlocked, isAppActive }
     switch (activePage) {
       case 'home':
         return <Home onNavigate={setActivePage} onTriggerVault={handleTriggerVault}
           onTriggerChronoLock={handleTriggerChronoLock} isVaultUnlocked={isVaultUnlocked}
           installedApps={installedApps} setInstalledApps={setInstalledApps} lockedApps={lockedApps} onToggleAppLock={toggleAppLock}
-          gridColumns={gridColumns} gridRows={gridRows} homeIconSize={homeIconSize} homeTextSize={homeTextSize} layoutStyle={layoutStyle} setLayoutStyle={useThemeStore.getState().setLayoutStyle}
-          use24HourClock={use24HourClock} showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} isAppActive={isAppActive} powerSaveMode={powerSaveMode}
-          showHomeOrb={showHomeOrb} />
+          use24HourClock={use24HourClock} showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} isAppActive={isAppActive} powerSaveMode={powerSaveMode} />
       case 'widgets':
         return <Widgets isAppActive={isAppActive} activePage={activePage} powerSaveMode={powerSaveMode} />
       case 'assistant':
-        return <Assistant llmBackend={llmBackend} setLlmBackend={setLlmBackend} geminiKey={geminiKey} geminiModel={geminiModel} groqKey={groqKey}
+        return <Assistant
           autoTriggerLive={useAppStore.getState().showArcSearch} setAutoTriggerLive={() => {}}
           onNavigate={setActivePage}
-          chatLog={chatLog} setChatLog={setChatLog} textPrompt={textPrompt} setTextPrompt={setTextPrompt}
-          isListening={isListening} isSpeaking={useAssistantStore.getState().isSpeaking} isLiveVoice={isLiveVoice}
-          isPrivateSession={isPrivateSession} setIsPrivateSession={setIsPrivateSession}
-          activeUserTranscript={useAssistantStore.getState().activeUserTranscript} activeAiResponse={useAssistantStore.getState().activeAiResponse}
-          showLiveConfigModal={showLiveConfigModal} setShowLiveConfigModal={setShowLiveConfigModal}
-          liveSetupEngine={liveSetupEngine} setLiveSetupEngine={setLiveSetupEngine} liveSetupKey={liveSetupKey} setLiveSetupKey={setLiveSetupKey}
-          sessions={sessions} setSessions={setSessions} activeSessionId={activeSessionId} setActiveSessionId={setActiveSessionId}
           startVoiceInput={voiceEngine.startVoiceInput} stopVoiceInput={voiceEngine.stopVoiceInput}
           speakText={voiceEngine.speakText} stopSpeaking={voiceEngine.stopSpeaking}
-          voiceEnabled={voiceEnabled} setVoiceEnabled={setVoiceEnabled} submitPrompt={aiBackend.submitPrompt}
-          isLiveConfigured={voiceEngine.isLiveConfigured} handleEngageLiveClick={voiceEngine.handleEngageLiveClick}
+          submitPrompt={aiBackend.submitPrompt}
+          handleEngageLiveClick={voiceEngine.handleEngageLiveClick}
           handleSaveLiveConfig={voiceEngine.handleSaveLiveConfig} handleOpenLiveMode={voiceEngine.handleOpenLiveMode}
           handleExitLiveModeOnly={voiceEngine.handleExitLiveModeOnly} handleStopLiveModeCompletely={voiceEngine.handleStopLiveModeCompletely}
-          handleTogglePrivate={() => useAssistantStore.getState().togglePrivate()}
-          createNewSession={() => useAssistantStore.getState().createNewSession()}
-          loadSession={(id) => useAssistantStore.getState().loadSession(id)}
-          deleteSession={(id, e) => { e.stopPropagation(); useAssistantStore.getState().deleteSession(id) }}
-          isAppActive={isAppActive} showHomeOrb={showHomeOrb} />
+          isAppActive={isAppActive} />
       case 'drawer':
         return <Drawer onNavigate={setActivePage} onTriggerChronoLock={handleTriggerChronoLock}
           onTriggerVault={handleTriggerVault}
-          isVaultUnlocked={isVaultUnlocked} gridColumns={gridColumns} gridRows={gridRows} installedApps={installedApps} setInstalledApps={setInstalledApps}
-          setActivePage={setActivePage} showAppLabels={showAppLabels} showDrawerSearch={showDrawerSearch}
-          onToggleAppLock={toggleAppLock} lockedApps={lockedApps} globalIconTheme={globalIconTheme}
-          drawerIconSize={drawerIconSize} drawerTextSize={drawerTextSize}
-          drawerLayout={drawerLayout} setDrawerLayout={useThemeStore.getState().setDrawerLayout} />
+          isVaultUnlocked={isVaultUnlocked} installedApps={installedApps} setInstalledApps={setInstalledApps}
+          setActivePage={setActivePage} showAppLabels={showAppLabels}
+          onToggleAppLock={toggleAppLock} lockedApps={lockedApps} globalIconTheme={globalIconTheme} />
       case 'settings':
         return <Settings geminiKey={geminiKey} setGeminiKey={useAIStore.getState().setGeminiKey} geminiModel={geminiModel} setGeminiModel={useAIStore.getState().setGeminiModel}
           groqKey={groqKey} setGroqKey={useAIStore.getState().setGroqKey} isVaultUnlocked={isVaultUnlocked} onResetVault={() => { setIsVaultUnlocked(false); setShowVaultExplorer(false) }}
-          dpiScale={dpiScale} setDpiScale={useThemeStore.getState().setDpiScale} gridColumns={gridColumns} setGridColumns={useThemeStore.getState().setGridColumns}
-          gridRows={gridRows} setGridRows={useThemeStore.getState().setGridRows} homeIconSize={homeIconSize} setHomeIconSize={useThemeStore.getState().setHomeIconSize}
-          drawerIconSize={drawerIconSize} setDrawerIconSize={useThemeStore.getState().setDrawerIconSize} drawerTextSize={drawerTextSize} setDrawerTextSize={useThemeStore.getState().setDrawerTextSize}
-          homeTextSize={homeTextSize} setHomeTextSize={useThemeStore.getState().setHomeTextSize} layoutStyle={layoutStyle} setLayoutStyle={useThemeStore.getState().setLayoutStyle}
-          drawerLayout={drawerLayout} setDrawerLayout={useThemeStore.getState().setDrawerLayout}
           glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} themeColor={themeColor} setThemeColor={setThemeColor}
-          wallpaper={wallpaper} setWallpaper={useThemeStore.getState().setWallpaper} hasCustomWallpaper={hasCustomWallpaper} setCustomWallpaper={useThemeStore.getState().setCustomWallpaper}
-          showAppLabels={showAppLabels} setShowAppLabels={useThemeStore.getState().setShowAppLabels}
-          showDrawerSearch={showDrawerSearch} setShowDrawerSearch={useThemeStore.getState().setShowDrawerSearch}
-          activeLiveWallpaper={activeLiveWallpaper} setActiveLiveWallpaper={useThemeStore.getState().setActiveLiveWallpaper}
-          fullscreenActive={fullscreenActive} setFullscreenActive={useThemeStore.getState().setFullscreenActive}
+          wallpaper={wallpaper} hasCustomWallpaper={hasCustomWallpaper}
+          showAppLabels={showAppLabels}
+          activeLiveWallpaper={activeLiveWallpaper}
+          fullscreenActive={fullscreenActive}
           onResetApps={resetToDefaults} llmBackend={llmBackend} setLlmBackend={setLlmBackend}
-          installedApps={installedApps} setInstalledApps={setInstalledApps} globalIconTheme={globalIconTheme} setGlobalIconTheme={useThemeStore.getState().setGlobalIconTheme}
-          pageTransitionEffect={pageTransitionEffect} setPageTransitionEffect={useThemeStore.getState().setPageTransitionEffect}
-          pageTransitionSpeed={pageTransitionSpeed} setPageTransitionSpeed={useThemeStore.getState().setPageTransitionSpeed}
-          pageTransitionEasing={pageTransitionEasing} setPageTransitionEasing={useThemeStore.getState().setPageTransitionEasing}
-          use24HourClock={use24HourClock} setUse24HourClock={useThemeStore.getState().setUse24HourClock}
+          installedApps={installedApps} setInstalledApps={setInstalledApps} globalIconTheme={globalIconTheme}
+          pageTransitionEffect={pageTransitionEffect}
+          pageTransitionSpeed={pageTransitionSpeed}
+          pageTransitionEasing={pageTransitionEasing}
+          use24HourClock={use24HourClock}
           voicePitch={voicePitch} setVoicePitch={useAIStore.getState().setVoicePitch}
           voiceRate={voiceRate} setVoiceRate={useAIStore.getState().setVoiceRate}
-          showHomeOrb={showHomeOrb} setShowHomeOrb={useThemeStore.getState().setShowHomeOrb}
           powerSaveMode={powerSaveMode} setPowerSaveMode={setPowerSaveMode}
           onTriggerFeatureTour={() => setShowFeatureTour(true)} />
       case 'iris_tools':
@@ -155,24 +132,27 @@ export default function App() {
       case 'zero_screen':
         return <ZeroScreen onNavigate={setActivePage} isAppActive={isAppActive} installedApps={installedApps} onTriggerChronoLock={handleTriggerChronoLock} onTriggerVault={handleTriggerVault} />
       default:
-        return <Home onNavigate={setActivePage} isAppActive={isAppActive} showHomeOrb={showHomeOrb}
+        return <Home onNavigate={setActivePage} isAppActive={isAppActive}
           onTriggerChronoLock={handleTriggerChronoLock}
           onTriggerVault={handleTriggerVault}
-          isVaultUnlocked={isVaultUnlocked} gridColumns={gridColumns} gridRows={gridRows} homeIconSize={homeIconSize} homeTextSize={homeTextSize}
-          layoutStyle={layoutStyle} setLayoutStyle={useThemeStore.getState().setLayoutStyle}
+          isVaultUnlocked={isVaultUnlocked}
           installedApps={installedApps} setInstalledApps={setInstalledApps} lockedApps={lockedApps} onToggleAppLock={toggleAppLock}
-          showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} powerSaveMode={powerSaveMode} />
+          use24HourClock={use24HourClock} showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} powerSaveMode={powerSaveMode} />
     }
   }
 
-  const customWallpaperData = localStorage.getItem('custom_wallpaper') || ''
+  const customWallpaperData = useMemo(() => {
+    const raw = localStorage.getItem('custom_wallpaper') || ''
+    if (raw && !raw.startsWith('data:') && !raw.startsWith('blob:')) return ''
+    return raw
+  }, [wallpaper, hasCustomWallpaper])
 
   const scale = dpiScale / 100
 
   return (
     <div
       style={scale === 1 ? { width: '100vw', height: '100lvh', backgroundColor: 'transparent' } : { zoom: scale, width: `${100 / scale}vw`, height: `${100 / scale}lvh`, backgroundColor: 'transparent' }}
-      className={`relative flex flex-col overflow-hidden transition-all duration-300 interactive-glass h-full w-full text-on-surface font-mono selection:bg-primary-fixed-dim/30 ${PowerSaveManager.isEnabled() ? 'power-save-mode' : ''}`}
+      className={`relative flex flex-col overflow-hidden transition-all duration-300 interactive-glass h-full w-full text-on-surface font-mono selection:bg-primary-fixed-dim/30 ${PowerSaveManager.isEnabled() ? 'power-save-mode' : ''} ${darkGlassTheme ? 'dark-glass-theme' : ''}`}
       onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
     >
       {wallpaper !== 'SYSTEM' && hasCustomWallpaper && wallpaper !== 'VOID' && (

@@ -67,8 +67,6 @@ export default function FolderModal({
     <div 
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70" 
       onClick={onClose}
-      onTouchStart={e => e.stopPropagation()}
-      onTouchEnd={e => e.stopPropagation()}
     >
       <div 
         className="glass-surface border border-primary-fixed-dim/40 rounded-[2rem] w-full max-w-sm m-6 p-6 shadow-[0_0_40px_rgba(var(--primary-rgb),0.2)] max-h-[70vh] flex flex-col"

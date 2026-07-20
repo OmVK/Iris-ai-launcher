@@ -32,14 +32,14 @@ export const useAppStore = create((set, get) => ({
   setVaultTab: (v) => set({ vaultTab: v }),
   setLockedApps: (updater) => set((s) => {
     const next = typeof updater === 'function' ? updater(s.lockedApps) : updater
-    localStorage.setItem('iris_locked_apps', JSON.stringify(next))
+    try { localStorage.setItem('iris_locked_apps', JSON.stringify(next)) } catch {}
     return { lockedApps: next }
   }),
   toggleAppLock: (packageId) => set((s) => {
     const next = s.lockedApps.includes(packageId)
       ? s.lockedApps.filter(p => p !== packageId)
       : [...s.lockedApps, packageId]
-    localStorage.setItem('iris_locked_apps', JSON.stringify(next))
+    try { localStorage.setItem('iris_locked_apps', JSON.stringify(next)) } catch {}
     return { lockedApps: next }
   }),
 

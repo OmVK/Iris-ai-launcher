@@ -106,7 +106,7 @@ export default function Assistant({
   const fetchGroqModels = async (key) => { if (!key) return; try { const res = await fetch('https://api.groq.com/openai/v1/models', { headers: { 'Authorization': `Bearer ${key}` } }); if (res.ok) { const data = await res.json(); if (data.data) setDynamicGroqModels(data.data.map(m => m.id)) } } catch (_e) { /* model fetch failed */ } }
   const fetchNvidiaModels = async (key) => { const fb = ['meta/llama-3.1-405b-instruct', 'meta/llama-3.1-70b-instruct', 'meta/llama-3.1-8b-instruct', 'mistralai/mixtral-8x22b-instruct-v0.1', 'google/gemma-2-27b-it']; if (!key) return; try { const res = await fetch('https://integrate.api.nvidia.com/v1/models', { headers: { 'Authorization': `Bearer ${key}` } }); if (res.ok) { const data = await res.json(); if (data.data) { setDynamicNvidiaModels(data.data.map(m => m.id).filter(id => id.includes('instruct') || id.includes('chat')).slice(0, 20) || fb) } } } catch (e) { setDynamicNvidiaModels(fb) } }
 
-  useEffect(() => { if (llmBackend === 'GEMINI') fetchGeminiModels(getGeminiKey()); if (llmBackend === 'GROQ') fetchGroqModels(getGroqKey()); if (llmBackend === 'NVIDIA') fetchNvidiaModels(getNvidiaKey()) }, [llmBackend, geminiKey, groqKey])
+  useEffect(() => { if (llmBackend === 'GEMINI') fetchGeminiModels(getGeminiKey()); if (llmBackend === 'GROQ') fetchGroqModels(getGroqKey()); if (llmBackend === 'NVIDIA') getNvidiaKey().then(k => fetchNvidiaModels(k)) }, [llmBackend, geminiKey, groqKey])
 
   // Connection test
   const testConnection = async (provider, key) => {
@@ -123,7 +123,7 @@ export default function Assistant({
   }
 
   // Auto-trigger live mode
-  useEffect(() => { if (autoTriggerLive) { handleOpenLiveMode(); if (setAutoTriggerLive) setAutoTriggerLive(false) } }, [autoTriggerLive])
+  useEffect(() => { if (autoTriggerLive) { handleOpenLiveMode(); if (setAutoTriggerLive) setAutoTriggerLive(false) } }, [autoTriggerLive, handleOpenLiveMode, setAutoTriggerLive])
 
   const streamEndRef = useRef(null)
   useEffect(() => { if (streamEndRef.current) streamEndRef.current.scrollIntoView({ behavior: 'smooth' }) }, [chatLog])
@@ -226,7 +226,7 @@ export default function Assistant({
                   )}
 
                   <div className="flex-1 glass-surface rounded-t-xl p-4 font-mono-data text-[10px] overflow-y-auto scroll-container space-y-3.5 border-b-0 leading-relaxed bg-[#0a0e17]/40 relative">
-                    {chatLog.map((msg, index) => <ChatMessage key={index} msg={msg} index={index} chatUnlocked={chatUnlocked} onDelete={(i) => setChatLog(prev => prev.filter((_, idx) => idx !== i))} />)}
+                    {chatLog.map((msg, index) => <ChatMessage key={msg.id || `msg-${index}`} msg={msg} index={index} chatUnlocked={chatUnlocked} onDelete={(i) => setChatLog(prev => prev.filter((_, idx) => idx !== i))} />)}
                     {activeUserTranscript && <div className={`flex gap-2 animate-pulse ${!chatUnlocked ? 'opacity-10 blur-md select-none' : ''}`}><span className="text-on-surface-variant/40 shrink-0">[{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }).toUpperCase()}]</span><span className="font-bold shrink-0 text-[#c6c5d4]">[USER]</span><span className="text-[#dfe2ef]/85">{activeUserTranscript}</span></div>}
                     {activeAiResponse && <div className={`flex gap-2 animate-pulse ${!chatUnlocked ? 'opacity-10 blur-md select-none' : ''}`}><span className="text-on-surface-variant/40 shrink-0">[{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }).toUpperCase()}]</span><span className="font-bold shrink-0 text-primary-container">[IRIS]</span><span className="text-on-surface">{activeAiResponse}</span></div>}
                     <div ref={streamEndRef} />

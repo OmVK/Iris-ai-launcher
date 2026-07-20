@@ -1,21 +1,32 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { STOCK_DB } from '../data/stockData'
 
-export default function useStockData({ ticker1, ticker2 }) {
-  const [liveData1, setLiveData1] = useState(STOCK_DB['BTC'])
-  const [liveData2, setLiveData2] = useState(STOCK_DB['SOL'])
-  const [isLoading, setIsLoading] = useState(false)
+const DEFAULT_TICKER = { name: 'Unknown', price: 0, change: 0, pe: 0, cap: '0', volume: '0', history: [], candles: [] }
 
-  const fetchLiveTicker = async (ticker, isPrimary) => {
+export default function useStockData({ ticker1, ticker2 }) {
+  const [liveData1, setLiveData1] = useState(STOCK_DB['BTC'] || DEFAULT_TICKER)
+  const [liveData2, setLiveData2] = useState(STOCK_DB['SOL'] || DEFAULT_TICKER)
+  const [isLoading, setIsLoading] = useState(false)
+  const mountedRef = useRef(true)
+  const abortRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (abortRef.current) abortRef.current.abort()
+    }
+  }, [])
+
+  const fetchLiveTicker = async (ticker, isPrimary, signal) => {
     const isCrypto = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'ADA'].includes(ticker)
-    const baseMeta = STOCK_DB[ticker]
+    const baseMeta = STOCK_DB[ticker] || DEFAULT_TICKER
 
     try {
       if (isCrypto) {
-        const tickerRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${ticker}USDT`)
+        const tickerRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${ticker}USDT`, { signal })
         const tickerJson = await tickerRes.json()
 
-        const klineRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${ticker}USDT&interval=1d&limit=15`)
+        const klineRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${ticker}USDT&interval=1d&limit=15`, { signal })
         const klineJson = await klineRes.json()
 
         const realPrice = parseFloat(tickerJson.lastPrice)
@@ -40,11 +51,13 @@ export default function useStockData({ ticker1, ticker2 }) {
           candles: candleHistory
         }
 
-        if (isPrimary) setLiveData1(finalObj)
-        else setLiveData2(finalObj)
+        if (mountedRef.current) {
+          if (isPrimary) setLiveData1(finalObj)
+          else setLiveData2(finalObj)
+        }
       } else {
         const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=15d`
-        const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`)
+        const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`, { signal })
         const proxyJson = await proxyRes.json()
         const parsed = JSON.parse(proxyJson.contents)
 
@@ -78,10 +91,13 @@ export default function useStockData({ ticker1, ticker2 }) {
           candles: candleHistory
         }
 
-        if (isPrimary) setLiveData1(finalObj)
-        else setLiveData2(finalObj)
+        if (mountedRef.current) {
+          if (isPrimary) setLiveData1(finalObj)
+          else setLiveData2(finalObj)
+        }
       }
     } catch (err) {
+      if (err.name === 'AbortError') return
       console.warn("Live financial feed rate-limited, engaging static backup nodes:", err)
       const fallbackObj = {
         ...baseMeta,
@@ -92,17 +108,25 @@ export default function useStockData({ ticker1, ticker2 }) {
           close: val
         }))
       }
-      if (isPrimary) setLiveData1(fallbackObj)
-      else setLiveData2(fallbackObj)
+      if (mountedRef.current) {
+        if (isPrimary) setLiveData1(fallbackObj)
+        else setLiveData2(fallbackObj)
+      }
     }
   }
 
   useEffect(() => {
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setIsLoading(true)
     Promise.all([
-      fetchLiveTicker(ticker1, true),
-      fetchLiveTicker(ticker2, false)
-    ]).finally(() => setIsLoading(false))
+      fetchLiveTicker(ticker1, true, controller.signal),
+      fetchLiveTicker(ticker2, false, controller.signal)
+    ]).finally(() => {
+      if (mountedRef.current) setIsLoading(false)
+    })
+    return () => controller.abort()
   }, [ticker1, ticker2])
 
   return { liveData1, liveData2, isLoading }

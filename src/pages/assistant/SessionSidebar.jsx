@@ -28,7 +28,7 @@ export default function SessionSidebar({ sessions, activeSessionId, isPrivateSes
               className={`group flex items-center justify-between p-2 rounded border font-mono-data text-[9px] cursor-pointer transition-all ${isActive ? 'bg-primary-fixed-dim/10 border-primary-fixed-dim/40 text-primary-fixed-dim shadow-[0_0_8px_rgba(var(--primary-rgb),0.15)]' : 'bg-transparent border-transparent hover:bg-white/5 text-on-surface-variant/60 hover:text-white'}`}>
               <span className="truncate pr-1">{s.name}</span>
               {sessions.length > 1 && (
-                <button onClick={(e) => onDeleteSession(s.id, e)} className="hover:text-error transition-colors text-on-surface-variant/60">
+                <button onClick={(e) => { e.stopPropagation(); onDeleteSession(s.id) }} className="hover:text-error transition-colors text-on-surface-variant/60">
                   <span className="material-symbols-outlined text-[10px]">delete</span>
                 </button>
               )}

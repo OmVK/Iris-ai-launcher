@@ -174,7 +174,7 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
 
   const handleAction = (res) => {
     if (res.type === 'app') {
-      launchApp(res.data)
+      launchApp(res.data.packageId, res.data.label)
       onClose()
     } else if (res.type === 'setting') {
       setActivePage('settings')

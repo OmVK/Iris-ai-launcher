@@ -9,26 +9,20 @@ import DrawerMesh from '../components/drawer/DrawerMesh'
 import { launchApp } from '../components/LauncherPlugin'
 import { routeAppClick } from '../utils/appClickRouter'
 import { trackAppLaunch } from '../hooks/useAppSuggestions'
+import { useThemeStore } from '../stores/themeStore'
 
 export default function Drawer({
   onNavigate,
   onTriggerChronoLock,
   onTriggerVault,
   isVaultUnlocked,
-  gridColumns = 5,
-  gridRows = 5,
   installedApps = [],
   setInstalledApps,
   lockedApps = [],
-  onToggleAppLock,
-  showAppLabels = true,
-  showDrawerSearch = true,
-  globalIconTheme = 'DEFAULT',
-  drawerIconSize = 100,
-  drawerTextSize = 100,
-  drawerLayout = 'GRID',
-  setDrawerLayout
+  onToggleAppLock
 }) {
+  const { gridColumns, gridRows, showAppLabels, showDrawerSearch, globalIconTheme, drawerIconSize, drawerTextSize, drawerLayout, setDrawerLayout } = useThemeStore()
+  
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('ALL')
   const [sortBy, setSortBy] = useState('A-Z')
@@ -92,9 +86,7 @@ export default function Drawer({
     return () => { el.removeEventListener('scroll', onScroll); clearTimeout(scrollTimerRef.current) }
   }, [])
 
-  const categoriesItems = useMemo(() => [
-    ...customFolders
-  ], [customFolders])
+  const categoriesItems = useMemo(() => customFolders.filter(f => f && f.apps && f.apps.length > 0), [customFolders])
 
   const autoCategoriesItems = useMemo(() => {
     if (drawerLayout !== 'CATEGORIES') return categoriesItems
@@ -171,6 +163,11 @@ export default function Drawer({
     ))
     setToastText(`${app.label.toUpperCase()} ${app.isHome ? 'REMOVED FROM' : 'ADDED TO'} HOME`)
     setTimeout(() => setActiveContextMenu(null), 250)
+  }, [setInstalledApps, setToastText])
+
+  const handleClearAllHome = useCallback(() => {
+    setInstalledApps(prev => prev.map(a => a.isHome ? { ...a, isHome: false } : a))
+    setToastText('ALL HOME APPS CLEARED')
   }, [setInstalledApps, setToastText])
 
   return (
@@ -258,6 +255,16 @@ export default function Drawer({
               <option value="Z-A" className="bg-[#020617]">SORT: Z-A</option>
               <option value="SIZE" className="bg-[#020617]">SORT: SIZE</option>
             </select>
+
+            {installedApps.some(a => a.isHome) && (
+              <button
+                onClick={handleClearAllHome}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg glass-chip border border-error/30 text-error/70 text-[8px] font-bold font-label-caps tracking-widest active:scale-95 transition-all hover:bg-error/10"
+              >
+                <span className="material-symbols-outlined text-[11px]">remove_circle</span>
+                <span>CLEAR HOME</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

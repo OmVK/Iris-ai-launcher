@@ -6,15 +6,18 @@ export default function ResultDisplay({ tool, result, copied, copyToClipboard })
     </button>
   )
 
-  const Row = ({ label, value, copyId }) => (
-    <div className="flex items-start justify-between gap-2 py-1 border-b border-white/5 last:border-0">
-      <span className="text-on-surface-variant/40 shrink-0">{label}</span>
-      <span className="text-on-surface-variant text-right flex items-center">
-        <span className="break-all">{value}</span>
-        {copyId && <CopyBtn text={value} id={copyId} />}
-      </span>
-    </div>
-  )
+  const Row = ({ label, value, copyId }) => {
+    if (value === null || value === undefined) return null
+    return (
+      <div className="flex items-start justify-between gap-2 py-1 border-b border-white/5 last:border-0">
+        <span className="text-on-surface-variant/40 shrink-0">{label}</span>
+        <span className="text-on-surface-variant text-right flex items-center">
+          <span className="break-all">{String(value)}</span>
+          {copyId && <CopyBtn text={String(value)} id={copyId} />}
+        </span>
+      </div>
+    )
+  }
 
   if (tool === 'ip_info' && result.info) {
     const i = result.info

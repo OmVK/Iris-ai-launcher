@@ -3,7 +3,8 @@ import { registerPlugin } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { LocalNotifications } from '@capacitor/local-notifications'
-import { processCommand, initEngine } from '../utils/OfflineCommandEngine'
+import { processCommand as _processCommand, initEngine } from '../utils/OfflineCommandEngine'
+const processCommand = typeof _processCommand === 'function' ? _processCommand : async () => ({ success: false, response: 'Offline engine unavailable.' })
 import IrisVisualizer from './IrisVisualizer'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { handleSideEffect } from '../utils/offlineSideEffects'
@@ -24,6 +25,8 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
   const pendingReminderTextRef = useRef('')
   const speechInterruptRef = useRef(false)
   const conversationHistoryRef = useRef([])
+  const mountedRef = useRef(true)
+  const timeoutsRef = useRef([])
 
   const { speakTextNative, stopSpeakingNative, canvasRef, activeAudioRef, ttsResolvers } = useOfflineTTS({ isVisible, isAppActive, speechInterruptRef })
 
@@ -40,6 +43,18 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
 
   useEffect(() => {
     initEngine()
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    timeoutsRef.current.forEach(id => clearTimeout(id))
+    timeoutsRef.current = []
+
+    return () => {
+      mountedRef.current = false
+      timeoutsRef.current.forEach(id => clearTimeout(id))
+      timeoutsRef.current = []
+    }
   }, [])
 
   useEffect(() => {
@@ -63,6 +78,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
     startListening()
 
     const statusListener = LauncherPlugin.addListener('onSpeechStatus', (data) => {
+      if (!mountedRef.current) return
       if (data.status === 'listening') {
         setStatusText('Listening...')
         setIsListening(true)
@@ -75,6 +91,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
     })
 
     const partialListener = LauncherPlugin.addListener('onSpeechPartial', (data) => {
+      if (!mountedRef.current) return
       if (data.text) setStatusText(data.text)
     })
 
@@ -126,9 +143,10 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
         if (retryCount < 10 && !speechInterruptRef.current && isVisibleRef.current) {
           setIsProcessing(false)
           setIsListening(false)
-          setTimeout(() => {
-              if (isVisibleRef.current) startListening(retryCount + 1)
+          const tid = setTimeout(() => {
+              if (mountedRef.current && isVisibleRef.current) startListening(retryCount + 1)
           }, 50)
+          timeoutsRef.current.push(tid)
         } else {
           setStatusText('I didn\'t catch that. Tap to try again.')
           setIsListening(false)
@@ -140,11 +158,12 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
       setIsProcessing(false)
       setIsListening(false)
       if (retryCount < 10 && !speechInterruptRef.current && isVisibleRef.current) {
-        setTimeout(() => {
-          if (isVisibleRef.current) {
+        const tid = setTimeout(() => {
+          if (mountedRef.current && isVisibleRef.current) {
             startListening(retryCount + 1)
           }
         }, 50)
+        timeoutsRef.current.push(tid)
       } else {
         setStatusText('Tap to try again.')
       }
@@ -348,29 +367,28 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
       setIsProcessing(false)
       if (isVisibleRef.current) {
         if (pendingContextRef.current) {
-          // We need more context from the user, start listening again
-          setTimeout(() => {
-            if (isVisibleRef.current) {
+          const tid = setTimeout(() => {
+            if (mountedRef.current && isVisibleRef.current) {
               startListening()
             }
           }, 1500)
+          timeoutsRef.current.push(tid)
         } else if (didClose) {
-          // Command explicitly requested close (e.g. launched an app), close immediately
           if (typeof onClose === 'function') onClose()
         } else if (shouldKeepListening) {
-          // Conversational/info command — keep listening for next command
-          setTimeout(() => {
-            if (isVisibleRef.current) {
+          const tid = setTimeout(() => {
+            if (mountedRef.current && isVisibleRef.current) {
               startListening()
             }
           }, 2000)
+          timeoutsRef.current.push(tid)
         } else {
-          // Task completed with response spoken — close overlay
-          setTimeout(() => {
-            if (isVisibleRef.current) {
+          const tid = setTimeout(() => {
+            if (mountedRef.current && isVisibleRef.current) {
               if (typeof onClose === 'function') onClose()
             }
           }, 3000)
+          timeoutsRef.current.push(tid)
         }
       }
     }

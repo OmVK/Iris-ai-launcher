@@ -42,13 +42,11 @@ export default function TaskAlarmOverlay({ setActivePage }) {
       const task = e.detail
       setActiveTask(task)
       
-      // Play tone and speak
       playAlertTone()
       setTimeout(() => {
         speakTextNative(`Reminder for task: ${task.text}`)
       }, 600)
 
-      // Auto-complete after 60 seconds
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       timeoutRef.current = setTimeout(() => {
         handleMarkDone(task.id)
@@ -59,6 +57,10 @@ export default function TaskAlarmOverlay({ setActivePage }) {
     return () => {
       window.removeEventListener('TRIGGER_TASK_ALARM', handleTrigger)
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {})
+        audioCtxRef.current = null
+      }
     }
   }, [])
 

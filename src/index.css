@@ -79,6 +79,20 @@ body.custom-wallpaper-active .glass-icon-container {
   border: 1px solid rgba(var(--primary-rgb), 0.2) !important;
 }
 
+body.dark-glass-theme .glass-surface {
+  background: rgba(5, 5, 10, 0.2) !important;
+  backdrop-filter: blur(25px) !important;
+  -webkit-backdrop-filter: blur(25px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+body.dark-glass-theme .glass-icon-container {
+  background: rgba(5, 5, 10, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
 .glass-border {
   border: 1px solid rgba(var(--primary-rgb), 0.15);
   transition: border-color 0.3s ease;
@@ -561,4 +575,19 @@ body.custom-wallpaper-active .glass-icon-container {
 
 .power-save-mode .page-transition-container {
   animation: none !important;
+}
+
+/* Respect user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .page-transition-container {
+    animation: none !important;
+  }
+  .iris-orb, .iris-orb::before, .iris-bg-container > div {
+    animation: none !important;
+  }
 }

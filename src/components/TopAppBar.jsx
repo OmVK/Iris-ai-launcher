@@ -77,7 +77,7 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
     return () => {
       if (clockInterval) clearInterval(clockInterval)
     }
-  }, [use24HourClock, isAppActive, powerSaveMode])
+  }, [use24HourClock, isAppActive])
 
   return (
     <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-margin h-12 bg-surface-container/30 backdrop-blur-3xl border-b border-outline-variant/30 shadow-[0_1px_15px_-3px_rgba(var(--primary-rgb),0.2)]">

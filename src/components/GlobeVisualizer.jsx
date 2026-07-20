@@ -129,10 +129,23 @@ export default function GlobeVisualizer({ state = 'idle', className = '' }) {
       animationFrameId = requestAnimationFrame(draw);
     }
 
+    const resizeObserver = new ResizeObserver(() => {
+      const rect = canvas.parentElement?.getBoundingClientRect()
+      if (rect) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+        canvas.width = rect.width * dpr
+        canvas.height = rect.height * dpr
+        canvas.style.width = rect.width + 'px'
+        canvas.style.height = rect.height + 'px'
+      }
+    })
+    resizeObserver.observe(canvas.parentElement || canvas)
+
     draw();
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      resizeObserver.disconnect();
     };
   }, [state]);
 

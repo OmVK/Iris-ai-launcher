@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import { launchApp } from '../components/LauncherPlugin'
 
@@ -25,6 +26,7 @@ const levenshtein = (a, b) => {
 }
 
 export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef }) {
+  const loadingAppsRef = useRef(false)
   const dispatchCommand = async (command) => {
     const { action, params } = command
     try {
@@ -34,12 +36,14 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
           const lowerApp = params.app.toLowerCase().replace(/[.,!?\s']/g, '')
           let apps = appsListRef.current || []
 
-          if (apps.length === 0) {
+          if (apps.length === 0 && !loadingAppsRef.current) {
             try {
+              loadingAppsRef.current = true
               const res = await LauncherPlugin.getInstalledApps()
               apps = res?.apps || []
               appsListRef.current = apps
             } catch (e) { console.warn('[IRIS] Failed to get installed apps for open:', e) }
+            finally { loadingAppsRef.current = false }
           }
 
           let match = apps.find(a =>
@@ -105,12 +109,14 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
           const lowerApp = params.app.toLowerCase().replace(/[.,!?]/g, '')
           let apps = appsListRef.current || []
 
-          if (apps.length === 0) {
+          if (apps.length === 0 && !loadingAppsRef.current) {
             try {
+              loadingAppsRef.current = true
               const res = await LauncherPlugin.getInstalledApps()
               apps = res?.apps || []
               appsListRef.current = apps
             } catch (e) { console.warn('[IRIS] Failed to get installed apps for uninstall/info:', e) }
+            finally { loadingAppsRef.current = false }
           }
 
           const match = apps.find(a =>
@@ -170,7 +176,11 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
           return { close: true }
         }
         case 'timer': {
-          let secs = parseInt(params.duration) || 0
+          const parsed = parseInt(params.duration)
+          if (!parsed || parsed === 0) {
+            return { error: "Please specify a duration for the timer." }
+          }
+          let secs = parsed
           if (params.unit?.startsWith('minute')) secs *= 60
           else if (params.unit?.startsWith('hour')) secs *= 3600
           await LauncherPlugin.setTimer({ seconds: secs })

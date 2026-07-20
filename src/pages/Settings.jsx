@@ -13,42 +13,31 @@ import PowerSaveSection from './settings/PowerSaveSection'
 import FactoryResetSection from './settings/FactoryResetSection'
 import VaultLockSection from './settings/VaultLockSection'
 import AboutSection from './settings/AboutSection'
+import { useThemeStore } from '../stores/themeStore'
 
 export default function Settings({
   geminiKey, setGeminiKey,
   geminiModel, setGeminiModel,
   groqKey, setGroqKey,
   isVaultUnlocked, onResetVault, onResetApps,
-  dpiScale, setDpiScale,
-  gridColumns, setGridColumns,
-  gridRows, setGridRows,
-  homeIconSize, setHomeIconSize,
-  drawerIconSize, setDrawerIconSize,
-  drawerTextSize, setDrawerTextSize,
-  homeTextSize, setHomeTextSize,
-  layoutStyle, setLayoutStyle,
-  glassOpacity, setGlassOpacity,
-  themeColor, setThemeColor,
-  wallpaper, setWallpaper,
-  hasCustomWallpaper, setCustomWallpaper,
-  showAppLabels, setShowAppLabels,
-  showDrawerSearch, setShowDrawerSearch,
-  activeLiveWallpaper, setActiveLiveWallpaper,
-  fullscreenActive, setFullscreenActive,
   llmBackend, setLlmBackend,
   installedApps = [], setInstalledApps,
-  globalIconTheme, setGlobalIconTheme,
-  use24HourClock, setUse24HourClock,
-  pageTransitionEffect, setPageTransitionEffect,
-  pageTransitionSpeed, setPageTransitionSpeed,
-  pageTransitionEasing, setPageTransitionEasing,
   voicePitch, setVoicePitch,
   voiceRate, setVoiceRate,
   powerSaveMode, setPowerSaveMode,
-  showHomeOrb, setShowHomeOrb,
-  drawerLayout, setDrawerLayout,
   onTriggerFeatureTour
 }) {
+  const { 
+    dpiScale, setDpiScale, gridColumns, setGridColumns, gridRows, setGridRows,
+    homeIconSize, setHomeIconSize, drawerIconSize, setDrawerIconSize, drawerTextSize, setDrawerTextSize,
+    homeTextSize, setHomeTextSize, layoutStyle, setLayoutStyle, glassOpacity, setGlassOpacity,
+    themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setCustomWallpaper,
+    showAppLabels, setShowAppLabels, showDrawerSearch, setShowDrawerSearch, activeLiveWallpaper, setActiveLiveWallpaper,
+    fullscreenActive, setFullscreenActive, globalIconTheme, setGlobalIconTheme, use24HourClock, setUse24HourClock,
+    pageTransitionEffect, setPageTransitionEffect, pageTransitionSpeed, setPageTransitionSpeed,
+    pageTransitionEasing, setPageTransitionEasing, showHomeOrb, setShowHomeOrb, drawerLayout, setDrawerLayout,
+    darkGlassTheme, setDarkGlassTheme
+  } = useThemeStore()
   const [expandedSections, setExpandedSections] = useState({
     wallpaperTheme: false, apiKeys: false, layoutConfig: false,
     appIcons: false, transitions: false, llmBackend: false,
@@ -74,7 +63,7 @@ export default function Settings({
       <LLMBackendSection expandedSections={expandedSections} toggleSection={toggleSection} llmBackend={llmBackend} setLlmBackend={setLlmBackend} geminiModel={geminiModel} setGeminiModel={setGeminiModel} />
       <VoiceSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} voicePitch={voicePitch} setVoicePitch={setVoicePitch} voiceRate={voiceRate} setVoiceRate={setVoiceRate} />
       <NeuralSkillsSection expandedSections={expandedSections} toggleSection={toggleSection} showDrawerSearch={showDrawerSearch} setShowDrawerSearch={setShowDrawerSearch} />
-      <TweaksSection expandedSections={expandedSections} toggleSection={toggleSection} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} showAppLabels={showAppLabels} setShowAppLabels={setShowAppLabels} use24HourClock={use24HourClock} setUse24HourClock={setUse24HourClock} fullscreenActive={fullscreenActive} setFullscreenActive={setFullscreenActive} showHomeOrb={showHomeOrb} setShowHomeOrb={setShowHomeOrb} />
+      <TweaksSection expandedSections={expandedSections} toggleSection={toggleSection} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} showAppLabels={showAppLabels} setShowAppLabels={setShowAppLabels} use24HourClock={use24HourClock} setUse24HourClock={setUse24HourClock} fullscreenActive={fullscreenActive} setFullscreenActive={setFullscreenActive} showHomeOrb={showHomeOrb} setShowHomeOrb={setShowHomeOrb} darkGlassTheme={darkGlassTheme} setDarkGlassTheme={setDarkGlassTheme} />
       <LauncherEngineSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <PowerSaveSection expandedSections={expandedSections} toggleSection={toggleSection} powerSaveMode={powerSaveMode} setPowerSaveMode={setPowerSaveMode} />
       <FactoryResetSection expandedSections={expandedSections} toggleSection={toggleSection} onResetApps={onResetApps} />

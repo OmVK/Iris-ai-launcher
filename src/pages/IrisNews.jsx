@@ -13,7 +13,7 @@ async function fetchHackerNews() {
   const ids = await res.json()
   const top = ids.slice(0, 15)
   const stories = await Promise.all(
-    top.map(id => fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r => r.json()))
+    top.map(id => fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r => r.json()).catch(() => null))
   )
   return stories.filter(s => s && s.title).map(s => ({
     title: s.title,
@@ -44,17 +44,21 @@ function parseRSS(xml) {
 }
 
 async function fetchWorldNews() {
-  const res = await fetch('https://feeds.bbci.co.uk/news/world/rss.xml')
-  const xml = await res.text()
-  const articles = parseRSS(xml)
-  return articles.map(a => ({ ...a, source: 'BBC World' }))
+  try {
+    const res = await fetch('https://feeds.bbci.co.uk/news/world/rss.xml')
+    const xml = await res.text()
+    const articles = parseRSS(xml)
+    return articles.map(a => ({ ...a, source: 'BBC World' }))
+  } catch (e) { return [] }
 }
 
 async function fetchTechNews() {
-  const res = await fetch('https://feeds.bbci.co.uk/news/technology/rss.xml')
-  const xml = await res.text()
-  const articles = parseRSS(xml)
-  return articles.map(a => ({ ...a, source: 'BBC Tech' }))
+  try {
+    const res = await fetch('https://feeds.bbci.co.uk/news/technology/rss.xml')
+    const xml = await res.text()
+    const articles = parseRSS(xml)
+    return articles.map(a => ({ ...a, source: 'BBC Tech' }))
+  } catch (e) { return [] }
 }
 
 function timeAgo(ts) {
@@ -89,6 +93,7 @@ export default function IrisNews({ onNavigate }) {
     setError(null)
     try {
       const source = NEWS_SOURCES.find(s => s.id === sourceId)
+      if (!source) { setError('Unknown news source.'); setLoading(false); return }
       const data = await source.fetch()
       if (!data || data.length === 0) {
         setError('No articles found. Try again later.')

@@ -15,6 +15,8 @@ export default function useOfflineTTS({ isVisible, isAppActive, speechInterruptR
   const audioQueueRef = useRef([])
   const isPlayingRef = useRef(false)
   const idleTimerRef = useRef(null)
+  const safetyTimerRef = useRef(null)
+  const objectUrlsRef = useRef([])
 
   // Audio Visualizer animation loop
   useEffect(() => {
@@ -56,6 +58,9 @@ export default function useOfflineTTS({ isVisible, isAppActive, speechInterruptR
         analyserRef.current = null
       }
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
+      objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+      objectUrlsRef.current = []
     }
   }, [])
 
@@ -134,14 +139,17 @@ export default function useOfflineTTS({ isVisible, isAppActive, speechInterruptR
     }
     const audio = activeAudioRef.current;
     audio.src = url;
+    objectUrlsRef.current.push(url)
     let settled = false
     const settle = () => {
       if (settled) return
       settled = true
       URL.revokeObjectURL(url)
+      objectUrlsRef.current = objectUrlsRef.current.filter(u => u !== url)
       handleChunkEnd(id)
       playNextAudio()
     }
+    audio.onended = settle
     audio.play().then(() => {
       const state = ttsResolvers.current.get(id)
       if (state && state.onFirstChunk) state.onFirstChunk()
@@ -154,7 +162,6 @@ export default function useOfflineTTS({ isVisible, isAppActive, speechInterruptR
         new Promise(r => setTimeout(r, 3000))
       ]).then(settle).catch(settle)
     })
-    audio.onended = settle
   }
 
   const speakTextNative = (text, onAudioStart) => {
@@ -170,9 +177,10 @@ export default function useOfflineTTS({ isVisible, isAppActive, speechInterruptR
       const chunks = text.match(/.*?[.!?](?:\s|$)|.+$/g)?.map(s => s.trim()).filter(Boolean) || [text]
       const jobId = Date.now().toString() + Math.random()
       let audioStarted = false
-      const safetyTimer = setTimeout(() => { ttsResolvers.current.delete(jobId); resolve() }, 30000)
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
+      safetyTimerRef.current = setTimeout(() => { ttsResolvers.current.delete(jobId); resolve() }, 30000)
       const wrappedResolve = () => {
-        clearTimeout(safetyTimer)
+        if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
         ttsResolvers.current.delete(jobId)
         const waitForAudio = () => {
           if (isPlayingRef.current || audioQueueRef.current.length > 0) {
@@ -203,10 +211,10 @@ export default function useOfflineTTS({ isVisible, isAppActive, speechInterruptR
           LauncherPlugin.speakText({ text }),
           new Promise(r => setTimeout(r, 3000))
         ]).then(() => {
-          clearTimeout(safetyTimer)
+          if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
           resolve()
         }).catch(() => {
-          clearTimeout(safetyTimer)
+          if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
           resolve()
         })
       }

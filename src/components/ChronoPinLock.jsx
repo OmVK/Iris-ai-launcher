@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { logNotification, authenticateBiometric } from './LauncherPlugin'
 import PinKeypad from './PinKeypad'
 import ChronoClockDial from './ChronoClockDial'
@@ -11,6 +11,8 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
   const [statusState, setStatusState] = useState('AWAITING_PASSKEY') // 'AWAITING_PASSKEY' | 'VALIDATING' | 'GRANTED' | 'DENIED'
   const [isShaking, setIsShaking] = useState(false)
   const consoleEndRef = useRef(null)
+  const biometricTimeoutRef = useRef(null)
+  const mountedRef = useRef(true)
 
   const logListTemplate = [
     "SYS: [0.0s] CHRONO-PASSKEY NETWORK SYNCHRONIZER ONLINE...",
@@ -19,6 +21,14 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     "SYS: [0.9s] VAULT ENVELOPE ARMED. ENCRYPTED PASSCODE SYNCED.",
     "SYS: [1.2s] AWAITING DYNAMIC CLOCK PIN ENTRY FOR SYSTEM VAULT..."
   ]
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (biometricTimeoutRef.current) clearTimeout(biometricTimeoutRef.current)
+    }
+  }, [])
 
   // Live ticking clock syncer (updates time every 1s — sufficient for PIN validation)
   useEffect(() => {
@@ -45,6 +55,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
 
   // Silent WebRTC Security Camera Capture
   const captureThreatPhoto = async () => {
+    if (!mountedRef.current) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
       const video = document.createElement('video')
@@ -127,7 +138,8 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
       }
     }
     // Delay slightly to let the UI render the lock screen first
-    setTimeout(runBiometric, 500)
+    biometricTimeoutRef.current = setTimeout(runBiometric, 500)
+    return () => { if (biometricTimeoutRef.current) clearTimeout(biometricTimeoutRef.current) }
   }, [])
 
   // Auto-scroll the terminal logs console to bottom
@@ -197,14 +209,14 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     addLog("KEYPAD: ENTIRE SECURE BUFFER CLEARED")
   }
 
-  const handleVerifyPin = (input) => {
+  const handleVerifyPin = useCallback((input) => {
     setStatusState('VALIDATING')
     addLog("SYS: RUNNING SECURE CHRONO-AUTHENTICATOR PIPELINE...")
 
-    // Capture correct PINs at the moment of entry to avoid time-expiry during the validation delay
     const correctPins = getCorrectPins()
 
-    setTimeout(() => {
+    const validationTimeout = setTimeout(() => {
+      if (!mountedRef.current) return
       if (correctPins.includes(input)) {
         setStatusState('GRANTED')
         addLog("SYS: COGNITIVE TIME SYNC CONFIRMED!")
@@ -212,9 +224,10 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
         logNotification('BIOMETRIC', 'Access Granted: Chrono-key validation succeeded.', 'success')
         if (navigator.vibrate) navigator.vibrate([100, 50, 100])
         
-        setTimeout(() => {
-          if (onUnlockSuccess) onUnlockSuccess()
+        const unlockTimeout = setTimeout(() => {
+          if (mountedRef.current && onUnlockSuccess) onUnlockSuccess()
         }, 1200)
+        biometricTimeoutRef.current = unlockTimeout
       } else {
         setStatusState('DENIED')
         setIsShaking(true)
@@ -224,14 +237,17 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
         captureThreatPhoto()
         if (navigator.vibrate) navigator.vibrate(300)
 
-        setTimeout(() => {
+        const resetTimeout = setTimeout(() => {
+          if (!mountedRef.current) return
           setPinInput('')
           setStatusState('AWAITING_PASSKEY')
           setIsShaking(false)
         }, 1000)
+        biometricTimeoutRef.current = resetTimeout
       }
     }, 700)
-  }
+    biometricTimeoutRef.current = validationTimeout
+  }, [onUnlockSuccess])
 
   return (
     <div className="fixed inset-0 bg-[#020617]/95 backdrop-blur-xl z-50 flex items-center justify-center p-4">

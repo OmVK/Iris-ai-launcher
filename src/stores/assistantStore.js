@@ -15,7 +15,8 @@ const loadSessions = () => {
 
 const loadChatLog = (sessions) => {
   try {
-    const found = sessions.find(s => s.id === 'default')
+    const activeId = localStorage.getItem('iris_assistant_active_session') || 'default'
+    const found = sessions.find(s => s.id === activeId)
     if (found && Array.isArray(found.log)) return found.log.length > 50 ? found.log.slice(-50) : found.log
   } catch {}
   return DEFAULT_LOG
@@ -37,7 +38,8 @@ export const useAssistantStore = create((set, get) => ({
   liveSetupEngine: (() => { try { return localStorage.getItem('system_llm_backend') || 'GEMINI' } catch { return 'GEMINI' } })(),
   liveSetupKey: '',
   sessions: initSessions,
-  activeSessionId: 'default',
+  activeSessionId: (() => { try { return localStorage.getItem('iris_assistant_active_session') || 'default' } catch { return 'default' } })(),
+  _savedChatLog: null,
 
   setChatLog: (updater) => set((s) => ({
     chatLog: typeof updater === 'function' ? updater(s.chatLog) : updater
@@ -57,7 +59,10 @@ export const useAssistantStore = create((set, get) => ({
   setSessions: (updater) => set((s) => ({
     sessions: typeof updater === 'function' ? updater(s.sessions) : updater
   })),
-  setActiveSessionId: (v) => set({ activeSessionId: v }),
+  setActiveSessionId: (v) => {
+    try { localStorage.setItem('iris_assistant_active_session', v) } catch {}
+    set({ activeSessionId: v })
+  },
 
   persistSessions: () => {
     const { sessions, activeSessionId, chatLog, isPrivateSession } = get()
@@ -65,7 +70,7 @@ export const useAssistantStore = create((set, get) => ({
     let updated = sessions.map(s => s.id === activeSessionId ? { ...s, log: chatLog } : s)
     updated = updated.map(s => ({ ...s, log: s.log.length > 50 ? s.log.slice(-50) : s.log }))
     if (updated.length > 10) updated = updated.slice(-10)
-    localStorage.setItem('iris_assistant_sessions', JSON.stringify(updated))
+    try { localStorage.setItem('iris_assistant_sessions', JSON.stringify(updated)) } catch {}
     set({ sessions: updated })
   },
 
@@ -96,7 +101,7 @@ export const useAssistantStore = create((set, get) => ({
     const { sessions, activeSessionId } = get()
     if (sessions.length <= 1) return
     const updated = sessions.filter(s => s.id !== id)
-    localStorage.setItem('iris_assistant_sessions', JSON.stringify(updated))
+    try { localStorage.setItem('iris_assistant_sessions', JSON.stringify(updated)) } catch {}
     if (activeSessionId === id) {
       set({ sessions: updated, activeSessionId: updated[0].id, chatLog: updated[0].log })
     } else {
@@ -105,17 +110,19 @@ export const useAssistantStore = create((set, get) => ({
   },
 
   togglePrivate: () => {
-    const { isPrivateSession, sessions, activeSessionId } = get()
+    const { isPrivateSession, sessions, activeSessionId, chatLog, _savedChatLog } = get()
     if (!isPrivateSession) {
       set({
         isPrivateSession: true,
+        _savedChatLog: chatLog,
         chatLog: [{ time: "SECURE", sender: "IRIS", text: "HIGH-SECURITY PRIVATE NEURO-LINK ENGAGED. NO HISTORICAL NODES WILL BE PERSISTED.", type: "error" }]
       })
     } else {
       const found = sessions.find(s => s.id === activeSessionId)
       set({
         isPrivateSession: false,
-        chatLog: found ? found.log : [{ time: "14:02:12", sender: "IRIS", text: "Neuro-link restored to default log.", type: "system" }]
+        _savedChatLog: null,
+        chatLog: _savedChatLog || (found ? found.log : [{ time: "14:02:12", sender: "IRIS", text: "Neuro-link restored to default log.", type: "system" }])
       })
     }
   },

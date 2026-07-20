@@ -24,7 +24,7 @@ export default function VaultExplorer({
         <div className="flex-1 min-h-0 overflow-y-auto">
           {vaultTab === 'FILES' ? <FileExplorer isVaultUnlocked={isVaultUnlocked} onTriggerUnlock={onTriggerUnlock} /> : vaultTab === 'THREATS' ? <ThreatLogs /> : (
             <div className="flex flex-col h-full">
-              {lockedApps.length === 0 ? (
+              {!(Array.isArray(lockedApps) && lockedApps.length > 0) ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-outline-variant/30 rounded-lg bg-black/20">
                   <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 mb-2">lock_open</span>
                   <p className="font-mono-data text-[10px] text-on-surface-variant/60 uppercase tracking-wider max-w-[320px]">NO SECURED COGNITIVE INTERFACES MOUNTED.</p>
@@ -32,7 +32,7 @@ export default function VaultExplorer({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 overflow-y-auto pr-1">
-                  {installedApps.filter(app => lockedApps.includes(app.packageId)).map(app => (
+                  {installedApps.filter(app => Array.isArray(lockedApps) && lockedApps.includes(app.packageId)).map(app => (
                     <div key={app.packageId} className="flex items-center justify-between p-2.5 rounded border border-outline-variant/20 bg-surface-container/10 hover:bg-surface-container/20 hover:border-primary-fixed-dim/30 transition-all group">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded bg-primary-fixed-dim/10 border border-primary-fixed-dim/20 flex items-center justify-center flex-shrink-0">

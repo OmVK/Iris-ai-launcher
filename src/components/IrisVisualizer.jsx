@@ -21,9 +21,6 @@ export default function IrisVisualizer({
   useEffect(() => { isListeningRef.current = isListening }, [isListening])
   useEffect(() => { 
     isAppActiveRef.current = isAppActive
-    if (isAppActive && !document.hidden) {
-      document.dispatchEvent(new Event('visibilitychange'))
-    }
   }, [isAppActive])
 
   useEffect(() => {

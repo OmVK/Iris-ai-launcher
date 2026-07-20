@@ -10,7 +10,7 @@ export default function ThreatLogs() {
       try {
         const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
         const res = await Filesystem.readdir({ path: 'Iris_Threats', directory: Directory.Data })
-        const files = res.files.filter(f => (f.name.startsWith('Threat_') || f.name.startsWith('Private_Threat_') || f.name.startsWith('Privite_Threat_')) && f.name.endsWith('.txt'))
+        const files = res.files.filter(f => (f.name.startsWith('Threat_') || f.name.startsWith('Private_Threat_')) && f.name.endsWith('.txt'))
         
         const loadedThreats = []
         for (const f of files) {
@@ -20,7 +20,7 @@ export default function ThreatLogs() {
             encoding: Encoding.UTF8
           })
           
-          let timeLabel = f.name.replace('Private_Threat_', 'Private: ').replace('Privite_Threat_', 'Private: ').replace('Threat_', '').replace('.txt', '').replace(/-/g, ':')
+          let timeLabel = f.name.replace('Private_Threat_', 'Private: ').replace('Threat_', '').replace('.txt', '').replace(/-/g, ':')
           loadedThreats.push({
             id: f.name,
             time: timeLabel,

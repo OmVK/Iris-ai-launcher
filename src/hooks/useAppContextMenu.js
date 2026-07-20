@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { uninstallApp, openAppSettings } from '../components/LauncherPlugin'
 import { setContextMenuOpen } from './useAppGestures'
 
@@ -17,7 +17,7 @@ export function useAppContextMenu({ setInstalledApps, onToggleAppLock }) {
     }
   }, [toastText])
 
-  const handleContextMenu = (e, app) => {
+  const handleContextMenu = useCallback((e, app) => {
     e.preventDefault()
     e.stopPropagation()
     const touch = e.touches ? e.touches[0] : e
@@ -29,7 +29,7 @@ export function useAppContextMenu({ setInstalledApps, onToggleAppLock }) {
       y: Math.min(clientY, window.innerHeight - 150)
     })
     if (navigator.vibrate) navigator.vibrate(40)
-  }
+  }, [])
 
   const handleLockApp = (app) => {
     if (onToggleAppLock) {

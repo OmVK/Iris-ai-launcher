@@ -31,7 +31,7 @@ async function getOrCreateKey() {
 }
 
 function buf2str(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+  return btoa(Array.from(new Uint8Array(buf), b => String.fromCharCode(b)).join(''))
 }
 
 function str2buf(str) {
@@ -44,7 +44,11 @@ function str2buf(str) {
 let keyPromise = null
 
 function ensureKey() {
-  if (!keyPromise) keyPromise = getOrCreateKey()
+  if (!keyPromise) keyPromise = getOrCreateKey().catch(err => {
+    console.warn('Key generation failed, will retry:', err)
+    keyPromise = null
+    return null
+  })
   return keyPromise
 }
 
@@ -57,6 +61,7 @@ async function encrypt(plaintext) {
 }
 
 async function decrypt(blob) {
+  if (!blob || typeof blob !== 'string' || !blob.includes('.')) return null
   const key = await ensureKey()
   const [ivStr, ctStr] = blob.split('.')
   const iv = str2buf(ivStr)
@@ -113,7 +118,7 @@ function removeItem(key) {
 
 async function migrateAll() {
   if (isNative) {
-    const API_KEYS = ['gemini_api_key', 'groq_api_key', 'nvidia_api_key', 'cartesia_api_key']
+    const API_KEYS = ['gemini_api_key', 'groq_api_key', 'nvidia_api_key', 'cartesia_api_key', 'huggingface_api_key']
     for (const key of API_KEYS) {
       const ksValue = localStorage.getItem(KS_PREFIX + key)
       if (ksValue) continue
@@ -129,7 +134,7 @@ async function migrateAll() {
       }
     }
   } else {
-    const API_KEYS = ['gemini_api_key', 'groq_api_key', 'nvidia_api_key', 'cartesia_api_key']
+    const API_KEYS = ['gemini_api_key', 'groq_api_key', 'nvidia_api_key', 'cartesia_api_key', 'huggingface_api_key']
     for (const key of API_KEYS) {
       const ksValue = localStorage.getItem(KS_PREFIX + key)
       if (ksValue) continue

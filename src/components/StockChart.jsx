@@ -10,6 +10,10 @@ export default function StockChart() {
 
   const { liveData1, liveData2, isLoading } = useStockData({ ticker1, ticker2 })
 
+  if (!liveData1.history || liveData1.history.length < 2 || !liveData2.history || liveData2.history.length < 2) {
+    return null
+  }
+
   const chartWidth = 320
   const chartHeight = 110
 

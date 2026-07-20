@@ -90,11 +90,11 @@ export async function getInstalledApps() {
 
 export async function launchApp(packageId, label = null) {
   const displayLabel = label || packageId
-  logNotification('APP_LAUNCH', `Successfully booted: ${displayLabel}`, 'success')
 
   if (isNative) {
     try {
       await NativeLauncher.launchApp({ packageId })
+      logNotification('APP_LAUNCH', `Successfully booted: ${displayLabel}`, 'success')
       return true
     } catch (e) {
       console.error(`Native Launcher: Failed to boot app intent for ${packageId}`, e)
@@ -102,6 +102,7 @@ export async function launchApp(packageId, label = null) {
       return false
     }
   } else {
+    logNotification('APP_LAUNCH', `Successfully booted: ${displayLabel}`, 'success')
     return true
   }
 }
@@ -335,7 +336,7 @@ export async function getActiveNotifications() {
   if (isNative) {
     try {
       const res = await NativeLauncher.getActiveNotifications()
-      if (res && res.notifications) {
+      if (res && res.notifications && typeof res.notifications === 'string') {
         return JSON.parse(res.notifications)
       }
       return []

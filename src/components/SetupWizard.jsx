@@ -48,12 +48,18 @@ export default function SetupWizard({ onComplete }) {
     // For pure HTML5 / Web, we prompt using browser standard APIs to trigger Android OS permission dialogs.
     if (type === 'mic') {
       navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(() => setPermissionsGranted(p => ({ ...p, mic: true })))
-        .catch(() => setPermissionsGranted(p => ({ ...p, mic: true }))); // Auto-fail safe
+        .then((stream) => {
+          stream.getTracks().forEach(t => t.stop())
+          setPermissionsGranted(p => ({ ...p, mic: true }))
+        })
+        .catch(() => setPermissionsGranted(p => ({ ...p, mic: false })));
     } else if (type === 'camera') {
       navigator.mediaDevices.getUserMedia({ video: true })
-        .then(() => setPermissionsGranted(p => ({ ...p, camera: true })))
-        .catch(() => setPermissionsGranted(p => ({ ...p, camera: true }))); // Auto-fail safe
+        .then((stream) => {
+          stream.getTracks().forEach(t => t.stop())
+          setPermissionsGranted(p => ({ ...p, camera: true }))
+        })
+        .catch(() => setPermissionsGranted(p => ({ ...p, camera: false })));
     } else if (type === 'storage') {
       import('./LauncherPlugin').then(m => {
         m.requestStorageAccess().then(success => {

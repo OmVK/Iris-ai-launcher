@@ -10,5 +10,5 @@ export const getLSNum = (key, fallback) => {
 }
 
 export const getLSBool = (key, fallback) => {
-  try { return localStorage.getItem(key) !== null ? localStorage.getItem(key) !== 'false' : fallback } catch { return fallback }
+  try { const v = localStorage.getItem(key); return v !== null ? v !== 'false' : fallback } catch { return fallback }
 }
