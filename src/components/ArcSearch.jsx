@@ -174,13 +174,13 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
 
   const handleAction = (res) => {
     if (res.type === 'app') {
-      launchApp(res.data.packageId, res.data.label)
+      launchApp(res.data)
       onClose()
     } else if (res.type === 'setting') {
       setActivePage('settings')
       onClose()
     } else if (res.type === 'web') {
-      launchApp('com.android.chrome', res.data)
+      launchApp({ packageId: 'com.android.chrome', label: res.data })
       onClose()
     } else if (res.type === 'rag') {
       onClose()
