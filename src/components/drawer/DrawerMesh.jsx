@@ -75,6 +75,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
   const rafRef = useRef(null)
   const camVelRef = useRef(false)
   const timeRef = useRef(0)
+  const lastInteractRef = useRef(Date.now())
 
   const edges = useMemo(() => {
     if (filteredApps.length < 2) return []
@@ -166,7 +167,15 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
 
     const render = () => {
       if (!running) return
-      rafRef.current = requestAnimationFrame(render)
+
+      const now = Date.now()
+      const idleMs = now - lastInteractRef.current
+      const isIdle = idleMs > 3000
+      if (isIdle) {
+        rafRef.current = setTimeout(() => { rafRef.current = requestAnimationFrame(render) }, 100)
+      } else {
+        rafRef.current = requestAnimationFrame(render)
+      }
 
       const nodes = nodesRef.current
       const edgeList = edgesRef.current
@@ -196,7 +205,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       if (isDragging) dirtyRef.current = true
 
       let hasMovingNodes = false
-      const simSpeed = isDragging ? 0.5 : 0.15
+      const simSpeed = isDragging ? 0.5 : isIdle ? 0.04 : 0.15
       const nLen = nodes.length
       const dragIdx = isDragging ? dragRef.current.nodeIdx : -1
       timeRef.current += 0.016
@@ -352,10 +361,10 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       ctx.restore()
     }
     rafRef.current = requestAnimationFrame(render)
-    return () => { running = false; if (rafRef.current) cancelAnimationFrame(rafRef.current); ro.disconnect() }
+    return () => { running = false; if (rafRef.current) { cancelAnimationFrame(rafRef.current); clearTimeout(rafRef.current) } ro.disconnect() }
   }, [filteredApps, showAppLabels, drawerIconSize])
 
-  const markDirty = useCallback(() => { dirtyRef.current = true }, [])
+  const markDirty = useCallback(() => { dirtyRef.current = true; lastInteractRef.current = Date.now() }, [])
 
   const screenToWorld = useCallback((clientX, clientY) => {
     const canvas = canvasRef.current
@@ -400,6 +409,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
 
   const handleTouchStart = useCallback((e) => {
     e.stopPropagation()
+    lastInteractRef.current = Date.now()
     if (e.touches && e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX
       const dy = e.touches[0].clientY - e.touches[1].clientY
@@ -507,6 +517,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
   }, [onAppClick, clearLongPress])
 
   const handleMouseDown = useCallback((e) => {
+    lastInteractRef.current = Date.now()
     const hit = hitTest(e.clientX, e.clientY)
     cameraRef.current.velX = 0; cameraRef.current.velY = 0
     if (hit !== -1) {
