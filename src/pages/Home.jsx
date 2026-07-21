@@ -13,7 +13,6 @@ import { useAppContextMenu } from '../hooks/useAppContextMenu'
 import AppContextMenu from '../components/AppContextMenu'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { routeAppClick } from '../utils/appClickRouter'
-import useAppSuggestions, { trackAppLaunch } from '../hooks/useAppSuggestions'
 import { useThemeStore } from '../stores/themeStore'
 
 export default function Home({ 
@@ -61,8 +60,6 @@ export default function Home({
     handleTriggerUninstall,
     handleOpenAppInfo
   } = useAppContextMenu({ setInstalledApps, onToggleAppLock })
-
-  const { suggestions, handleSuggestionClick } = useAppSuggestions(installedApps, onTriggerChronoLock, onTriggerVault, onNavigate)
 
   const swipeStartPos = useRef({ x: 0, y: 0 })
 
@@ -189,7 +186,6 @@ export default function Home({
       return
     }
 
-    trackAppLaunch(app.packageId)
     routeAppClick(app, { onTriggerChronoLock, onTriggerVault, onNavigate, launchApp })
   }, [activeContextMenu, onTriggerChronoLock, onTriggerVault, onNavigate])
 
@@ -244,19 +240,6 @@ export default function Home({
       {layoutStyle === 'CENTERED' && (
         <>
           <HomeClockBanner weather={weather} batteryLevel={batteryLevel} />
-          {suggestions.length > 0 && (
-            <div className="flex gap-3 justify-center mb-3 mt-1">
-              {suggestions.map(app => (
-                <button key={app.packageId} onClick={() => handleSuggestionClick(app)}
-                  className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]/30 transition-all active:scale-90 group">
-                  <div className="w-7 h-7 rounded-md overflow-hidden flex items-center justify-center bg-black/30">
-                    {app.icon ? <img src={app.icon} alt="" className="w-full h-full object-cover" /> : <span className="material-symbols-outlined text-[10px] text-white/40">apps</span>}
-                  </div>
-                  <span className="text-[7px] text-white/50 group-hover:text-[#00f2ff] truncate max-w-[50px]">{app.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
           <HomeGrid {...homeGridProps} />
         </>
       )}
@@ -264,19 +247,6 @@ export default function Home({
       {layoutStyle === 'CORE_BOTTOM' && (
         <>
           <HomeGrid {...homeGridProps} />
-          {suggestions.length > 0 && (
-            <div className="flex gap-3 justify-center mt-3 mb-1">
-              {suggestions.map(app => (
-                <button key={app.packageId} onClick={() => handleSuggestionClick(app)}
-                  className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]/30 transition-all active:scale-90 group">
-                  <div className="w-7 h-7 rounded-md overflow-hidden flex items-center justify-center bg-black/30">
-                    {app.icon ? <img src={app.icon} alt="" className="w-full h-full object-cover" /> : <span className="material-symbols-outlined text-[10px] text-white/40">apps</span>}
-                  </div>
-                  <span className="text-[7px] text-white/50 group-hover:text-[#00f2ff] truncate max-w-[50px]">{app.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
           <HomeClockBanner weather={weather} batteryLevel={batteryLevel} />
         </>
       )}

@@ -8,7 +8,6 @@ import DrawerCategories from '../components/drawer/DrawerCategories'
 import DrawerMesh from '../components/drawer/DrawerMesh'
 import { launchApp } from '../components/LauncherPlugin'
 import { routeAppClick } from '../utils/appClickRouter'
-import { trackAppLaunch } from '../hooks/useAppSuggestions'
 import { useThemeStore } from '../stores/themeStore'
 
 export default function Drawer({
@@ -153,7 +152,6 @@ export default function Drawer({
       e.stopPropagation()
       return
     }
-    trackAppLaunch(app.packageId)
     routeAppClick(app, { onNavigate, launchApp })
   }, [onNavigate])
 

@@ -428,7 +428,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       if (hit !== -1) {
         const node = nodesRef.current[hit]
         const world = screenToWorld(touch.clientX, touch.clientY)
-        dragRef.current = { active: true, nodeIdx: hit, offsetX: world.x - node.x, offsetY: world.y - node.y, moved: false }
+        dragRef.current = { active: true, nodeIdx: hit, offsetX: world.x - node.x, offsetY: world.y - node.y, moved: false, startNodeX: node.x, startNodeY: node.y }
         startLongPress(touch.clientX, touch.clientY)
       } else {
         dragRef.current = { active: true, nodeIdx: -1, moved: false, lastX: touch.clientX, lastY: touch.clientY, lastTime: Date.now() }
@@ -472,10 +472,16 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       if (dragRef.current.nodeIdx !== -1) {
         const world = screenToWorld(touch.clientX, touch.clientY)
         const node = nodesRef.current[dragRef.current.nodeIdx]
+        const prevX = node.x
+        const prevY = node.y
         node.x = world.x - dragRef.current.offsetX
         node.y = world.y - dragRef.current.offsetY
         node.vx = 0; node.vy = 0
-        dragRef.current.moved = true
+        const totalDx = node.x - (dragRef.current.startNodeX ?? prevX)
+        const totalDy = node.y - (dragRef.current.startNodeY ?? prevY)
+        if (!dragRef.current.moved && Math.sqrt(totalDx * totalDx + totalDy * totalDy) > 8) {
+          dragRef.current.moved = true
+        }
       } else {
         const dx = touch.clientX - dragRef.current.lastX
         const dy = touch.clientY - dragRef.current.lastY
@@ -487,7 +493,9 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
         cameraRef.current.y += dy
         cameraRef.current.velX = (dx / dt) * 16
         cameraRef.current.velY = (dy / dt) * 16
-        dragRef.current.moved = true
+        if (!dragRef.current.moved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+          dragRef.current.moved = true
+        }
         dragRef.current.lastX = touch.clientX
         dragRef.current.lastY = touch.clientY
         dragRef.current.lastTime = now
@@ -506,7 +514,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       const app = nodesRef.current[dragRef.current.nodeIdx]?.app
       if (app) {
         const elapsed = Date.now() - touchStartRef.current.time
-        if (elapsed < 300) onAppClick({ clientX: endX, clientY: endY, preventDefault() {}, stopPropagation() {} }, app)
+        if (elapsed < 500) onAppClick({ clientX: endX, clientY: endY, preventDefault() {}, stopPropagation() {} }, app)
       }
     }
     dragRef.current.active = false
@@ -523,7 +531,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
     if (hit !== -1) {
       const node = nodesRef.current[hit]
       const world = screenToWorld(e.clientX, e.clientY)
-      dragRef.current = { active: true, nodeIdx: hit, offsetX: world.x - node.x, offsetY: world.y - node.y, moved: false }
+      dragRef.current = { active: true, nodeIdx: hit, offsetX: world.x - node.x, offsetY: world.y - node.y, moved: false, startNodeX: node.x, startNodeY: node.y }
       startLongPress(e.clientX, e.clientY)
     } else {
       dragRef.current = { active: true, nodeIdx: -1, moved: false, lastX: e.clientX, lastY: e.clientY, lastTime: Date.now() }
@@ -551,7 +559,11 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       node.x = world.x - dragRef.current.offsetX
       node.y = world.y - dragRef.current.offsetY
       node.vx = 0; node.vy = 0
-      dragRef.current.moved = true
+      const totalDx = node.x - (dragRef.current.startNodeX ?? node.x)
+      const totalDy = node.y - (dragRef.current.startNodeY ?? node.y)
+      if (!dragRef.current.moved && Math.sqrt(totalDx * totalDx + totalDy * totalDy) > 8) {
+        dragRef.current.moved = true
+      }
     } else {
       const dx = e.clientX - dragRef.current.lastX
       const dy = e.clientY - dragRef.current.lastY
@@ -563,7 +575,9 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       cameraRef.current.y += dy
       cameraRef.current.velX = (dx / dt) * 16
       cameraRef.current.velY = (dy / dt) * 16
-      dragRef.current.moved = true
+      if (!dragRef.current.moved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+        dragRef.current.moved = true
+      }
       dragRef.current.lastX = e.clientX
       dragRef.current.lastY = e.clientY
       dragRef.current.lastTime = now

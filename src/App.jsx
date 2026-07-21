@@ -130,7 +130,7 @@ export default function App() {
       case 'private':
         return <PrivateVault />
       case 'zero_screen':
-        return <ZeroScreen onNavigate={setActivePage} isAppActive={isAppActive} installedApps={installedApps} onTriggerChronoLock={handleTriggerChronoLock} onTriggerVault={handleTriggerVault} />
+        return <ZeroScreen onNavigate={setActivePage} isAppActive={isAppActive} />
       default:
         return <Home onNavigate={setActivePage} isAppActive={isAppActive}
           onTriggerChronoLock={handleTriggerChronoLock}

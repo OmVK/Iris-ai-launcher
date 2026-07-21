@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAIStore } from '../stores/aiStore'
-import useAppSuggestions, { trackAppLaunch } from '../hooks/useAppSuggestions'
 import { fetchCurrentWeather } from '../utils/weather'
 
 const FALLBACK_QUOTES = [
@@ -12,13 +11,11 @@ const FALLBACK_QUOTES = [
   '"Stay hungry, stay foolish." — Stewart Brand',
 ]
 
-export default function ZeroScreen({ onNavigate, isAppActive, installedApps, onTriggerChronoLock, onTriggerVault }) {
+export default function ZeroScreen({ onNavigate, isAppActive }) {
   const [quote, setQuote] = useState("Loading quote...")
   const [briefing, setBriefing] = useState("Generating daily briefing...")
   const [weather, setWeather] = useState("Loading weather...")
   const [refreshing, setRefreshing] = useState(false)
-
-  const { suggestions, handleSuggestionClick } = useAppSuggestions(installedApps || [], onTriggerChronoLock, onTriggerVault, onNavigate)
 
   const refreshAll = useCallback(async () => {
     setRefreshing(true)
@@ -114,26 +111,6 @@ export default function ZeroScreen({ onNavigate, isAppActive, installedApps, onT
           </div>
           <p className="font-mono-data text-xs text-white uppercase">{weather}</p>
         </div>
-
-        {suggestions.length > 0 && (
-          <div className="glass-surface border border-[#39ff14]/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(57,255,20,0.1)]">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="material-symbols-outlined text-[#39ff14]">auto_awesome</span>
-              <h3 className="font-bold text-[10px] tracking-widest uppercase text-[#39ff14]/80 font-mono-data">Predicted Apps</h3>
-            </div>
-            <div className="flex gap-3">
-              {suggestions.map(app => (
-                <button key={app.packageId} onClick={() => handleSuggestionClick(app)}
-                  className="flex flex-col items-center gap-1.5 flex-1 p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-[#39ff14]/10 hover:border-[#39ff14]/30 transition-all active:scale-90 group">
-                  <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center bg-black/30">
-                    {app.icon ? <img src={app.icon} alt="" className="w-full h-full object-cover" /> : <span className="material-symbols-outlined text-sm text-white/40">apps</span>}
-                  </div>
-                  <span className="text-[8px] text-white/60 group-hover:text-[#39ff14] truncate w-full text-center">{app.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="glass-surface border border-[#ff007f]/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(255,0,127,0.1)]">
           <div className="flex items-center gap-3 mb-3">
