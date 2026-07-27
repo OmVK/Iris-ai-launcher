@@ -12,7 +12,7 @@ const STEPS = [
   {
     title: 'HOME SCREEN',
     subtitle: 'YOUR COMMAND CENTER',
-    description: 'Your home screen features a live clock, weather data, battery status, and an AI orb. Swipe up to open the drawer, left for news, right for the daily briefing.',
+    description: 'Your home screen features a live clock, weather data, battery status, and an AI orb. Swipe up to open the drawer, right for the daily briefing.',
     icon: 'home',
     color: '#00e5ff',
     highlight: 'home',

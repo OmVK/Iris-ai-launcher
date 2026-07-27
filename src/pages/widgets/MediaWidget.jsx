@@ -16,7 +16,7 @@ export default function MediaWidget({ isPlaying, trackIndex, playerMode, selecte
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
     const cw = 160, ch = 36
     canvas.width = cw * dpr
     canvas.height = ch * dpr

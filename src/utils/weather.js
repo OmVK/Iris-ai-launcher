@@ -12,11 +12,11 @@ const WEATHER_CODE_MAP = {
   95: 'THUNDERSTORM', 96: 'THUNDERSTORM_HAIL', 99: 'THUNDERSTORM_HAIL',
 }
 
-export function codeToCondition(code) {
+function codeToCondition(code) {
   return WEATHER_CODE_MAP[code] || 'CLEAR'
 }
 
-export function getCoords() {
+function getCoords() {
   const lat = localStorage.getItem('iris_weather_lat')
   const lon = localStorage.getItem('iris_weather_lon')
   if (lat && lon) return { lat: parseFloat(lat), lon: parseFloat(lon) }

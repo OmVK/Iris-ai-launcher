@@ -9,6 +9,29 @@ import DrawerMesh from '../components/drawer/DrawerMesh'
 import { launchApp } from '../components/LauncherPlugin'
 import { routeAppClick } from '../utils/appClickRouter'
 import { useThemeStore } from '../stores/themeStore'
+import { useAppsStore } from '../stores/appsStore'
+
+const CATEGORY_PATTERNS = {
+  COMMUNICATION: ['whatsapp', 'telegram', 'discord', 'signal', 'messaging', 'message', 'mail', 'slack', 'teams', 'zoom', 'skype', 'snapchat', 'instagram', 'facebook', 'twitter', 'reddit'],
+  MEDIA: ['spotify', 'youtube', 'music', 'netflix', 'video', 'tiktok', 'camera', 'gallery', 'photo', 'media', 'player', 'podcast', 'radio'],
+  GAMES: ['game', 'play', 'games', 'gaming', 'esports'],
+  SYSTEM: ['settings', 'android', 'google', 'system', 'phone', 'dialer', 'contacts', 'calendar', 'clock', 'calculator', 'files', 'file', 'manager'],
+  PRODUCTIVITY: ['docs', 'sheets', 'slides', 'drive', 'office', 'notion', 'todo', 'task', 'note', 'evernote', 'trello', 'asana'],
+  FINANCE: ['bank', 'pay', 'wallet', 'finance', 'stock', 'crypto', 'coin', 'trade'],
+  HEALTH: ['health', 'fitness', 'workout', 'run', 'meditat', 'sleep', 'step'],
+  TRAVEL: ['maps', 'map', 'navigation', 'uber', 'lyft', 'travel', 'flight', 'hotel'],
+  SHOPPING: ['shop', 'store', 'amazon', 'ebay', 'market', 'buy'],
+}
+
+function detectCategory(app) {
+  const pkg = (app.packageId || '').toLowerCase()
+  const label = (app.label || '').toLowerCase()
+  const combined = `${pkg} ${label}`
+  for (const [cat, patterns] of Object.entries(CATEGORY_PATTERNS)) {
+    if (patterns.some(p => combined.includes(p))) return cat
+  }
+  return app.cat || 'OTHER'
+}
 
 export default function Drawer({
   onNavigate,
@@ -20,30 +43,50 @@ export default function Drawer({
   lockedApps = [],
   onToggleAppLock
 }) {
-  const { gridColumns, gridRows, showAppLabels, showDrawerSearch, globalIconTheme, drawerIconSize, drawerTextSize, drawerLayout, setDrawerLayout } = useThemeStore()
+  const { gridColumns, gridRows, showAppLabels, showDrawerSearch, globalIconTheme, drawerIconSize, drawerTextSize, drawerLayout, setDrawerLayout, iconShape } = useThemeStore()
+  const { hiddenApps, toggleHiddenApp, appFrequency, recordAppLaunch } = useAppsStore()
   
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('ALL')
   const [sortBy, setSortBy] = useState('A-Z')
   const [activeLetter, setActiveLetter] = useState(null)
+  const [showHidden, setShowHidden] = useState(false)
 
-  const filteredApps = useMemo(() => installedApps.filter(app => {
-    const isLocked = Array.isArray(lockedApps) && lockedApps.includes(app.packageId)
-    if (isLocked) return false
-    const matchesSearch = app.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          app.packageId.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCat = activeCategory === 'ALL' || app.cat === activeCategory
-    const matchesLetter = !activeLetter || app.label.charAt(0).toUpperCase() === activeLetter
-    return matchesSearch && matchesCat && matchesLetter
-  }).sort((a, b) => {
-    if (sortBy === 'A-Z') return a.label.localeCompare(b.label)
-    if (sortBy === 'Z-A') return b.label.localeCompare(a.label)
-    if (sortBy === 'SIZE') {
-      const parseSize = (s) => parseFloat(s) || 0
-      return parseSize(b.storageSize) - parseSize(a.storageSize)
-    }
-    return 0
-  }), [installedApps, lockedApps, searchQuery, activeCategory, sortBy, activeLetter])
+  const categorizedApps = useMemo(() => {
+    return installedApps.map(app => ({
+      ...app,
+      detectedCat: detectCategory(app)
+    }))
+  }, [installedApps])
+
+  const filteredApps = useMemo(() => {
+    return categorizedApps.filter(app => {
+      const isLocked = Array.isArray(lockedApps) && lockedApps.includes(app.packageId)
+      if (isLocked) return false
+      const isHidden = hiddenApps.includes(app.packageId)
+      if (isHidden && !showHidden) return false
+      if (!isHidden && showHidden) return false
+
+      const q = searchQuery.toLowerCase()
+      const matchesSearch = !q || 
+        app.label.toLowerCase().includes(q) ||
+        app.packageId.toLowerCase().includes(q)
+      const matchesCat = activeCategory === 'ALL' || app.detectedCat === activeCategory
+      const matchesLetter = !activeLetter || app.label.charAt(0).toUpperCase() === activeLetter
+      return matchesSearch && matchesCat && matchesLetter
+    }).sort((a, b) => {
+      if (sortBy === 'A-Z') return a.label.localeCompare(b.label)
+      if (sortBy === 'Z-A') return b.label.localeCompare(a.label)
+      if (sortBy === 'SIZE') {
+        const parseSize = (s) => parseFloat(s) || 0
+        return parseSize(b.storageSize) - parseSize(a.storageSize)
+      }
+      if (sortBy === 'FREQUENCY') {
+        return (appFrequency[b.packageId] || 0) - (appFrequency[a.packageId] || 0)
+      }
+      return 0
+    })
+  }, [categorizedApps, lockedApps, hiddenApps, showHidden, searchQuery, activeCategory, sortBy, activeLetter, appFrequency])
 
   const [activeFolder, setActiveFolder] = useState(null)
   const [customFolders, setCustomFolders] = useState(() => {
@@ -69,7 +112,7 @@ export default function Drawer({
   const scrollRef = useRef(null)
   const scrollTimerRef = useRef(null)
 
-  const categories = ['ALL', 'SYSTEM', 'COMMUNICATION', 'MEDIA', 'DEVTOOLS']
+  const categories = ['ALL', 'COMMUNICATION', 'MEDIA', 'GAMES', 'SYSTEM', 'PRODUCTIVITY', 'FINANCE', 'HEALTH', 'TRAVEL', 'SHOPPING']
 
   useEffect(() => { localStorage.setItem('iris_custom_folders', JSON.stringify(customFolders)) }, [customFolders])
 
@@ -89,19 +132,24 @@ export default function Drawer({
 
   const autoCategoriesItems = useMemo(() => {
     if (drawerLayout !== 'CATEGORIES') return categoriesItems
-    const commApps = installedApps.filter(a => a.packageId.includes('whatsapp') || a.packageId.includes('telegram') || a.packageId.includes('discord') || a.cat === 'COMMUNICATION' || a.label.toLowerCase().includes('message') || a.label.toLowerCase().includes('mail') || a.packageId.includes('chrome') || a.packageId.includes('browser') || a.packageId.includes('snapchat') || a.packageId.includes('instagram') || a.packageId.includes('facebook') || a.packageId.includes('twitter')).map(a => a.packageId)
-    const mediaApps = installedApps.filter(a => a.packageId.includes('spotify') || a.packageId.includes('youtube') || a.packageId.includes('music') || a.packageId.includes('netflix') || a.cat === 'MEDIA' || a.packageId.includes('camera') || a.packageId.includes('gallery') || a.packageId.includes('tiktok') || a.packageId.includes('video')).map(a => a.packageId)
-    const sysApps = installedApps.filter(a => a.cat === 'SYSTEM' || a.packageId.includes('android') || a.packageId.includes('google') || a.packageId.includes('settings')).map(a => a.packageId)
-    const gamesApps = installedApps.filter(a => a.packageId.includes('game') || a.packageId.includes('play') || a.cat === 'GAMES').map(a => a.packageId)
-    const getUnique = (arr) => [...new Set(arr)]
+    const byCat = {}
+    for (const app of categorizedApps) {
+      const cat = app.detectedCat
+      if (!byCat[cat]) byCat[cat] = []
+      byCat[cat].push(app.packageId)
+    }
+    const autoFolders = Object.entries(byCat).map(([cat, apps]) => ({
+      id: `auto_${cat.toLowerCase()}`,
+      name: cat.charAt(0) + cat.slice(1).toLowerCase(),
+      isAuto: true,
+      isFolder: true,
+      apps: [...new Set(apps)]
+    }))
     return [
       ...categoriesItems,
-      { id: 'auto_comm', name: 'Communication & Social', isAuto: true, isFolder: true, apps: getUnique(commApps) },
-      { id: 'auto_media', name: 'Media & Photo', isAuto: true, isFolder: true, apps: getUnique(mediaApps) },
-      { id: 'auto_sys_android', name: 'System Utilities', isAuto: true, isFolder: true, apps: getUnique(sysApps) },
-      { id: 'auto_games', name: 'Games', isAuto: true, isFolder: true, apps: getUnique(gamesApps) }
+      ...autoFolders
     ].filter(f => f.apps && f.apps.length > 0)
-  }, [installedApps, categoriesItems, drawerLayout])
+  }, [categorizedApps, categoriesItems, drawerLayout])
 
   const handleDrawerTouchStart = (e) => {
     const touch = e.touches ? e.touches[0] : e
@@ -152,8 +200,9 @@ export default function Drawer({
       e.stopPropagation()
       return
     }
+    recordAppLaunch(app.packageId)
     routeAppClick(app, { onNavigate, launchApp })
-  }, [onNavigate])
+  }, [onNavigate, recordAppLaunch])
 
   const handleToggleHomePlacement = useCallback((app) => {
     setInstalledApps(prev => prev.map(a =>
@@ -177,7 +226,7 @@ export default function Drawer({
         data-no-arc
         onTouchStart={handleDrawerTouchStart}
         onTouchEnd={handleDrawerTouchEnd}
-        className="flex-grow pt-14 px-margin overflow-y-auto pb-28 scroll-container select-none"
+        className="flex-grow pt-12 px-margin overflow-y-auto pb-20 scroll-container select-none"
       >
       {toastText && (
         <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
@@ -190,37 +239,20 @@ export default function Drawer({
 
       <div className="sticky top-0 z-40 bg-background/0 pb-4">
         <div className="max-w-xl mx-auto space-y-4">
-          {showDrawerSearch && (
-            <div className="glass-chip glass-border rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_15px_rgba(var(--primary-rgb),0.15)]">
-              <span className="material-symbols-outlined text-primary-fixed-dim">search</span>
-              <input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search System Schematics..."
-                className="bg-transparent border-none focus:outline-none focus:ring-0 w-full text-xs font-mono-data text-on-surface placeholder:text-on-surface-variant/40"
-                type="text"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="material-symbols-outlined text-on-surface-variant hover:text-white transition-colors text-sm">close</button>
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-1.5 justify-center">
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1 rounded-full glass-chip glass-border font-label-caps text-[8px] tracking-widest border transition-all active:scale-95 ${
-                  activeCategory === cat
-                    ? 'bg-primary-fixed-dim/20 text-primary-fixed-dim border-primary-fixed-dim/40 shadow-[0_0_10px_rgba(var(--primary-rgb),0.25)]'
-                    : 'border-outline-variant/30 text-on-surface-variant/50 hover:text-white hover:border-white/20'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+          <div className="glass-chip glass-border rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_15px_rgba(var(--primary-rgb),0.15)]">
+            <span className="material-symbols-outlined text-primary-fixed-dim">search</span>
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search apps..."
+              className="bg-transparent border-none focus:outline-none focus:ring-0 w-full text-xs font-mono-data text-on-surface placeholder:text-on-surface-variant/40"
+              type="text"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="material-symbols-outlined text-on-surface-variant hover:text-white transition-colors text-sm">close</button>
+            )}
           </div>
+
 
           <div className="flex gap-2 justify-center pt-1 flex-wrap items-center">
             {[
@@ -252,7 +284,20 @@ export default function Drawer({
               <option value="A-Z" className="bg-[#020617]">SORT: A-Z</option>
               <option value="Z-A" className="bg-[#020617]">SORT: Z-A</option>
               <option value="SIZE" className="bg-[#020617]">SORT: SIZE</option>
+              <option value="FREQUENCY" className="bg-[#020617]">SORT: FREQUENCY</option>
             </select>
+
+            <button
+              onClick={() => setShowHidden(!showHidden)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg glass-chip border text-[8px] font-bold font-label-caps tracking-widest active:scale-95 transition-all ${
+                showHidden
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                  : 'border-outline-variant/30 text-on-surface-variant/50 hover:text-white hover:border-white/10'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[11px]">{showHidden ? 'visibility' : 'visibility_off'}</span>
+              <span>HIDDEN</span>
+            </button>
 
             {installedApps.some(a => a.isHome) && (
               <button
@@ -273,6 +318,7 @@ export default function Drawer({
           drawerIconSize={drawerIconSize} drawerTextSize={drawerTextSize}
           showAppLabels={showAppLabels}
           globalIconTheme={globalIconTheme} onContextMenu={handleContextMenu} onAppClick={handleAppClick}
+          iconShape={iconShape}
         />
       )}
 
@@ -281,14 +327,16 @@ export default function Drawer({
           filteredApps={filteredApps} drawerIconSize={drawerIconSize} drawerTextSize={drawerTextSize}
           globalIconTheme={globalIconTheme}
           onContextMenu={handleContextMenu} onAppClick={handleAppClick}
+          iconShape={iconShape}
         />
       )}
 
       {drawerLayout === 'CATEGORIES' && (
         <DrawerCategories
-          autoCategoriesItems={autoCategoriesItems} installedApps={installedApps}
+          autoCategoriesItems={autoCategoriesItems} installedApps={categorizedApps}
           drawerIconSize={drawerIconSize} drawerTextSize={drawerTextSize}
           onAppClick={handleAppClick} onContextMenu={handleContextMenu} onCreateFolder={handleCreateFolder}
+          iconShape={iconShape}
         />
       )}
 

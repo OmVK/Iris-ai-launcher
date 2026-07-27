@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
-import { Device } from '@capacitor/device'
 import IrisVisualizer from '../components/IrisVisualizer'
 import { launchApp, expandNotificationPanel, getSystemStats } from '../components/LauncherPlugin'
 import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
-import { fetchCurrentWeather } from '../utils/weather'
 const OfflineAssistantOverlay = React.lazy(() => import('../components/OfflineAssistantOverlay'))
 import HudIcon from '../components/HudIcon'
-import HomeClockBanner from '../components/HomeClockBanner'
 import HudFallbackIcon from '../components/HudFallbackIcon'
 import HomeGrid from '../components/HomeGrid'
+import HomePager from '../components/HomePager'
+
+import HomeScreenWidgetHost from '../components/HomeScreenWidgetHost'
+import PinnedContacts from '../components/PinnedContacts'
+import HomeScreenFolder from '../components/HomeScreenFolder'
 import { useAppContextMenu } from '../hooks/useAppContextMenu'
 import AppContextMenu from '../components/AppContextMenu'
 import PowerSaveManager from '../utils/PowerSaveManager'
@@ -41,12 +43,8 @@ export default function Home({
   // Power Save Mode (reactive)
   powerSaveMode
 }) {
-  const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, showHomeOrb } = useThemeStore()
+  const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, showHomeOrb, homePages, activeHomePage, setActiveHomePage, homeScreenFolders, setHomeScreenFolders, iconShape } = useThemeStore()
   
-  const [weather, setWeather] = useState(() => {
-    return localStorage.getItem('iris_cached_weather_string') || 'SYNCHRONIZING_METEO...'
-  })
-  const [batteryLevel, setBatteryLevel] = useState(100)
   const [showOfflineAssistant, setShowOfflineAssistant] = useState(false)
   const [assistantState, setAssistantState] = useState({ isListening: false, isProcessing: false })
   const [sysStats, setSysStats] = useState({ memTotal: 0, memUsed: 0, memAvailable: 0, cpuTemp: 35.0 })
@@ -66,48 +64,21 @@ export default function Home({
   useEffect(() => {
     if (!isAppActive) return
 
-    const fetchBattery = async () => {
-      try {
-        const info = await Device.getBatteryInfo()
-        if (info.batteryLevel !== undefined) {
-          setBatteryLevel(Math.round(info.batteryLevel * 100))
-        }
-      } catch (e) {
-        // Fallback for web or if unsupported
-        setBatteryLevel(100)
-      }
+    const fetchStats = async () => {
       try {
         const stats = await getSystemStats()
         if (stats) setSysStats(stats)
       } catch (e) {}
     }
 
-    fetchBattery()
-    // Polling interval scales with power save mode
-    const batteryTimer = setInterval(fetchBattery, PowerSaveManager.getPollingInterval('batteryPollMs'))
-
-    // Fetch real weather using Open-Meteo based on global setting
-    const fetchWeather = async () => {
-      try {
-        const data = await fetchCurrentWeather()
-        if (data) {
-          setWeather(data.displayString)
-          localStorage.setItem('iris_cached_weather_string', data.displayString)
-        }
-      } catch (e) {}
-    }
-
-    fetchWeather()
-    // Refresh weather periodically
-    const weatherTimer = setInterval(fetchWeather, PowerSaveManager.getPollingInterval('weatherPollMs'))
+    fetchStats()
+    const statsTimer = setInterval(fetchStats, PowerSaveManager.getPollingInterval('batteryPollMs'))
 
     return () => {
-      clearInterval(batteryTimer)
-      clearInterval(weatherTimer)
+      clearInterval(statsTimer)
     }
   }, [isAppActive, powerSaveMode])
 
-  // Holographic Parallax Device Orientation Effect
   useEffect(() => {
     if (!isAppActive) return
 
@@ -116,12 +87,9 @@ export default function Home({
       const now = Date.now()
       if (now - lastUpdate < 16) return
       lastUpdate = now
-      // gamma is the left-to-right tilt in degrees, where right is positive
-      // beta is the front-to-back tilt in degrees, where front is positive
       let x = event.gamma || 0;
-      let y = (event.beta || 45) - 45; // Offset by 45 deg typical holding angle
+      let y = (event.beta || 45) - 45;
       
-      // Limit extreme tilting
       if (x > 25) x = 25;
       if (x < -25) x = -25;
       if (y > 25) y = 25;
@@ -139,18 +107,12 @@ export default function Home({
     };
   }, [isAppActive]);
 
-
-
-  // Swipe event helpers for page swiping and navigation
   const handleSwipeStart = (e) => {
-    // Swipe start coordinates tracking
     const touch = e.touches ? e.touches[0] : e
     swipeStartPos.current = { x: touch.clientX, y: touch.clientY }
   }
 
   const handleSwipeEnd = (e) => {
-
-    // Swipe end detection logic
     if (!e || !swipeStartPos.current) return
     const touch = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : e)
     if (!touch || !touch.clientX) return
@@ -158,21 +120,14 @@ export default function Home({
     const dx = touch.clientX - swipeStartPos.current.x
     const dy = touch.clientY - swipeStartPos.current.y
 
-    // Swipe left or right
     if (Math.abs(dx) > 100 && Math.abs(dy) < 100) {
       if (dx > 100 && swipeStartPos.current.x < 100) {
-        // Swipe right from the left edge: Zero Screen
         onNavigate('zero_screen')
-      } else if (dx < -100) {
-        // Swipe left: Iris News
-        onNavigate('iris_news')
       }
     }
-    // Swipe up: open App Drawer
     else if (dy < -60 && Math.abs(dx) < 120) {
       onNavigate('drawer')
     }
-    // Swipe down: expand Notification Panel
     else if (dy > 80 && Math.abs(dx) < 120) {
       expandNotificationPanel()
     }
@@ -189,7 +144,6 @@ export default function Home({
     routeAppClick(app, { onTriggerChronoLock, onTriggerVault, onNavigate, launchApp })
   }, [activeContextMenu, onTriggerChronoLock, onTriggerVault, onNavigate])
 
-  // --- Context Menu Actions ---
   const handleRemoveFromHome = (app) => {
     setInstalledApps(prev => prev.map(a => a.packageId === app.packageId ? { ...a, isHome: false } : a))
     setToastText(`${app.label.toUpperCase()} REMOVED FROM HOME`)
@@ -214,6 +168,10 @@ export default function Home({
     HudFallbackIcon
   }), [installedApps, lockedApps, isVaultUnlocked, globalIconTheme, showAppLabels, homeIconSize, homeTextSize, gridColumns, gridRows, tilt, handleAppClick, handleContextMenu])
 
+  const homeApps = useMemo(() => {
+    return installedApps.filter(app => app.isHome !== false).slice(0, gridColumns * gridRows * homePages)
+  }, [installedApps, gridColumns, gridRows, homePages])
+
   return (
     <div 
       onMouseDown={handleSwipeStart}
@@ -224,7 +182,6 @@ export default function Home({
       className="relative flex-1 flex flex-col pt-4 pb-28 px-margin z-10 select-none overflow-y-auto no-scrollbar"
     >
       
-      {/* Interactive alert toast overlays */}
       {toastText && (
         <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
           <div className="glass-surface border border-primary-fixed-dim/40 px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(var(--primary-rgb),0.4)] animate-bounce bg-[#020617]/95">
@@ -236,25 +193,62 @@ export default function Home({
         </div>
       )}
 
-      {/* Dynamic layout placement template grid */}
-      {layoutStyle === 'CENTERED' && (
+      {homePages > 1 ? (
+        <HomePager
+          pages={Array.from({ length: homePages })}
+          activePage={activeHomePage}
+          onPageChange={setActiveHomePage}
+        >
+          {Array.from({ length: homePages }).map((_, pageIndex) => {
+            const pageApps = homeApps.slice(
+              pageIndex * gridColumns * gridRows,
+              (pageIndex + 1) * gridColumns * gridRows
+            )
+            return (
+              <HomeGrid
+                key={pageIndex}
+                {...homeGridProps}
+                installedApps={pageApps}
+              />
+            )
+          })}
+        </HomePager>
+      ) : (
         <>
-          <HomeClockBanner weather={weather} batteryLevel={batteryLevel} />
-          <HomeGrid {...homeGridProps} />
+          {layoutStyle === 'CENTERED' && (
+            <>
+              <HomeGrid {...homeGridProps} />
+            </>
+          )}
+          {layoutStyle === 'CORE_BOTTOM' && (
+            <>
+              <HomeGrid {...homeGridProps} />
+            </>
+          )}
         </>
       )}
 
-      {layoutStyle === 'CORE_BOTTOM' && (
-        <>
-          <HomeGrid {...homeGridProps} />
-          <HomeClockBanner weather={weather} batteryLevel={batteryLevel} />
-        </>
+      <PinnedContacts
+        onLaunchApp={(app) => launchApp(app.packageId, app.label)}
+        glassOpacity={75}
+      />
+
+      {homeScreenFolders.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          {homeScreenFolders.map((folder) => (
+            <HomeScreenFolder
+              key={folder.id}
+              folder={folder}
+              installedApps={installedApps}
+              onAppClick={(app) => launchApp(app.packageId, app.label)}
+              onEditFolder={(updatedFolder) => {
+                setHomeScreenFolders(prev => prev.map(f => f.id === updatedFolder.id ? updatedFolder : f))
+              }}
+            />
+          ))}
+        </div>
       )}
 
-
-      {/* ======================================================== */}
-      {/* 4. ANDROID FLOATING LONG-PRESS CONTEXT MENU OVERLAY      */}
-      {/* ======================================================== */}
       <AppContextMenu
         activeContextMenu={activeContextMenu}
         onRemoveFromHome={handleRemoveFromHome}
@@ -264,9 +258,6 @@ export default function Home({
         onClose={() => setActiveContextMenu(null)}
       />
 
-      {/* ======================================================== */}
-      {/* 7. OFFLINE ASSISTANT CORE                                */}
-      {/* ======================================================== */}
       <Suspense fallback={null}>
         <OfflineAssistantOverlay 
           isVisible={showOfflineAssistant} 
@@ -278,6 +269,7 @@ export default function Home({
           isAppActive={isAppActive}
         />
       </Suspense>
+
 
     </div>
   )

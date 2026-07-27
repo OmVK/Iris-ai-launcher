@@ -1,93 +1,83 @@
 import ProviderBadge from '../../components/ProviderBadge'
+import { logNotification } from '../../components/LauncherPlugin'
 
 export default function EngineModelBar({ activeBackend, onSetBackend, selectedOllamaModel, onSetOllamaModel, ollamaModels, ollamaStatus, activeGeminiModel, onSetGeminiModel, dynamicGeminiModels, activeGroqModel, onSetGroqModel, dynamicGroqModels, activeNvidiaModel, onSetNvidiaModel, dynamicNvidiaModels, onFetchOllamaModels, onNewChat, backendStatus }) {
   return (
-    <div className="w-full max-w-lg px-4 py-1.5 glass-surface border border-outline-variant/20 rounded-xl flex items-center justify-between gap-4 font-mono-data text-[9px] mx-auto">
-      <div className="flex items-center gap-1.5 flex-1">
-        <span className="text-on-surface-variant/50 uppercase text-[8px] shrink-0">ENGINE:</span>
-        <div className="relative w-full">
-          <select value={activeBackend} onChange={e => { onSetBackend(e.target.value); if (e.target.value === 'OLLAMA') onFetchOllamaModels() }}
-            className="w-full appearance-none bg-black/40 border border-outline-variant/30 rounded pl-1.5 pr-5 py-0.5 text-[#00f2ff] focus:outline-none focus:border-[#00f2ff] cursor-pointer font-mono-data">
-            <option value="OLLAMA">Local Ollama Server</option>
-            <option value="ONDEVICE">Gemini Nano (On-Device)</option>
-            <option value="GEMINI">Google Gemini API</option>
-            <option value="GROQ">Groq LPU (Cloud)</option>
-            <option value="NVIDIA">NVIDIA NIM Engine</option>
-          </select>
-          <span className="material-symbols-outlined absolute right-1 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none text-[#00f2ff]/60">expand_more</span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1.5 shrink-0">
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full shadow-lg">
+      
+      <div className="flex items-center bg-white/5 rounded-full px-2 py-1">
         <ProviderBadge backend={activeBackend} showLabel={false} />
+        <select value={activeBackend} onChange={e => { onSetBackend(e.target.value); if (e.target.value === 'OLLAMA') onFetchOllamaModels() }}
+          className="appearance-none bg-transparent text-white/90 text-[11px] font-medium px-2 py-0.5 focus:outline-none cursor-pointer">
+          <option value="OLLAMA" className="bg-[#1e293b]">Local Ollama</option>
+          <option value="ONDEVICE" className="bg-[#1e293b]">Gemini Nano</option>
+          <option value="GEMINI" className="bg-[#1e293b]">Google Gemini</option>
+          <option value="GROQ" className="bg-[#1e293b]">Groq LPU</option>
+          <option value="NVIDIA" className="bg-[#1e293b]">NVIDIA NIM</option>
+        </select>
+        <span className="material-symbols-outlined text-[14px] text-white/50 pointer-events-none -ml-1">expand_more</span>
       </div>
 
-      <div className="flex items-center gap-1.5 flex-1">
-        <span className="text-on-surface-variant/50 uppercase text-[8px] shrink-0">MODEL:</span>
+      <div className="w-[1px] h-4 bg-white/10 mx-1"></div>
+
+      <div className="flex items-center text-[11px] font-medium text-[rgba(var(--primary-rgb),0.8)]">
         {activeBackend === 'OLLAMA' && (
-          <div className="relative w-full">
+          <div className="relative flex items-center">
             <select value={selectedOllamaModel} onChange={e => { onSetOllamaModel(e.target.value); localStorage.setItem('ollama_model', e.target.value) }}
-              className="w-full appearance-none bg-black/40 border border-outline-variant/30 rounded pl-1.5 pr-5 py-0.5 text-[#00f2ff] focus:outline-none focus:border-[#00f2ff] cursor-pointer" disabled={ollamaStatus !== 'online' || ollamaModels.length === 0}>
-              {ollamaModels.length === 0 ? <option value="">(No models found)</option> : ollamaModels.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+              className="appearance-none bg-transparent pr-5 focus:outline-none cursor-pointer" disabled={ollamaStatus !== 'online' || ollamaModels.length === 0}>
+              {ollamaModels.length === 0 ? <option value="" className="bg-[#1e293b]">(No models found)</option> : ollamaModels.map(m => <option key={m.name} value={m.name} className="bg-[#1e293b]">{m.name}</option>)}
             </select>
-            <span className="material-symbols-outlined absolute right-1 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none text-[#00f2ff]/60">expand_more</span>
+            <span className="material-symbols-outlined absolute right-0 text-[14px] pointer-events-none">expand_more</span>
           </div>
         )}
         {activeBackend === 'GEMINI' && (
-          <div className="relative w-full">
-            <select value={activeGeminiModel} onChange={e => { onSetGeminiModel(e.target.value); alert(`Model Saved!\n\nSelected: ${e.target.value}`) }}
-              className="w-full appearance-none bg-black/40 border border-outline-variant/30 rounded pl-1.5 pr-5 py-0.5 text-[#ff007f] focus:outline-none focus:border-[#ff007f] cursor-pointer">
-              {dynamicGeminiModels.length > 0 ? dynamicGeminiModels.map(m => <option key={m} value={m}>{m}</option>) : (<>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Standard)</option>
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Advanced)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Next-Gen)</option>
-                <option value="gemini-pro">Gemini Pro (Legacy)</option>
+          <div className="relative flex items-center">
+            <select value={activeGeminiModel} onChange={e => { onSetGeminiModel(e.target.value); logNotification('MODEL', `Selected: ${e.target.value}`, 'success') }}
+              className="appearance-none bg-transparent pr-5 focus:outline-none cursor-pointer">
+              {dynamicGeminiModels.length > 0 ? dynamicGeminiModels.map(m => <option key={m} value={m} className="bg-[#1e293b]">{m}</option>) : (<>
+                <option value="gemini-1.5-flash" className="bg-[#1e293b]">1.5 Flash</option>
+                <option value="gemini-1.5-pro" className="bg-[#1e293b]">1.5 Pro</option>
+                <option value="gemini-2.5-flash" className="bg-[#1e293b]">2.5 Flash</option>
+                <option value="gemini-pro" className="bg-[#1e293b]">Gemini Pro</option>
               </>)}
             </select>
-            <span className="material-symbols-outlined absolute right-1 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none text-[#ff007f]/60">expand_more</span>
+            <span className="material-symbols-outlined absolute right-0 text-[14px] pointer-events-none">expand_more</span>
           </div>
         )}
         {activeBackend === 'GROQ' && (
-          <div className="relative w-full">
+          <div className="relative flex items-center">
             <select value={activeGroqModel} onChange={e => { onSetGroqModel(e.target.value); localStorage.setItem('groq_model', e.target.value) }}
-              className="w-full appearance-none bg-black/40 border border-outline-variant/30 rounded pl-1.5 pr-5 py-0.5 text-[#39ff14] focus:outline-none focus:border-[#39ff14] cursor-pointer font-mono-data">
-              {dynamicGroqModels.length > 0 ? dynamicGroqModels.map(m => <option key={m} value={m}>{m}</option>) : (<>
-                <option value="llama-3.3-70b-versatile">Llama 3.3 70B (High-End)</option>
-                <option value="llama-3.2-3b-preview">Llama 3.2 3B (Fast)</option>
-                <option value="llama-3.2-1b-preview">Llama 3.2 1B (Light)</option>
-                <option value="llama3-8b-8192">Llama 3 8B (Legacy)</option>
-                <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                <option value="gemma2-9b-it">Gemma 2 9B (Google)</option>
+              className="appearance-none bg-transparent pr-5 focus:outline-none cursor-pointer">
+              {dynamicGroqModels.length > 0 ? dynamicGroqModels.map(m => <option key={m} value={m} className="bg-[#1e293b]">{m}</option>) : (<>
+                <option value="llama-3.3-70b-versatile" className="bg-[#1e293b]">Llama 3.3 70B</option>
+                <option value="llama-3.2-3b-preview" className="bg-[#1e293b]">Llama 3.2 3B</option>
+                <option value="llama-3.2-1b-preview" className="bg-[#1e293b]">Llama 3.2 1B</option>
+                <option value="mixtral-8x7b-32768" className="bg-[#1e293b]">Mixtral 8x7B</option>
               </>)}
             </select>
-            <span className="material-symbols-outlined absolute right-1 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none text-[#39ff14]/60">expand_more</span>
+            <span className="material-symbols-outlined absolute right-0 text-[14px] pointer-events-none">expand_more</span>
           </div>
         )}
         {activeBackend === 'NVIDIA' && (
-          <div className="relative w-full">
+          <div className="relative flex items-center">
             <select value={activeNvidiaModel} onChange={e => { onSetNvidiaModel(e.target.value); localStorage.setItem('nvidia_model', e.target.value) }}
-              className="w-full appearance-none bg-black/40 border border-outline-variant/30 rounded pl-1.5 pr-5 py-0.5 text-[#76b900] focus:outline-none focus:border-[#76b900] cursor-pointer font-mono-data">
-              {dynamicNvidiaModels.length > 0 ? dynamicNvidiaModels.map(m => <option key={m} value={m}>{m}</option>) : (<>
-                <option value="meta/llama-3.1-70b-instruct">Llama 3.1 70B (Instruct)</option>
-                <option value="meta/llama-3.1-405b-instruct">Llama 3.1 405B (Heavy)</option>
-                <option value="meta/llama-3.1-8b-instruct">Llama 3.1 8B (Fast)</option>
-                <option value="mistralai/mixtral-8x22b-instruct-v0.1">Mixtral 8x22B (MoE)</option>
+              className="appearance-none bg-transparent pr-5 focus:outline-none cursor-pointer">
+              {dynamicNvidiaModels.length > 0 ? dynamicNvidiaModels.map(m => <option key={m} value={m} className="bg-[#1e293b]">{m}</option>) : (<>
+                <option value="meta/llama-3.1-70b-instruct" className="bg-[#1e293b]">Llama 3.1 70B</option>
+                <option value="meta/llama-3.1-405b-instruct" className="bg-[#1e293b]">Llama 3.1 405B</option>
               </>)}
             </select>
-            <span className="material-symbols-outlined absolute right-1 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none text-[#76b900]/60">expand_more</span>
+            <span className="material-symbols-outlined absolute right-0 text-[14px] pointer-events-none">expand_more</span>
           </div>
         )}
         {activeBackend === 'ONDEVICE' && (
-          <div className="w-full bg-black/40 border border-outline-variant/30 rounded px-1.5 py-0.5 text-[#00f2ff] font-mono-data text-[9px]">
-            Gemini Nano (On-Device)
-          </div>
+          <span className="px-1">Nano On-Device</span>
         )}
       </div>
 
       <button onClick={onNewChat}
-        className="px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface-variant/60 hover:text-white hover:border-[#00f2ff]/50 hover:bg-[#00f2ff]/10 transition-all shrink-0 flex items-center gap-1 active:scale-95" title="New Chat">
-        <span className="material-symbols-outlined text-[12px]">add_comment</span>
-        <span className="text-[8px] uppercase font-bold hidden sm:inline">NEW</span>
+        className="ml-2 w-7 h-7 rounded-full bg-[rgba(var(--primary-rgb),0.1)] border border-[rgba(var(--primary-rgb),0.2)] text-[var(--primary-color)] hover:bg-[rgba(var(--primary-rgb),0.2)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center" title="New Chat">
+        <span className="material-symbols-outlined text-[16px]">edit_square</span>
       </button>
     </div>
   )

@@ -2,13 +2,16 @@ import React from 'react'
 import { IRIS_ICON_PACK } from '../../utils/IrisIconPack'
 import HudIcon from '../HudIcon'
 import HudFallbackIcon from '../HudFallbackIcon'
+import { getIconContainerStyle } from '../../utils/IconShapeMask'
 
-function DrawerIcon({ app, isLocked, size, iconTheme }) {
+function DrawerIcon({ app, isLocked, size, iconTheme, iconShape = 'system' }) {
   const iconMaxPx = Math.round(size)
+  const shapeStyle = getIconContainerStyle(iconShape, iconMaxPx)
+
   return (
     <div
-      style={{ maxWidth: `${iconMaxPx}px`, fontSize: `${Math.round(iconMaxPx * 0.46)}px` }}
-      className={`w-full aspect-square rounded-2xl glass-icon-container flex items-center justify-center relative transition-[background-color,border-color] duration-200 icon-theme-${iconTheme?.toLowerCase() || 'default'} overflow-hidden mx-auto ${
+      style={shapeStyle}
+      className={`glass-icon-container flex items-center justify-center relative transition-[background-color,border-color] duration-200 icon-theme-${iconTheme?.toLowerCase() || 'default'} overflow-hidden mx-auto ${
         isLocked ? 'border-error/30' : ''
       }`}
     >

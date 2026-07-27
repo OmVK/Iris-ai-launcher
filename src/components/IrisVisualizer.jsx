@@ -97,7 +97,7 @@ export default function IrisVisualizer({
       const b = Math.round(colorState.current.b)
 
       // Handle high DPI displays dynamically. ONLY reallocate canvas buffer if size actually changed to save GPU!
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
       const targetSize = size * dpr
       if (canvas.width !== targetSize) {
         canvas.width = targetSize

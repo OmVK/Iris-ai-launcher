@@ -157,44 +157,28 @@ public class IrisGenAIPlugin extends Plugin {
             Object textPart = textPartClass.getConstructor(String.class).newInstance(prompt);
 
             Class<?> reqBuilderClass = Class.forName("com.google.mlkit.genai.prompt.GenerateContentRequest$Builder");
-            Object reqBuilder = reqBuilderClass.getConstructor(Class.forName("com.google.mlkit.genai.prompt.Part")).newInstance(textPart);
-
-            Class<?> genConfigClass = Class.forName("com.google.mlkit.genai.prompt.GenerationConfig");
-            Object configBuilder = genConfigClass.getMethod("builder").invoke(null);
+            Object reqBuilder = reqBuilderClass.getConstructor(textPartClass).newInstance(textPart);
 
             Method setTemp = null;
-            for (Method m : genConfigClass.getMethods()) {
+            for (Method m : reqBuilderClass.getMethods()) {
                 if (m.getName().equals("setTemperature") && m.getParameterCount() == 1) {
                     setTemp = m;
                     break;
                 }
             }
             if (setTemp != null) {
-                configBuilder = setTemp.invoke(configBuilder, (float) temperature);
+                setTemp.invoke(reqBuilder, (Float) (float) temperature);
             }
 
             Method setMaxTokens = null;
-            for (Method m : genConfigClass.getMethods()) {
+            for (Method m : reqBuilderClass.getMethods()) {
                 if (m.getName().equals("setMaxOutputTokens") && m.getParameterCount() == 1) {
                     setMaxTokens = m;
                     break;
                 }
             }
             if (setMaxTokens != null) {
-                configBuilder = setMaxTokens.invoke(configBuilder, maxTokens);
-            }
-
-            Object config = genConfigClass.getMethod("build").invoke(configBuilder);
-
-            Method setGenConfig = null;
-            for (Method m : reqBuilderClass.getMethods()) {
-                if (m.getName().equals("setGenerationConfig") && m.getParameterCount() == 1) {
-                    setGenConfig = m;
-                    break;
-                }
-            }
-            if (setGenConfig != null) {
-                reqBuilder = setGenConfig.invoke(reqBuilder, config);
+                setMaxTokens.invoke(reqBuilder, (Integer) maxTokens);
             }
 
             Object request = reqBuilderClass.getMethod("build").invoke(reqBuilder);

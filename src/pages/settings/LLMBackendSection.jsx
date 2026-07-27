@@ -3,9 +3,10 @@ import SettingsSection from './SettingsSection'
 import { GenAI } from '../../components/GenAIPlugin'
 
 const GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', desc: 'Fast + Reasoning' },
-  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', desc: 'Advanced Reasoning' },
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', desc: 'Legacy Fast' },
+  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', desc: 'Latest Fast' },
+  { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', desc: 'Advanced Reasoning' },
+  { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', desc: 'Fast + Reasoning' },
+  { id: 'gemini-1.0-pro', label: 'Gemini 1.0 Pro', desc: 'Legacy Fallback' },
 ]
 
 export default function LLMBackendSection({ expandedSections, toggleSection, llmBackend, setLlmBackend, geminiModel, setGeminiModel }) {

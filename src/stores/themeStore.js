@@ -37,13 +37,21 @@ export const useThemeStore = create((set, get) => ({
   pageTransitionSpeed: getLSNum('iris_page_transition_speed', 300),
   pageTransitionEasing: getLS('page_transition_easing', 'SMOOTH'),
   darkGlassTheme: getLSBool('dark_glass_theme', false),
+  homePages: getLSNum('home_pages', 1),
+  activeHomePage: 0,
+  iconShape: getLS('icon_shape', 'system'),
+  dockColumns: getLSNum('dock_columns', 5),
+  dockBackground: getLS('dock_background', 'blur'),
+  homeScreenFolders: (() => { try { const raw = getLS('home_screen_folders', ''); return raw ? JSON.parse(raw) : [] } catch { return [] } })(),
+  wallpaperBlur: getLSNum('wallpaper_blur', 0),
+  wallpaperVignette: getLSNum('wallpaper_vignette', 0),
 
   setThemeColor: (v) => { try { localStorage.setItem('theme_color', v) } catch {} set({ themeColor: v }) },
   setGlassOpacity: (v) => { try { localStorage.setItem('glass_opacity', v) } catch {} set({ glassOpacity: v }) },
   setWallpaper: (v) => { try { localStorage.setItem('wallpaper', v) } catch {} set({ wallpaper: v }) },
   setCustomWallpaper: (v) => {
     if (v) {
-      if (v.length > 5000000) return
+      if (v.length > 8000000) return
       try { localStorage.setItem('custom_wallpaper', v) } catch {} set({ hasCustomWallpaper: true })
     } else {
       try { localStorage.removeItem('custom_wallpaper') } catch {} set({ hasCustomWallpaper: false })
@@ -69,6 +77,14 @@ export const useThemeStore = create((set, get) => ({
   setPageTransitionSpeed: (v) => { try { localStorage.setItem('iris_page_transition_speed', v) } catch {} set({ pageTransitionSpeed: v }) },
   setPageTransitionEasing: (v) => { try { localStorage.setItem('page_transition_easing', v) } catch {} set({ pageTransitionEasing: v }) },
   setDarkGlassTheme: (v) => { try { localStorage.setItem('dark_glass_theme', v) } catch {} set({ darkGlassTheme: v }) },
+  setHomePages: (v) => { try { localStorage.setItem('home_pages', v) } catch {} set({ homePages: v }) },
+  setActiveHomePage: (v) => set({ activeHomePage: v }),
+  setIconShape: (v) => { try { localStorage.setItem('icon_shape', v) } catch {} set({ iconShape: v }) },
+  setDockColumns: (v) => { try { localStorage.setItem('dock_columns', v) } catch {} set({ dockColumns: v }) },
+  setDockBackground: (v) => { try { localStorage.setItem('dock_background', v) } catch {} set({ dockBackground: v }) },
+  setHomeScreenFolders: (v) => { try { localStorage.setItem('home_screen_folders', JSON.stringify(v)) } catch {} set({ homeScreenFolders: v }) },
+  setWallpaperBlur: (v) => { try { localStorage.setItem('wallpaper_blur', v) } catch {} set({ wallpaperBlur: v }) },
+  setWallpaperVignette: (v) => { try { localStorage.setItem('wallpaper_vignette', v) } catch {} set({ wallpaperVignette: v }) },
 
   syncSystemWallpaper: async () => {
     try {

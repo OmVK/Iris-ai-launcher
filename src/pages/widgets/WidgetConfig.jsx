@@ -6,6 +6,11 @@ const DEFAULT_WIDGETS = [
   { id: 'stocks', label: 'Stock & Crypto Candlestick Cores' },
   { id: 'media', label: 'Sonic & System Media Player' },
   { id: 'tasks', label: 'Day Tasks Manager' },
+  { id: 'clock', label: 'Digital Clock' },
+  { id: 'analog_clock', label: 'Analog Clock' },
+  { id: 'calendar', label: 'Calendar Widget' },
+  { id: 'battery', label: 'Battery Monitor' },
+  { id: 'notes', label: 'Quick Notes' },
   { id: 'ping', label: 'Ping Network Speedometer' },
   { id: 'signal', label: 'Dense Signal Telemetry' }
 ]
@@ -35,20 +40,40 @@ export default function WidgetConfig({ activeWidgetIds, customWidgets, onAddWidg
   }
 
   return (
-    <section className="glass-surface glass-border rounded-xl p-4 text-xs font-mono-data space-y-4">
-      <div className="flex justify-between items-center">
-        <span className="text-primary-fixed-dim font-bold flex items-center gap-1.5 text-xs">
-          <span className="material-symbols-outlined text-sm animate-pulse">space_dashboard</span>
-          CUSTOMIZE METRIC DASHBOARD
+    <div className="flex flex-col items-center gap-3">
+      <button
+        onClick={() => setIsConfigOpen(!isConfigOpen)}
+        className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/[0.08] transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] cursor-pointer active:scale-95"
+        style={{
+          background: isConfigOpen ? 'rgba(12, 16, 28, 0.82)' : 'rgba(12, 16, 28, 0.6)',
+          backdropFilter: 'blur(40px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+          boxShadow: isConfigOpen
+            ? '0 4px 24px rgba(0,0,0,0.4), 0 0 1px rgba(0,229,255,0.15), inset 0 1px 0 rgba(255,255,255,0.04)'
+            : '0 2px 12px rgba(0,0,0,0.2)',
+          height: isConfigOpen ? 40 : 32,
+          width: isConfigOpen ? '100%' : 'auto',
+          maxWidth: isConfigOpen ? 400 : 'none',
+        }}
+      >
+        <span className="material-symbols-outlined text-primary-fixed-dim animate-pulse" style={{ fontSize: 14 }}>space_dashboard</span>
+        <span className="font-label-caps text-[9px] tracking-[0.12em] text-primary-fixed-dim">
+          {isConfigOpen ? 'WIDGET WORKSHOP' : 'CUSTOMIZE DASHBOARD'}
         </span>
-        <button onClick={() => setIsConfigOpen(!isConfigOpen)}
-          className="px-2.5 py-1 rounded border border-primary-fixed-dim/30 bg-primary-fixed-dim/10 text-primary-fixed-dim text-[9px] font-bold active:scale-95 transition-all">
-          {isConfigOpen ? 'CLOSE WORKSHOP' : 'WIDGET WORKSHOP'}
-        </button>
-      </div>
+        <span className="material-symbols-outlined text-on-surface-variant/40 transition-transform duration-300" style={{ fontSize: 14, transform: isConfigOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+          expand_more
+        </span>
+      </button>
 
       {isConfigOpen && (
-        <div className="pt-3 border-t border-white/5 space-y-4">
+        <div className="w-full glass-surface rounded-2xl p-4 text-xs font-mono-data space-y-4 border border-white/[0.06]"
+          style={{
+            background: 'rgba(12, 16, 28, 0.7)',
+            backdropFilter: 'blur(40px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)',
+          }}
+        >
           <div className="space-y-1.5">
             <p className="text-[7.5px] text-on-surface-variant/40 uppercase">ACTIVE MOUNT SYSTEM NODES</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -91,6 +116,6 @@ export default function WidgetConfig({ activeWidgetIds, customWidgets, onAddWidg
           </form>
         </div>
       )}
-    </section>
+    </div>
   )
 }

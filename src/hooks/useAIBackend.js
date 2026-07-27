@@ -26,31 +26,26 @@ const SEARCH_STRIP_PATTERNS = [
   /give me /gi, /i want to know /gi, /i need to know /gi
 ]
 
-const SYSTEM_PROMPT_TEMPLATE = (ragContext, searchContext) => localStorage.getItem('iris_system_prompt') || `You are Iris, a voice-first AI assistant. You speak naturally, like a knowledgeable friend — not a textbook.
+const SYSTEM_PROMPT_TEMPLATE = (ragContext, searchContext) => localStorage.getItem('iris_system_prompt') || `You are Iris, an intelligent AI assistant integrated into a custom Android launcher.
+
+RESPONSE RULES:
+- Answer directly. No filler phrases like "Great question!" or "Of course!"
+- For code: always use fenced code blocks with language tag
+- For lists: use markdown bullet points
+- For math or structured data: use tables or clear formatting
+- Keep answers concise unless the user asks for detail
+- If asked something ambiguous, ask ONE clarifying question
+- If you don't know something, say so plainly — don't hallucinate
+
+CONTEXT:
+- You run inside an Android app
+- The user may switch between AI models mid-conversation
+- You have access to the conversation history
+${ragContext ? `- Additional context available: RAG Search\n` : ''}${searchContext ? `- Additional context available: Web Search\n` : ''}
+TONE:
+- Direct, helpful, no unnecessary verbosity
 
 Current date/time: ${new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-
-VOICE CONVERSATION RULES (CRITICAL):
-- Keep responses SHORT. 1-3 sentences max for casual questions. Only go longer if the user explicitly asks for detail.
-- Talk like a real person having a conversation, not an essay writer.
-- Never say "Great question!" or "Certainly!" or any filler. Just answer.
-- If someone says "isn't it cool" — say "Yeah, it really is" or similar casual reply. Do NOT explain what "cool" means.
-- If someone says "hello" — say "Hey!" or "Hi, what's up?" — NOT a paragraph.
-- Match the user's energy. Short question = short answer. Casual tone = casual answer.
-- Only give detailed explanations when the user asks a technical or complex question that genuinely needs it.
-- Never start responses with restating the question.
-- Use bullet points or numbered lists only for multi-step instructions.
-
-You are helpful and honest. You have memory of the full conversation — reference earlier messages naturally.
-
-Core rules:
-- When live search data is provided, use it as primary source
-- Be honest if you don't know something
-- Never add unnecessary disclaimers or filler
-- For factual questions, check live search first
-- Adapt tone: casual for chat, precise for technical
-
-You are not any single AI — you are the best of all of them.
 ${ragContext} ${searchContext}`
 
 const cleanResponse = (responseText, systemInstruction, prompt) => {
@@ -171,7 +166,7 @@ export default function useAIBackend(speakTextFn) {
   }
 
   const callGemini = async (prompt, systemInstruction, signal, chatLogRef, apiKey) => {
-    const chosenModel = (localStorage.getItem('gemini_model') || 'gemini-2.5-flash').trim().replace(/\s+/g, '-')
+    let chosenModel = (localStorage.getItem('gemini_model') || 'gemini-2.0-flash').trim().replace(/\s+/g, '-')
     const history = chatLogRef
       .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
       .slice(-20)
@@ -185,6 +180,7 @@ export default function useAIBackend(speakTextFn) {
       }),
       signal
     })
+    
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}))
       throw new Error(`[${chosenModel}] ${errData?.error?.message || `HTTP ${res.status}`}`)
@@ -255,9 +251,16 @@ export default function useAIBackend(speakTextFn) {
     return res
   }
 
-  const callOnDevice = async (prompt, systemInstruction) => {
-    const genAIResult = await GenAI.generateText(prompt, {
-      systemInstruction,
+  const callOnDevice = async (prompt, systemInstruction, chatLogRef) => {
+    const historyText = chatLogRef
+      .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
+      .slice(-10)
+      .map(msg => `${msg.type === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
+      .join('\n');
+      
+    const fullPrompt = `${systemInstruction}\n\n[Conversation History]\n${historyText}\n\nUser: ${prompt}\nAssistant:`;
+
+    const genAIResult = await GenAI.generateText(fullPrompt, {
       temperature: 0.7,
       maxTokens: 2048
     })
@@ -272,10 +275,12 @@ export default function useAIBackend(speakTextFn) {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setChatLog(prev => [...prev, { time: timeStr, sender: "USER", text: prompt, type: "user" }])
     useAssistantStore.getState().setTextPrompt('')
-    setActiveUserTranscript(prompt)
-    setActiveAiResponse('Querying neural matrix offline...')
+    if (useAssistantStore.getState().isLiveVoice) {
+      setActiveUserTranscript(prompt)
+      setActiveAiResponse('Querying neural matrix offline...')
+    }
     const loadingId = Date.now()
-    setChatLog(prev => [...prev, { id: loadingId, time: timeStr, sender: "IRIS", text: "Processing neural pathways...", type: "system", loading: true }])
+    setChatLog(prev => [...prev, { id: loadingId, time: timeStr, sender: "IRIS", text: "Thinking...", type: "system", loading: true }])
 
     abortControllerRef.current = new AbortController()
     const signal = abortControllerRef.current.signal
@@ -311,14 +316,12 @@ export default function useAIBackend(speakTextFn) {
       const chatLogSnapshot = useAssistantStore.getState().chatLog
 
       const tryBackend = async (backend) => {
-        await checkBackend(backend)
-        if (getBackendStatus(backend) !== 'online') throw new Error(`Backend ${backend} is unreachable`)
         switch (backend) {
           case 'GEMINI': return await callGemini(prompt, systemInstruction, signal, chatLogSnapshot, geminiApiKey)
           case 'GROQ': return await callGroq(prompt, systemInstruction, signal, chatLogSnapshot, groqApiKey)
           case 'NVIDIA': return await callNvidia(prompt, systemInstruction, signal, chatLogSnapshot, nvidiaKey)
           case 'OLLAMA': return await callOllama(prompt, systemInstruction, signal)
-          case 'ONDEVICE': return { ok: true, text: await callOnDevice(prompt, systemInstruction) }
+          case 'ONDEVICE': return { ok: true, text: await callOnDevice(prompt, systemInstruction, chatLogSnapshot) }
           default: throw new Error(`Unknown backend: ${backend}`)
         }
       }
@@ -330,13 +333,23 @@ export default function useAIBackend(speakTextFn) {
         return true
       }
 
-      const chain = getBackendPriorityChain().filter(hasKey)
+      let chain = getBackendPriorityChain().filter(hasKey)
+      if (activeBackend) {
+        if (!hasKey(activeBackend)) {
+          throw new Error(`Please configure your API key for ${activeBackend} in Settings.`)
+        }
+        if (activeBackend !== 'ONDEVICE') {
+          chain = [activeBackend] // Only try the selected cloud backend to avoid 30s silent fallbacks
+        } else {
+          chain = [activeBackend, ...chain.filter(b => b !== activeBackend)]
+        }
+      }
       let lastError = null
 
       for (const backend of chain) {
         try {
           if (backend === 'ONDEVICE') {
-            responseText = await callOnDevice(prompt, systemInstruction)
+            responseText = await callOnDevice(prompt, systemInstruction, chatLogSnapshot)
             break
           }
           const res = await tryBackend(backend)

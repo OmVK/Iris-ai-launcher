@@ -132,7 +132,7 @@ export default function DiagnosticsTerminal({ onClose }) {
         </div>
         <div className="flex gap-2">
           <button onClick={runSelfDiagnostics} disabled={diagRunning} className="flex-grow py-1.5 bg-[#00f2ff]/10 border border-[#00f2ff]/30 text-[#00f2ff] font-bold rounded hover:bg-[#00f2ff]/20 active:scale-[0.98] transition-all">RE-RUN HEALTH DIAGNOSTIC</button>
-          <button onClick={onClose} className="px-3.5 py-1.5 bg-white/5 border border-white/10 hover:text-white rounded text-[9px] font-bold">CLOSE</button>
+          <button onClick={onClose} className="px-3.5 py-1.5 bg-[#00f2ff]/5 border border-[#00f2ff]/15 text-[#00f2ff]/60 hover:text-[#00f2ff] rounded text-[9px] font-bold">CLOSE</button>
         </div>
       </div>
     </div>

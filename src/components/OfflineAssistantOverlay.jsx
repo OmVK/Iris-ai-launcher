@@ -13,6 +13,15 @@ import useOfflineDispatch from '../hooks/useOfflineDispatch'
 import AssistantStatusPanel from './AssistantStatusPanel'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
+const launchApp = async (packageId, label) => {
+  try {
+    const { launchApp: nativeLaunch } = await import('./LauncherPlugin')
+    return await nativeLaunch(packageId, label)
+  } catch (e) {
+    console.warn('[IRIS] launchApp failed:', e)
+    throw e
+  }
+}
 
 export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, showHomeOrb = true, appsList, onStateChange, isAppActive = true }) {
   const [statusText, setStatusText] = useState('')
@@ -96,8 +105,8 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
     })
 
     return () => {
-      statusListener.then(l => l.remove())
-      partialListener.then(l => l.remove())
+      const removeStatus = typeof statusListener?.then === 'function' ? statusListener.then(l => l.remove()) : statusListener?.remove?.()
+      const removePartial = typeof partialListener?.then === 'function' ? partialListener.then(l => l.remove()) : partialListener?.remove?.()
     }
   }, [isVisible])
 
@@ -426,15 +435,17 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
   const handleNotifications = async () => {
     try {
       const res = await LauncherPlugin.getActiveNotifications()
-      if (res?.notifications) {
-        const parsed = JSON.parse(res.notifications)
-        if (parsed.length === 0) return 'No new notifications.'
-        if (parsed.length === 1) return `1 notification from ${parsed[0].title || 'someone'}.`
-        let msg = `${parsed.length} notifications. `
-        for (let i = 0; i < Math.min(3, parsed.length); i++) msg += `${parsed[i].appName || 'app'}: ${parsed[i].title}. `
-        return msg
+      let notifications = []
+      if (Array.isArray(res)) {
+        notifications = res
+      } else if (res?.notifications) {
+        notifications = typeof res.notifications === 'string' ? JSON.parse(res.notifications) : res.notifications
       }
-      return 'No notifications.'
+      if (notifications.length === 0) return 'No new notifications.'
+      if (notifications.length === 1) return `1 notification from ${notifications[0].title || 'someone'}.`
+      let msg = `${notifications.length} notifications. `
+      for (let i = 0; i < Math.min(3, notifications.length); i++) msg += `${notifications[i].appName || 'app'}: ${notifications[i].title}. `
+      return msg
     } catch {
       return 'Cannot access notifications.'
     }

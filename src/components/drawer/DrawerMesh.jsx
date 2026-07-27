@@ -147,7 +147,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
     let running = true
     let w, h
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
       const rect = canvas.getBoundingClientRect()
       w = rect.width; h = rect.height
       canvas.width = w * dpr; canvas.height = h * dpr

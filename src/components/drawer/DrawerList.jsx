@@ -2,12 +2,14 @@ import React from 'react'
 import { IRIS_ICON_PACK } from '../../utils/IrisIconPack'
 import HudIcon from '../HudIcon'
 import HudFallbackIcon from '../HudFallbackIcon'
+import { getIconContainerStyle } from '../../utils/IconShapeMask'
 
-function DrawerList({ filteredApps, drawerIconSize, drawerTextSize, globalIconTheme, onContextMenu, onAppClick }) {
+function DrawerList({ filteredApps, drawerIconSize, drawerTextSize, globalIconTheme, onContextMenu, onAppClick, iconShape = 'system' }) {
   return (
     <div className="max-w-xl mx-auto mt-6 flex flex-col gap-2 bg-black/10 rounded-xl border border-outline-variant/15 p-2 font-mono-data">
       {filteredApps.map((app) => {
         const iconSize = 40 * (drawerIconSize / 100)
+        const shapeStyle = getIconContainerStyle(iconShape, iconSize)
         return (
           <div
             key={app.packageId}
@@ -17,13 +19,13 @@ function DrawerList({ filteredApps, drawerIconSize, drawerTextSize, globalIconTh
           >
             <div className="flex items-center gap-3">
               <div
-                style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
-                className={`rounded-lg glass-icon-container flex items-center justify-center relative transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme?.toLowerCase() || 'default'}`}
+                style={shapeStyle}
+                className={`glass-icon-container flex items-center justify-center relative transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme?.toLowerCase() || 'default'}`}
               >
                 {app.icon && app.icon.startsWith('data:') ? (
                   (window.useGlobalHudIcons) ? (
                     IRIS_ICON_PACK[app.packageId] ? (
-                      <HudIcon packageId={app.packageId} size={28 * (drawerIconSize / 100)} />
+                      <HudIcon packageId={app.packageId} size={28 * (drawerIconSize / 100)} iconShape={iconShape} />
                     ) : (
                       <HudFallbackIcon src={app.icon} size={28 * (drawerIconSize / 100)} />
                     )

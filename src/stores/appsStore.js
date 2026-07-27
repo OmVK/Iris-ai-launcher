@@ -8,6 +8,9 @@ const IRIS_PACKAGE_IDS = new Set([
   'com.iris.media', 'com.iris.private'
 ])
 
+const HIDDEN_APPS_KEY = 'iris_hidden_apps'
+const APP_FREQUENCY_KEY = 'iris_app_frequency'
+
 const loadApps = () => {
   try {
     const cached = localStorage.getItem('installed_apps')
@@ -25,6 +28,20 @@ const loadApps = () => {
   }
 }
 
+const loadHiddenApps = () => {
+  try {
+    const raw = localStorage.getItem(HIDDEN_APPS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+const loadAppFrequency = () => {
+  try {
+    const raw = localStorage.getItem(APP_FREQUENCY_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
 try {
   const cf = localStorage.getItem('iris_custom_folders')
   if (cf) {
@@ -38,12 +55,33 @@ try {
 
 export const useAppsStore = create((set, get) => ({
   installedApps: loadApps(),
+  hiddenApps: loadHiddenApps(),
+  appFrequency: loadAppFrequency(),
 
   setInstalledApps: (updater) => set((s) => {
     const next = typeof updater === 'function' ? updater(s.installedApps) : updater
     localStorage.setItem('installed_apps', JSON.stringify(next))
     return { installedApps: next }
   }),
+
+  toggleHiddenApp: (packageId) => set((s) => {
+    const hidden = s.hiddenApps.includes(packageId)
+      ? s.hiddenApps.filter(id => id !== packageId)
+      : [...s.hiddenApps, packageId]
+    localStorage.setItem(HIDDEN_APPS_KEY, JSON.stringify(hidden))
+    return { hiddenApps: hidden }
+  }),
+
+  isAppHidden: (packageId) => get().hiddenApps.includes(packageId),
+
+  recordAppLaunch: (packageId) => set((s) => {
+    const freq = { ...s.appFrequency }
+    freq[packageId] = (freq[packageId] || 0) + 1
+    localStorage.setItem(APP_FREQUENCY_KEY, JSON.stringify(freq))
+    return { appFrequency: freq }
+  }),
+
+  getAppFrequency: (packageId) => get().appFrequency[packageId] || 0,
 
   mergeNativeApps: (nativeApps) => set((s) => {
     if (!nativeApps || nativeApps.length === 0) return s

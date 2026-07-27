@@ -85,7 +85,7 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
       <div className="flex-1 flex flex-col h-[100lvh] min-h-0 overflow-hidden">
         <div className="fixed inset-0 -z-10 bg-gradient-to-b from-black/35 via-transparent to-black/45 pointer-events-none" />
 
-        <div className="flex-1 overflow-y-auto pt-14 px-margin pb-28 scroll-container select-none">
+        <div className="flex-1 overflow-y-auto pt-12 px-margin pb-28 scroll-container select-none">
           <div className="max-w-xl mx-auto">
             {activeTool === 'unlock_iris' && vaultUnlockedForTool ? (
               <CommandReference glassBg={glassBg} onClose={() => { setActiveTool(null); setVaultUnlockedForTool(false) }} />
@@ -189,7 +189,7 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
     <div className="flex-1 flex flex-col h-[100lvh] min-h-0 overflow-hidden">
       <div className="fixed inset-0 -z-10 bg-gradient-to-b from-black/35 via-transparent to-black/45 pointer-events-none" />
 
-      <div className="flex-1 overflow-y-auto pt-14 px-margin pb-28 scroll-container select-none">
+      <div className="flex-1 overflow-y-auto pt-12 px-margin pb-28 scroll-container select-none">
         <div className="max-w-xl mx-auto mb-6">
           <h1 className="font-mono-data text-lg text-primary-fixed-dim tracking-widest uppercase mb-1">
             IRIS <span className="text-on-surface-variant/40">//</span> Tools

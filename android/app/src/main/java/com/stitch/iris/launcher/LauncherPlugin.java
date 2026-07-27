@@ -9,6 +9,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Base64;
+import android.util.Log;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -39,6 +40,7 @@ import android.media.projection.MediaProjectionManager;
 
 @CapacitorPlugin(name = "LauncherPlugin")
 public class LauncherPlugin extends Plugin {
+    private static final String TAG = "LauncherPlugin";
     private volatile boolean flashlightOn = false;
     private android.speech.tts.TextToSpeech tts;
     private volatile boolean isTtsReady = false;
@@ -123,9 +125,108 @@ public class LauncherPlugin extends Plugin {
         super.handleOnDestroy();
     }
 
+    public static LauncherPlugin getInstance() {
+        return instance;
+    }
+
+    public void notifyPackageChange(String data) {
+        try {
+            JSObject obj = new JSObject(data);
+            notifyListeners("onPackageChanged", obj);
+        } catch (Exception e) {
+            // Ignore parse errors
+        }
+    }
+
+    @PluginMethod
+    public void isAccessibilityServiceEnabled(PluginCall call) {
+        boolean enabled = PermissionManager.getInstance(getContext()).isAccessibilityServiceEnabled();
+        JSObject ret = new JSObject();
+        ret.put("enabled", enabled);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void isUsageStatsEnabled(PluginCall call) {
+        boolean enabled = PermissionManager.getInstance(getContext()).isUsageStatsEnabled();
+        JSObject ret = new JSObject();
+        ret.put("enabled", enabled);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getInstalledAppsCount(PluginCall call) {
+        try {
+            android.content.pm.PackageManager pm = getContext().getPackageManager();
+            android.content.Intent mainIntent = new android.content.Intent(android.content.Intent.ACTION_MAIN, null);
+            mainIntent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> list = pm.queryIntentActivities(mainIntent, 0);
+            JSObject ret = new JSObject();
+            ret.put("count", list != null ? list.size() : 0);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to get app count", e);
+        }
+    }
+
+    @PluginMethod
+    public void performGlobalAction(PluginCall call) {
+        String action = call.getString("action", "");
+        IrisAccessibilityService a11y = IrisAccessibilityService.getInstance();
+        if (a11y == null) {
+            call.reject("Accessibility service not enabled");
+            return;
+        }
+
+        switch (action) {
+            case "GLOBAL_ACTION_BACK":
+                a11y.performGlobalActionCompat(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
+                break;
+            case "GLOBAL_ACTION_HOME":
+                a11y.performGlobalActionCompat(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+                break;
+            case "GLOBAL_ACTION_RECENTS":
+                a11y.performGlobalActionCompat(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS);
+                break;
+            case "GLOBAL_ACTION_TAKE_SCREENSHOT":
+                a11y.takeScreenshotCompat();
+                break;
+            default:
+                call.reject("Unknown action: " + action);
+                return;
+        }
+        JSObject ret = new JSObject();
+        ret.put("performed", true);
+        call.resolve(ret);
+    }
+
     public static void onNotificationChanged() {
         if (instance != null) {
-            instance.notifyListeners("onNotificationUpdated", new JSObject());
+            try {
+                // Compute badge counts per package
+                IrisNotificationListenerService nls = IrisNotificationListenerService.getInstance();
+                JSObject data = new JSObject();
+                if (nls != null) {
+                    org.json.JSONArray notifications = nls.getActiveNotificationsJson();
+                    JSObject badgeCounts = new JSObject();
+                    int totalUnread = 0;
+                    for (int i = 0; i < notifications.length(); i++) {
+                        org.json.JSONObject notif = notifications.getJSONObject(i);
+                        String pkg = notif.optString("packageId", "");
+                        if (!pkg.isEmpty()) {
+                            int current = badgeCounts.optInt(pkg, 0);
+                            badgeCounts.put(pkg, current + 1);
+                            totalUnread++;
+                        }
+                    }
+                    data.put("badgeCounts", badgeCounts);
+                    data.put("totalUnread", totalUnread);
+                    data.put("notifications", new com.getcapacitor.JSArray(notifications.toString()));
+                }
+                instance.notifyListeners("onNotificationUpdated", data);
+            } catch (Exception e) {
+                instance.notifyListeners("onNotificationUpdated", new JSObject());
+            }
         }
     }
 
@@ -235,9 +336,9 @@ public class LauncherPlugin extends Plugin {
                             int height = iconDrawable.getIntrinsicHeight() > 0 ? iconDrawable.getIntrinsicHeight() : 64;
                             
                             // Limit drawing size to prevent massive temporary memory pressure
-                            if (width > 128 || height > 128) {
-                                width = 128;
-                                height = 128;
+                            if (width > 256 || height > 256) {
+                                width = 256;
+                                height = 256;
                             }
                             
                             Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
@@ -245,10 +346,10 @@ public class LauncherPlugin extends Plugin {
                             iconDrawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
                             iconDrawable.draw(canvas);
                             
-                            // Downscale to exactly 64x64 for highly compact transmission size (~2KB)
-                            Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 64, 64, true);
+                            // Downscale to 192x192 for crisp rendering on high-DPI screens
+                            Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 192, 192, true);
                             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                            resizedBitmap.compress(Bitmap.CompressFormat.PNG, 85, outputStream);
+                            resizedBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
                             byte[] byteArray = outputStream.toByteArray();
                             iconBase64 = "data:image/png;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP);
                             
@@ -1691,72 +1792,45 @@ public class LauncherPlugin extends Plugin {
         JSObject ret = new JSObject();
 
         try {
+            PermissionManager permManager = PermissionManager.getInstance(getContext());
+
+            if (permManager.isPermissionGranted(permission)) {
+                ret.put("granted", true);
+                ret.put("sdkRequired", true);
+                ret.put("message", permission + " already granted");
+                call.resolve(ret);
+                return;
+            }
+
+            // Handle special non-Activity permissions
             switch (permission) {
-                case "POST_NOTIFICATIONS": {
-                    if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        boolean granted = ContextCompat.checkSelfPermission(getContext(), "android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED;
-                        if (granted) {
-                            ret.put("granted", true);
-                            ret.put("sdkRequired", true);
-                            ret.put("message", "Notification permission already granted");
-                        } else {
-                            // Request the permission via Capacitor's built-in mechanism
-                            getActivity().requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 9001);
-                            ret.put("granted", false);
-                            ret.put("sdkRequired", true);
-                            ret.put("message", "Notification permission requested");
-                        }
-                    } else {
-                        ret.put("granted", true);
-                        ret.put("sdkRequired", false);
-                        ret.put("message", "POST_NOTIFICATIONS not required below SDK 33");
-                    }
-                    break;
-                }
-                case "RECORD_AUDIO": {
-                    boolean granted = ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
-                    if (granted) {
-                        ret.put("granted", true);
-                        ret.put("sdkRequired", true);
-                        ret.put("message", "Microphone permission granted");
-                    } else {
-                        getActivity().requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 9002);
-                        ret.put("granted", false);
-                        ret.put("sdkRequired", true);
-                        ret.put("message", "Microphone permission requested");
-                    }
-                    break;
-                }
-                case "SCHEDULE_EXACT_ALARM": {
-                    if (android.os.Build.VERSION.SDK_INT >= 31) {
-                        android.app.AlarmManager alarmManager = (android.app.AlarmManager) getContext().getSystemService(android.content.Context.ALARM_SERVICE);
-                        if (alarmManager != null && alarmManager.canScheduleExactAlarms()) {
-                            ret.put("granted", true);
-                            ret.put("sdkRequired", true);
-                            ret.put("message", "Exact alarm scheduling allowed");
-                        } else {
-                            try {
-                                Intent alarmIntent = new Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
-                                alarmIntent.setData(Uri.parse("package:" + getContext().getPackageName()));
-                                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                getContext().startActivity(alarmIntent);
-                            } catch (Exception e) { /* Settings page not available on this device */ }
-                            ret.put("granted", false);
-                            ret.put("sdkRequired", true);
-                            ret.put("message", "Exact alarm permission requested");
-                        }
-                    } else {
-                        ret.put("granted", true);
-                        ret.put("sdkRequired", false);
-                        ret.put("message", "SCHEDULE_EXACT_ALARM not required below SDK 31");
-                    }
-                    break;
-                }
-                default:
+                case "BIND_ACCESSIBILITY_SERVICE":
+                case "PACKAGE_USAGE_STATS":
+                case "SYSTEM_ALERT_WINDOW":
+                case "WRITE_SETTINGS":
+                case "REQUEST_INSTALL_PACKAGES":
+                case "ACCESS_NOTIFICATION_POLICY":
+                    permManager.openPermissionSettings(permission);
                     ret.put("granted", false);
-                    ret.put("sdkRequired", false);
-                    ret.put("message", "Unknown permission: " + permission);
-                    break;
+                    ret.put("sdkRequired", true);
+                    ret.put("message", "Opening settings for " + permission);
+                    call.resolve(ret);
+                    return;
+            }
+
+            // For runtime permissions, use the standard request flow
+            if (android.os.Build.VERSION.SDK_INT >= 23) {
+                String[] perms = {getPermissionString(permission)};
+                if (getActivity() != null) {
+                    androidx.core.app.ActivityCompat.requestPermissions(getActivity(), perms, permManager.getRequestCode(permission));
+                }
+                ret.put("granted", false);
+                ret.put("sdkRequired", true);
+                ret.put("message", permManager.getRationale(permission));
+            } else {
+                ret.put("granted", ContextCompat.checkSelfPermission(getContext(), permission) == PackageManager.PERMISSION_GRANTED);
+                ret.put("sdkRequired", false);
+                ret.put("message", "SDK < 23, permission auto-granted");
             }
         } catch (Exception e) {
             ret.put("granted", false);
@@ -1765,6 +1839,148 @@ public class LauncherPlugin extends Plugin {
         }
 
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void batchCheckPermissions(PluginCall call) {
+        JSArray permissionsArray = call.getArray("permissions", new JSArray());
+        PermissionManager permManager = PermissionManager.getInstance(getContext());
+        JSArray results = new JSArray();
+
+        try {
+            for (int i = 0; i < permissionsArray.length(); i++) {
+                String perm = permissionsArray.getString(i);
+                JSObject obj = new JSObject();
+                obj.put("permission", perm);
+                obj.put("granted", permManager.isPermissionGranted(perm));
+                obj.put("rationale", permManager.getRationale(perm));
+                obj.put("isRuntime", isRuntimePermission(perm));
+                results.put(obj);
+            }
+        } catch (Exception e) {
+            // Ignore parse errors
+        }
+
+        JSObject ret = new JSObject();
+        ret.put("results", results);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void batchRequestPermissions(PluginCall call) {
+        JSArray permissionsArray = call.getArray("permissions", new JSArray());
+        PermissionManager permManager = PermissionManager.getInstance(getContext());
+        JSArray results = new JSArray();
+        java.util.List<String> toRequest = new java.util.ArrayList<>();
+
+        for (int i = 0; i < permissionsArray.length(); i++) {
+            try {
+                String perm = permissionsArray.getString(i);
+                boolean granted = permManager.isPermissionGranted(perm);
+
+                JSObject obj = new JSObject();
+                obj.put("permission", perm);
+                obj.put("granted", granted);
+                results.put(obj);
+
+                if (!granted && isRuntimePermission(perm)) {
+                    toRequest.add(perm);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error reading permission at index " + i, e);
+            }
+        }
+
+        if (!toRequest.isEmpty() && getActivity() != null) {
+            String[] perms = toRequest.toArray(new String[0]);
+            androidx.core.app.ActivityCompat.requestPermissions(getActivity(), perms, 9000);
+        }
+
+        JSObject ret = new JSObject();
+        ret.put("results", results);
+        ret.put("requested", toRequest.size());
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openPermissionSettings(PluginCall call) {
+        String permission = call.getString("permission", "");
+        PermissionManager permManager = PermissionManager.getInstance(getContext());
+        permManager.openPermissionSettings(permission);
+        JSObject ret = new JSObject();
+        ret.put("opened", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getPermissionStatusSummary(PluginCall call) {
+        PermissionManager permManager = PermissionManager.getInstance(getContext());
+        String[] allPerms = {
+            "SET_WALLPAPER", "QUERY_ALL_PACKAGES", "REQUEST_INSTALL_PACKAGES",
+            "BIND_ACCESSIBILITY_SERVICE", "PACKAGE_USAGE_STATS", "READ_CONTACTS",
+            "READ_CALL_LOG", "CAMERA", "RECORD_AUDIO", "ACCESS_FINE_LOCATION",
+            "ACCESS_COARSE_LOCATION", "READ_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES",
+            "POST_NOTIFICATIONS", "WRITE_SETTINGS", "SYSTEM_ALERT_WINDOW",
+            "ACCESS_NOTIFICATION_POLICY", "USE_BIOMETRIC", "VIBRATE",
+            "CHANGE_NETWORK_STATE"
+        };
+
+        JSObject ret = new JSObject();
+        JSObject summary = new JSObject();
+        int granted = 0;
+        int total = allPerms.length;
+
+        for (String perm : allPerms) {
+            boolean isGranted = permManager.isPermissionGranted(perm);
+            summary.put(perm, isGranted);
+            if (isGranted) granted++;
+        }
+
+        ret.put("permissions", summary);
+        ret.put("granted", granted);
+        ret.put("total", total);
+        call.resolve(ret);
+    }
+
+    private String getPermissionString(String permission) {
+        switch (permission) {
+            case "CAMERA": return android.Manifest.permission.CAMERA;
+            case "RECORD_AUDIO": return android.Manifest.permission.RECORD_AUDIO;
+            case "ACCESS_FINE_LOCATION": return android.Manifest.permission.ACCESS_FINE_LOCATION;
+            case "ACCESS_COARSE_LOCATION": return android.Manifest.permission.ACCESS_COARSE_LOCATION;
+            case "READ_CONTACTS": return android.Manifest.permission.READ_CONTACTS;
+            case "READ_CALL_LOG": return android.Manifest.permission.READ_CALL_LOG;
+            case "POST_NOTIFICATIONS":
+                if (android.os.Build.VERSION.SDK_INT >= 33) return android.Manifest.permission.POST_NOTIFICATIONS;
+                return "POST_NOTIFICATIONS";
+            case "READ_EXTERNAL_STORAGE": return android.Manifest.permission.READ_EXTERNAL_STORAGE;
+            case "READ_MEDIA_IMAGES":
+                if (android.os.Build.VERSION.SDK_INT >= 33) return android.Manifest.permission.READ_MEDIA_IMAGES;
+                return android.Manifest.permission.READ_EXTERNAL_STORAGE;
+            case "VIBRATE": return android.Manifest.permission.VIBRATE;
+            case "SET_WALLPAPER": return android.Manifest.permission.SET_WALLPAPER;
+            default: return permission;
+        }
+    }
+
+    private boolean isRuntimePermission(String permission) {
+        switch (permission) {
+            case "CAMERA":
+            case "RECORD_AUDIO":
+            case "ACCESS_FINE_LOCATION":
+            case "ACCESS_COARSE_LOCATION":
+            case "READ_CONTACTS":
+            case "READ_CALL_LOG":
+            case "POST_NOTIFICATIONS":
+            case "READ_EXTERNAL_STORAGE":
+            case "READ_MEDIA_IMAGES":
+            case "WRITE_SETTINGS":
+            case "SYSTEM_ALERT_WINDOW":
+            case "USE_BIOMETRIC":
+                return true;
+            default:
+                return false;
+        }
     }
 
     @PluginMethod

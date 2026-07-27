@@ -1,4 +1,12 @@
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { useThemeStore } from '../stores/themeStore'
+
 export default function BottomNavBar({ activePage, setActivePage, showAppLabels = true }) {
+  const { dockColumns, dockBackground } = useThemeStore()
+  const [collapsed, setCollapsed] = useState(false)
+  const collapseTimer = useRef(null)
+  const navRef = useRef(null)
+
   const tabs = [
     { id: 'home', label: 'Home', icon: 'home_app_logo', filled: true },
     { id: 'widgets', label: 'Widgets', icon: 'widgets', filled: false },
@@ -7,57 +15,205 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     { id: 'settings', label: 'Settings', icon: 'settings', filled: true }
   ]
 
-  return (
-    <nav 
-      className="bottom-nav-dock glass-surface fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-gutter py-4 h-20 shadow-[0_-4px_20px_-5px_rgba(var(--primary-rgb),0.3)] rounded-t-xl !border-b-0 !border-x-0 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] delay-[150ms] translate-y-0 opacity-100 pointer-events-auto"
-      style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
-    >
-      {tabs.map((tab) => {
-        const isActive = activePage === tab.id
+  const startCollapseTimer = useCallback(() => {
+    if (collapseTimer.current) clearTimeout(collapseTimer.current)
+    collapseTimer.current = setTimeout(() => setCollapsed(true), 4000)
+  }, [])
 
-        if (tab.center) {
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActivePage(tab.id)}
-              className={`flex items-center justify-center p-3.5 rounded-full transition-all duration-300 scale-100 active:scale-90 ${
-                isActive 
-                  ? 'bg-primary-fixed-dim/30 text-primary-fixed-dim shadow-[0_0_20px_rgba(var(--primary-rgb),0.5)] border border-primary-fixed-dim/40' 
-                  : 'bg-surface-container-high/40 text-on-surface-variant/70 border border-outline-variant/30 hover:text-primary-fixed hover:border-primary-fixed-dim/30 hover:shadow-[0_0_12px_rgba(var(--primary-rgb),0.25)]'
-              }`}
-            >
-              <span 
-                className="material-symbols-outlined text-2xl" 
-                style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
+  useEffect(() => {
+    startCollapseTimer()
+    return () => { if (collapseTimer.current) clearTimeout(collapseTimer.current) }
+  }, [activePage, startCollapseTimer])
+
+  useEffect(() => {
+    if (collapsed) return
+    const handleClickOutside = (e) => {
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setCollapsed(true)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('touchstart', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [collapsed])
+
+  const handleNavClick = useCallback((id) => {
+    setActivePage(id)
+    setCollapsed(true)
+  }, [setActivePage])
+
+  const handleExpand = useCallback(() => {
+    setCollapsed(false)
+    startCollapseTimer()
+  }, [startCollapseTimer])
+
+  const tabsToRender = tabs.slice(0, dockColumns)
+  
+  const expWidth = 360
+  const expHeight = 68
+  const colWidth = tabsToRender.length * 36
+  const colHeight = 32
+
+  const getDockBgStyle = () => {
+    switch(dockBackground) {
+      case 'none': return { background: 'transparent', backdropFilter: 'none', WebkitBackdropFilter: 'none' }
+      case 'solid': return { background: 'rgba(12, 16, 28, 1)', backdropFilter: 'none', WebkitBackdropFilter: 'none' }
+      case 'gradient': return { background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.15), rgba(12, 16, 28, 0.95))', backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }
+      case 'blur':
+      default: return { background: 'rgba(12, 16, 28, 0.82)', backdropFilter: 'blur(40px) saturate(180%)', WebkitBackdropFilter: 'blur(40px) saturate(180%)' }
+    }
+  }
+
+  const touchStartX = useRef(null)
+  const isSwiping = useRef(false)
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartX.current = e.touches[0].clientX
+    isSwiping.current = false
+  }, [])
+
+  const handleTouchEnd = useCallback((e) => {
+    if (touchStartX.current === null) return
+    const touchEndX = e.changedTouches[0].clientX
+    const diff = touchStartX.current - touchEndX
+
+    if (Math.abs(diff) > 30) {
+      isSwiping.current = true
+      e.stopPropagation() // Prevent global app gestures
+      const currentIndex = tabs.findIndex(t => t.id === activePage)
+      if (diff > 0 && currentIndex < tabs.length - 1) {
+        setActivePage(tabs[currentIndex + 1].id)
+      } else if (diff < 0 && currentIndex > 0) {
+        setActivePage(tabs[currentIndex - 1].id)
+      }
+      startCollapseTimer()
+    }
+    touchStartX.current = null
+  }, [activePage, setActivePage, startCollapseTimer, tabs])
+
+  const handleDockClick = useCallback(() => {
+    if (isSwiping.current) {
+      isSwiping.current = false
+      return
+    }
+    handleExpand()
+  }, [handleExpand])
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-2 pointer-events-none">
+      <div
+        ref={navRef}
+        className="pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        style={{
+          ...getDockBgStyle(),
+          border: dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: dockBackground === 'none' ? 'none' : (collapsed
+            ? '0 -2px 12px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
+            : '0 -4px 24px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)'),
+          width: collapsed ? colWidth : expWidth,
+          height: collapsed ? colHeight : expHeight,
+          borderRadius: collapsed ? 20 : 34,
+        }}
+      >
+        {/* Collapsed State */}
+        <div 
+          className={`absolute inset-0 flex items-center justify-center transition-all ${
+            collapsed ? 'opacity-100 scale-100 duration-300 delay-200' : 'opacity-0 scale-95 duration-200 pointer-events-none'
+          }`}
+        >
+          <div 
+            onClick={handleDockClick}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="h-[32px] px-3 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+            style={{ width: colWidth }}
+          >
+            {tabsToRender.map((tab) => (
+              <span
+                key={tab.id}
+                className="material-symbols-outlined transition-all duration-200"
+                style={{
+                  fontSize: activePage === tab.id ? 16 : 13,
+                  fontVariationSettings: (activePage === tab.id && tab.filled) ? "'FILL' 1" : "'FILL' 0",
+                  color: activePage === tab.id
+                    ? 'rgba(0, 242, 255, 0.9)'
+                    : 'rgba(255, 255, 255, 0.3)',
+                  textShadow: activePage === tab.id ? '0 0 8px rgba(0, 242, 255, 0.5)' : 'none'
+                }}
               >
                 {tab.icon}
               </span>
-            </button>
-          )
-        }
+            ))}
+            <div className="w-px h-3 bg-white/10 mx-0.5" />
+            <span className="material-symbols-outlined text-white/25 animate-pulse" style={{ fontSize: 13 }}>expand_less</span>
+          </div>
+        </div>
 
-        return (
-          <button
-            key={tab.id}
-            onClick={() => setActivePage(tab.id)}
-            className={`flex flex-col items-center justify-center py-1 w-16 transition-all duration-200 active:scale-90 ${
-              isActive 
-                ? 'text-primary-fixed-dim scale-105' 
-                : 'text-on-surface-variant/50 hover:text-primary-fixed/80'
-            }`}
-          >
-            <span 
-              className="material-symbols-outlined text-xl" 
-              style={{ fontVariationSettings: (isActive && tab.filled) ? "'FILL' 1" : "'FILL' 0" }}
-            >
-              {tab.icon}
-            </span>
-            <span className={`font-label-caps text-[9px] mt-1 tracking-wider ${isActive ? 'text-primary-fixed-dim' : 'text-on-surface-variant/40'}`}>
-              {showAppLabels ? tab.label : <div className="h-2 w-2 rounded-full bg-current opacity-30 mt-1" />}
-            </span>
-          </button>
-        )
-      })}
-    </nav>
+        {/* Expanded State */}
+        <div 
+          className={`absolute inset-0 flex items-center justify-center transition-all ${
+            collapsed ? 'opacity-0 scale-95 duration-150 pointer-events-none' : 'opacity-100 scale-100 duration-300 delay-150'
+          }`}
+        >
+          <div className="w-[360px] h-[68px] px-3 flex justify-around items-center">
+            {tabsToRender.map((tab) => {
+              const isActive = activePage === tab.id
+
+              if (tab.center) {
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleNavClick(tab.id)}
+                    className={`flex items-center justify-center p-3.5 rounded-full transition-all duration-300 scale-100 active:scale-90 relative ${
+                      isActive
+                        ? 'bg-primary-fixed-dim/30 text-primary-fixed-dim shadow-[0_0_24px_rgba(0,242,255,0.6)] border border-primary-fixed-dim/40'
+                        : 'bg-surface-container-high/40 text-on-surface-variant/70 border border-outline-variant/30 hover:text-primary-fixed hover:border-primary-fixed-dim/30 hover:shadow-[0_0_12px_rgba(0,242,255,0.3)]'
+                    }`}
+                  >
+                    {isActive && (
+                      <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-primary-fixed-dim" />
+                    )}
+                    <span
+                      className="material-symbols-outlined text-[26px]"
+                      style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
+                    >
+                      {tab.icon}
+                    </span>
+                  </button>
+                )
+              }
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleNavClick(tab.id)}
+                  className={`flex flex-col items-center justify-center py-1 w-14 transition-all duration-200 active:scale-90 ${
+                    isActive
+                      ? 'text-primary-fixed-dim scale-110'
+                      : 'text-on-surface-variant/50 hover:text-primary-fixed/80'
+                  }`}
+                >
+                  <span
+                    className="material-symbols-outlined text-2xl"
+                    style={{ 
+                      fontVariationSettings: (isActive && tab.filled) ? "'FILL' 1" : "'FILL' 0",
+                      textShadow: isActive ? '0 0 10px rgba(0, 242, 255, 0.4)' : 'none'
+                    }}
+                  >
+                    {tab.icon}
+                  </span>
+                  <span className={`font-label-caps text-[9px] mt-1 tracking-wider transition-all ${isActive ? 'text-primary-fixed-dim drop-shadow-[0_0_4px_rgba(0,242,255,0.8)] font-bold' : 'text-on-surface-variant/40'}`}>
+                    {showAppLabels ? tab.label : <div className="h-1.5 w-1.5 rounded-full bg-current opacity-30 mt-1" />}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

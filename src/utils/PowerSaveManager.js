@@ -220,5 +220,5 @@ class PowerSaveManager {
 }
 
 const instance = new PowerSaveManager()
-export { MODES, FEATURE_PRESETS, detectDeviceTier }
+export { MODES, detectDeviceTier }
 export default instance

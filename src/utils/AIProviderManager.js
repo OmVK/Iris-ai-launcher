@@ -46,8 +46,7 @@ const checkCloud = async (backend) => {
   try {
     let url, headers, body
     if (backend === 'GEMINI') {
-      const model = (localStorage.getItem('gemini_model') || 'gemini-2.5-flash').trim().replace(/\s+/g, '-')
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}?key=${key}`
+      url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
       const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(8000) })
       if (res.ok) return { available: true, error: null }
       const data = await res.json().catch(() => ({}))
@@ -109,12 +108,7 @@ export const checkAllBackends = async (force = false) => {
   return results
 }
 
-export const isBackendAvailable = (backend) => {
-  const cached = statusCache[backend]
-  return cached?.available === true
-}
-
-export const getAvailableBackends = () => {
+const getAvailableBackends = () => {
   return BACKENDS.filter(b => statusCache[b].available === true)
 }
 
@@ -132,10 +126,3 @@ export const getBackendStatus = (backend) => {
 
 export const getBackendError = (backend) => statusCache[backend]?.error || null
 
-export const resetCache = () => {
-  BACKENDS.forEach(b => {
-    statusCache[b] = { available: null, lastCheck: 0, error: null }
-  })
-}
-
-export { BACKENDS }

@@ -17,7 +17,7 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
 
     // Handle Resize
     const resizeCanvas = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
       canvas.width = getW() * dpr
       canvas.height = getH() * dpr
       canvas.style.width = getW() + 'px'

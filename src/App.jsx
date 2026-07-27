@@ -10,7 +10,10 @@ import VaultExplorer from './components/VaultExplorer'
 import LiveVoiceFAB from './components/LiveVoiceFAB'
 import LiveConfigModal from './components/LiveConfigModal'
 import FeatureTour from './components/FeatureTour'
+import RecentsOverlay from './components/RecentsOverlay'
+import GracefulDegradation from './components/GracefulDegradation'
 import PowerSaveManager from './utils/PowerSaveManager'
+import WallpaperManager from './utils/WallpaperManager'
 
 const Home = lazy(() => import('./pages/Home'))
 const Widgets = lazy(() => import('./pages/Widgets'))
@@ -18,7 +21,7 @@ const Assistant = lazy(() => import('./pages/Assistant'))
 const Drawer = lazy(() => import('./pages/Drawer'))
 const Settings = lazy(() => import('./pages/Settings'))
 const IrisTools = lazy(() => import('./pages/IrisTools'))
-const IrisNews = lazy(() => import('./pages/IrisNews'))
+
 const PrivateVault = lazy(() => import('./pages/PrivateVault'))
 const ZeroScreen = lazy(() => import('./components/ZeroScreen'))
 const VpnBrowser = lazy(() => import('./pages/VpnBrowser'))
@@ -39,23 +42,29 @@ import usePageRouter from './hooks/usePageRouter'
 
 export default function App() {
   const { activePage, setActivePage, showChronoLock, setShowChronoLock, chronoTarget, setChronoTarget, isVaultUnlocked, setIsVaultUnlocked, showVaultExplorer, setShowVaultExplorer, vaultTab, setVaultTab, lockedApps, toggleAppLock, showArcSearch, setShowArcSearch, isAppActive, setIsAppActive, setupComplete, setSetupComplete, showVpnBrowser, setShowVpnBrowser, vpnBrowserUrl, setVpnBrowserUrl } = useAppStore()
-  const { themeColor, glassOpacity, wallpaper, hasCustomWallpaper, dpiScale, showAppLabels, use24HourClock, globalIconTheme, activeLiveWallpaper, pageTransitionEffect, pageTransitionSpeed, pageTransitionEasing, fullscreenActive, darkGlassTheme, setThemeColor, setGlassOpacity } = useThemeStore()
+  const { themeColor, glassOpacity, wallpaper, hasCustomWallpaper, dpiScale, showAppLabels, use24HourClock, globalIconTheme, activeLiveWallpaper, pageTransitionEffect, pageTransitionSpeed, pageTransitionEasing, fullscreenActive, darkGlassTheme, wallpaperBlur, wallpaperVignette, setThemeColor, setGlassOpacity } = useThemeStore()
   const { llmBackend, setLlmBackend, geminiKey, geminiModel, groqKey, voiceEnabled, setVoiceEnabled, voicePitch, voiceRate } = useAIStore()
   const { isLiveVoice, isListening, isPrivateSession, setIsPrivateSession, showLiveConfigModal, setShowLiveConfigModal, liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey, sessions, setSessions, activeSessionId, setActiveSessionId, chatLog, setChatLog, textPrompt, setTextPrompt } = useAssistantStore()
   const { installedApps, setInstalledApps, loadNativeApps, resetToDefaults } = useAppsStore()
   const { powerSaveMode, setPowerSaveMode } = usePowerStore()
   const [showFeatureTour, setShowFeatureTour] = useState(false)
+  const [showRecents, setShowRecents] = useState(false)
 
   const voiceEngine = useVoiceEngine()
   const aiBackend = useAIBackend(voiceEngine.speakText)
   voiceEngine.setSubmitPrompt(aiBackend.submitPrompt, aiBackend.isGeneratingRef, aiBackend.abortControllerRef)
 
-  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useAppGestures({ activePage, setActivePage, setShowArcSearch })
   useThemeVars({ themeColor, glassOpacity })
   useAppEffects({ isAppActive, setIsAppActive, setShowChronoLock, setShowVaultExplorer, setIsVaultUnlocked, setShowLiveConfigModal, setActivePage, loadNativeApps, lockedApps, fullscreenActive, isVaultUnlocked, powerSaveMode })
   const { handleLaunchApp, handleTriggerVault, handleTriggerChronoLock } = usePageRouter({ setActivePage, setChronoTarget, setShowChronoLock, isVaultUnlocked, setShowVaultExplorer })
 
+  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp: handleLaunchApp })
+
   useEffect(() => { loadNativeApps() }, [])
+
+  useEffect(() => {
+    WallpaperManager.checkDailyRotation()
+  }, [])
 
   const handleUnlockSuccess = () => {
     setIsVaultUnlocked(true); setShowChronoLock(false)
@@ -74,6 +83,9 @@ export default function App() {
       NEBULA: `radial-gradient(ellipse at top, rgba(30, 27, 75, ${o('1', '0.5')}) 0%, rgba(2, 6, 23, ${o('1', '0.85')}) 100%)`,
       AURORA: `linear-gradient(135deg, rgba(2, 6, 23, ${o('1', '0.8')}) 0%, rgba(6, 78, 59, ${o('1', '0.45')}) 50%, rgba(2, 6, 23, ${o('1', '0.8')}) 100%)`,
       FIBER: `linear-gradient(180deg, rgba(10, 14, 23, ${o('1', '0.6')}) 0%, rgba(20, 25, 35, ${o('1', '0.4')}) 50%, rgba(10, 14, 23, ${o('1', '0.7')}) 100%)`,
+      OCEAN: `linear-gradient(180deg, rgba(0, 20, 40, ${o('1', '0.8')}) 0%, rgba(0, 10, 20, ${o('1', '0.9')}) 100%)`,
+      SUNSET: `linear-gradient(180deg, rgba(40, 10, 20, ${o('1', '0.8')}) 0%, rgba(20, 5, 10, ${o('1', '0.9')}) 100%)`,
+      FOREST: `linear-gradient(180deg, rgba(5, 20, 10, ${o('1', '0.8')}) 0%, rgba(2, 10, 5, ${o('1', '0.9')}) 100%)`,
       CUSTOM: 'transparent',
     }
     return g[type] || '#020617'
@@ -95,7 +107,6 @@ export default function App() {
           startVoiceInput={voiceEngine.startVoiceInput} stopVoiceInput={voiceEngine.stopVoiceInput}
           speakText={voiceEngine.speakText} stopSpeaking={voiceEngine.stopSpeaking}
           submitPrompt={aiBackend.submitPrompt}
-          handleEngageLiveClick={voiceEngine.handleEngageLiveClick}
           handleSaveLiveConfig={voiceEngine.handleSaveLiveConfig} handleOpenLiveMode={voiceEngine.handleOpenLiveMode}
           handleExitLiveModeOnly={voiceEngine.handleExitLiveModeOnly} handleStopLiveModeCompletely={voiceEngine.handleStopLiveModeCompletely}
           isAppActive={isAppActive} />
@@ -125,8 +136,7 @@ export default function App() {
           onTriggerFeatureTour={() => setShowFeatureTour(true)} />
       case 'iris_tools':
         return <IrisTools onNavigate={setActivePage} onTriggerChronoLock={handleTriggerChronoLock} onTriggerVault={handleTriggerVault} />
-      case 'iris_news':
-        return <IrisNews onNavigate={setActivePage} />
+
       case 'private':
         return <PrivateVault />
       case 'zero_screen':
@@ -147,27 +157,52 @@ export default function App() {
     return raw
   }, [wallpaper, hasCustomWallpaper])
 
+  useEffect(() => {
+    const body = document.body
+    if (!body) return
+    body.style.background = '#020617'
+    body.style.margin = '0'
+    body.style.padding = '0'
+  }, [])
+
   const scale = dpiScale / 100
+
+  const rootBgStyle = useMemo(() => {
+    const bg = {}
+    if (wallpaper !== 'SYSTEM' && hasCustomWallpaper && wallpaper !== 'VOID' && customWallpaperData) {
+      bg.backgroundImage = `url("${customWallpaperData}")`
+      bg.backgroundSize = 'cover'
+      bg.backgroundPosition = 'center'
+      bg.backgroundRepeat = 'no-repeat'
+    } else if (wallpaper !== 'SYSTEM' && wallpaper !== 'VOID' && !hasCustomWallpaper) {
+      bg.background = getGradient(wallpaper)
+    } else {
+      bg.background = getGradient('VOID')
+    }
+    return bg
+  }, [wallpaper, hasCustomWallpaper, customWallpaperData])
+
+  const wallpaperOverlayStyle = useMemo(() => {
+    const s = { ...rootBgStyle, position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }
+    if (wallpaperBlur > 0) s.filter = `blur(${wallpaperBlur}px)`
+    if (wallpaperVignette > 0) s.boxShadow = `inset 0 0 ${wallpaperVignette * 3}px rgba(0,0,0,${wallpaperVignette / 100})`
+    return s
+  }, [rootBgStyle, wallpaperBlur, wallpaperVignette])
 
   return (
     <div
-      style={scale === 1 ? { width: '100vw', height: '100lvh', backgroundColor: 'transparent' } : { zoom: scale, width: `${100 / scale}vw`, height: `${100 / scale}lvh`, backgroundColor: 'transparent' }}
+      style={scale === 1 ? { width: '100vw', height: '100lvh', background: '#020617' } : { zoom: scale, width: `${100 / scale}vw`, height: `${100 / scale}lvh`, background: '#020617' }}
       className={`relative flex flex-col overflow-hidden transition-all duration-300 interactive-glass h-full w-full text-on-surface font-mono selection:bg-primary-fixed-dim/30 ${PowerSaveManager.isEnabled() ? 'power-save-mode' : ''} ${darkGlassTheme ? 'dark-glass-theme' : ''}`}
       onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
     >
-      {wallpaper !== 'SYSTEM' && hasCustomWallpaper && wallpaper !== 'VOID' && (
-        <div className="fixed inset-0 pointer-events-none z-0 bg-center bg-cover bg-no-repeat" style={{ backgroundImage: `url("${customWallpaperData}")` }} />
-      )}
-      {wallpaper !== 'SYSTEM' && (
-        <div className="fixed inset-0 pointer-events-none z-0" style={{ background: getGradient(wallpaper) }} />
-      )}
+      <div style={wallpaperOverlayStyle} />
       {!PowerSaveManager.shouldDisable('wallpaper') && (
         <InteractiveWallpaper mode={activeLiveWallpaper} activePage={activePage} isAppActive={isAppActive} />
       )}
       <ArcSearch isOpen={showArcSearch} onClose={() => setShowArcSearch(false)} installedApps={installedApps} launchApp={handleLaunchApp} activePage={activePage} setActivePage={setActivePage} globalIconTheme={globalIconTheme} />
       <TaskAlarmOverlay setActivePage={setActivePage} />
       <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} />
-      <main className="flex-1 flex flex-col overflow-hidden min-h-0">
+      <main className="flex-1 flex flex-col overflow-hidden min-h-0 relative z-10">
         <div key={activePage} className={`page-transition-container effect-${pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.16, 1, 0.3, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.56, 0.64, 1)' : 'cubic-bezier(0.16, 1, 0.3, 1)' }}>
           <Suspense fallback={<div className="flex items-center justify-center h-full"><span className="material-symbols-outlined text-primary-fixed-dim animate-pulse text-3xl">hourglass_empty</span></div>}>
             {renderActivePage()}
@@ -197,6 +232,8 @@ export default function App() {
       {!setupComplete && <SetupWizard onComplete={() => setSetupComplete(true)} />}
       {showVpnBrowser && <Suspense fallback={null}><VpnBrowser url={vpnBrowserUrl} onClose={() => { setShowVpnBrowser(false); setVpnBrowserUrl('') }} /></Suspense>}
       {showFeatureTour && <FeatureTour onClose={() => setShowFeatureTour(false)} />}
+      {showRecents && <RecentsOverlay isOpen={showRecents} onClose={() => setShowRecents(false)} />}
+      <GracefulDegradation />
       <video id="hidden-capture-video" style={{ display: 'none' }} playsInline muted></video>
       <canvas id="hidden-capture-canvas" style={{ display: 'none' }}></canvas>
     </div>

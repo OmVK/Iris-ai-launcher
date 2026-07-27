@@ -39,11 +39,13 @@ function downsampleIcon(iconDataUri) {
       img.onload = () => {
         try {
           const canvas = document.createElement('canvas')
-          canvas.width = 64
-          canvas.height = 64
+          canvas.width = 128
+          canvas.height = 128
           const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, 0, 0, 64, 64)
-          resolve(canvas.toDataURL('image/jpeg', 0.7))
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = 'high'
+          ctx.drawImage(img, 0, 0, 128, 128)
+          resolve(canvas.toDataURL('image/png'))
         } catch {
           resolve(iconDataUri)
         }
@@ -496,8 +498,111 @@ export async function checkAndRequestPermission(permission) {
       return { granted: false, sdkRequired: true, message: e.message }
     }
   }
-  // Web simulation: always granted
   return { granted: true, sdkRequired: false, message: `${permission} auto-granted (web simulation)` }
+}
+
+export async function batchCheckPermissions(permissions) {
+  if (isNative) {
+    try {
+      const result = await NativeLauncher.batchCheckPermissions({ permissions })
+      return result?.results || []
+    } catch (e) {
+      console.error('Batch permission check failed:', e)
+      return permissions.map(p => ({ permission: p, granted: false }))
+    }
+  }
+  return permissions.map(p => ({ permission: p, granted: true }))
+}
+
+export async function batchRequestPermissions(permissions) {
+  if (isNative) {
+    try {
+      const result = await NativeLauncher.batchRequestPermissions({ permissions })
+      return result || { results: [], requested: 0 }
+    } catch (e) {
+      console.error('Batch permission request failed:', e)
+      return { results: [], requested: 0 }
+    }
+  }
+  return { results: permissions.map(p => ({ permission: p, granted: true })), requested: 0 }
+}
+
+export async function openPermissionSettings(permission) {
+  if (isNative) {
+    try {
+      await NativeLauncher.openPermissionSettings({ permission })
+    } catch (e) {
+      console.error('Failed to open permission settings:', e)
+    }
+  }
+}
+
+export async function getPermissionStatusSummary() {
+  if (isNative) {
+    try {
+      return await NativeLauncher.getPermissionStatusSummary()
+    } catch (e) {
+      console.error('Failed to get permission summary:', e)
+      return { permissions: {}, granted: 0, total: 0 }
+    }
+  }
+  return { permissions: {}, granted: 0, total: 0 }
+}
+
+export async function isAccessibilityServiceEnabled() {
+  if (isNative) {
+    try {
+      const result = await NativeLauncher.isAccessibilityServiceEnabled()
+      return result?.enabled || false
+    } catch (e) {
+      return false
+    }
+  }
+  return false
+}
+
+export async function isUsageStatsEnabled() {
+  if (isNative) {
+    try {
+      const result = await NativeLauncher.isUsageStatsEnabled()
+      return result?.enabled || false
+    } catch (e) {
+      return false
+    }
+  }
+  return false
+}
+
+export async function performGlobalAction(action) {
+  if (isNative) {
+    try {
+      const result = await NativeLauncher.performGlobalAction({ action })
+      return result?.performed || false
+    } catch (e) {
+      console.error('Failed to perform global action:', e)
+      return false
+    }
+  }
+  return false
+}
+
+export async function getInstalledAppsCount() {
+  if (isNative) {
+    try {
+      const result = await NativeLauncher.getInstalledAppsCount()
+      return result?.count || 0
+    } catch (e) {
+      return 0
+    }
+  }
+  return 0
+}
+
+export function addPackageChangeListener(callback) {
+  if (isNative) {
+    return NativeLauncher.addListener('onPackageChanged', callback)
+  }
+  return { remove: () => {} }
 }
 
 export async function restartKeepAlive() {
@@ -650,3 +755,35 @@ export async function isVpnBrowserActive() {
 }
 
 
+export async function lookupContactMultiple(name) {
+  if (isNative) {
+    try {
+      if (NativeLauncher.lookupContactMultiple) {
+        const result = await NativeLauncher.lookupContactMultiple({ name })
+        if (result && result.contacts) {
+          return JSON.parse(result.contacts)
+        }
+      }
+    } catch (e) {
+      console.error('Failed to lookup multiple contacts:', e)
+    }
+  }
+  return []
+}
+
+export async function sendSMS(number, message = '') {
+  if (isNative) {
+    try {
+      if (NativeLauncher.sendSMS) {
+        await NativeLauncher.sendSMS({ number, message })
+        return true
+      }
+    } catch (e) {
+      console.error('Failed to send SMS:', e)
+    }
+  } else {
+    window.open(`sms:${number}?body=${encodeURIComponent(message)}`, '_blank')
+    return true
+  }
+  return false
+}

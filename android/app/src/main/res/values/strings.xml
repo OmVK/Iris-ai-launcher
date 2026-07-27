@@ -4,4 +4,5 @@
     <string name="title_activity_main">IRIS Cybernetic Launcher</string>
     <string name="package_name">com.stitch.iris.launcher</string>
     <string name="custom_url_scheme">com.stitch.iris.launcher</string>
+    <string name="accessibility_service_description">IRIS uses accessibility services to provide gesture navigation, app usage tracking, and screen capture for the recents task switcher. No data is collected or transmitted.</string>
 </resources>

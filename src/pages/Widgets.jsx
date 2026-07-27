@@ -15,6 +15,7 @@ import TasksWidget from './widgets/TasksWidget'
 import PingWidget from './widgets/PingWidget'
 import SignalWidget from './widgets/SignalWidget'
 import CustomWidget from './widgets/CustomWidget'
+import { ClockWidget, AnalogClockWidget, BatteryWidget, CalendarWidget, NotesWidget } from '../components/widgets/BuiltInWidgets'
 
 export default function Widgets({ isAppActive = true, activePage = 'widgets', powerSaveMode }) {
   const pendingTimers = useRef([])
@@ -226,6 +227,15 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
   const [pingHistory, setPingHistory] = useState([19, 15, 22, 18, 14, 19, 17, 20, 19])
   const [pingFailed, setPingFailed] = useState([false, false, false, false, false, false, false, false, false])
 
+  // Notes state
+  const [notes, setNotes] = useState(() => {
+    try { const raw = localStorage.getItem('iris_notes'); return raw ? JSON.parse(raw) : [] } catch { return [] }
+  })
+  useEffect(() => { localStorage.setItem('iris_notes', JSON.stringify(notes)) }, [notes])
+  const handleAddNote = useCallback((text) => {
+    setNotes(prev => [...prev.slice(0, 9), text])
+  }, [])
+
   const handleTriggerPingTest = useCallback(async () => {
     if (isPingTesting) return; setIsPingTesting(true)
     for (let i = 0; i < 5; i++) {
@@ -241,9 +251,10 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
   }, [isPingTesting])
 
   return (
-    <div className="flex-1 mt-12 mb-20 overflow-y-auto px-4 py-6 scroll-container select-none">
-      <audio ref={(el) => { if (el) { el.src = TRACKS[trackIndex].url; el.loop = true } }} />
-      <div className="max-w-2xl mx-auto space-y-4">
+    <div className="relative flex-1 flex flex-col h-[100lvh] min-h-0 overflow-hidden">
+      <div className="flex-grow pt-12 px-margin overflow-y-auto pb-20 scroll-container select-none">
+        <audio ref={(el) => { if (el) { el.src = TRACKS[trackIndex].url; el.loop = true } }} />
+        <div className="mx-auto space-y-4">
         <WidgetConfig activeWidgetIds={activeWidgetIds} customWidgets={customWidgets} onAddWidget={handleAddWidget} onRemoveWidget={handleRemoveWidget} onCreateCustomWidget={handleCreateCustomWidget} />
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {activeWidgetIds.includes('performance') && <PerformanceWidget batteryLevel={batteryLevel} isCharging={isCharging} osVersion={osVersion} usedMem={usedMem} totalMem={totalMem} cpuTemp={cpuTemp} isDiagnosticRunning={isDiagnosticRunning} onCpuClick={handleCpuClick} onRemove={() => handleRemoveWidget('performance')} />}
@@ -251,11 +262,57 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
           {activeWidgetIds.includes('stocks') && <StockWidget onRemove={() => handleRemoveWidget('stocks')} />}
           {activeWidgetIds.includes('media') && <MediaWidget isPlaying={isPlaying} trackIndex={trackIndex} playerMode={playerMode} selectedSystemPlayer={selectedSystemPlayer} onSetPlayerMode={handleSetPlayerMode} onPlayToggle={handlePlayToggle} onSkip={handleSkip} onSetSystemPlayer={setSelectedSystemPlayer} onLaunchSystemPlayer={handleLaunchSystemPlayer} onRemove={() => handleRemoveWidget('media')} isAppActive={isAppActive} />}
           {activeWidgetIds.includes('tasks') && <TasksWidget tasks={tasks} newTaskText={newTaskText} newTaskTime={newTaskTime} onSetNewTaskText={setNewTaskText} onSetNewTaskTime={setNewTaskTime} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} onClearAll={handleClearAllTasks} onRemove={() => handleRemoveWidget('tasks')} />}
+          {activeWidgetIds.includes('clock') && (
+            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
+                <span className="text-[9px] text-white/40 font-mono-data uppercase">Clock</span>
+                <button onClick={() => handleRemoveWidget('clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+              </div>
+              <ClockWidget size="medium" />
+            </div>
+          )}
+          {activeWidgetIds.includes('analog_clock') && (
+            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
+                <span className="text-[9px] text-white/40 font-mono-data uppercase">Analog Clock</span>
+                <button onClick={() => handleRemoveWidget('analog_clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+              </div>
+              <AnalogClockWidget size={100} />
+            </div>
+          )}
+          {activeWidgetIds.includes('calendar') && (
+            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
+                <span className="text-[9px] text-white/40 font-mono-data uppercase">Calendar</span>
+                <button onClick={() => handleRemoveWidget('calendar')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+              </div>
+              <CalendarWidget />
+            </div>
+          )}
+          {activeWidgetIds.includes('battery') && (
+            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
+                <span className="text-[9px] text-white/40 font-mono-data uppercase">Battery</span>
+                <button onClick={() => handleRemoveWidget('battery')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+              </div>
+              <BatteryWidget level={batteryLevel} />
+            </div>
+          )}
+          {activeWidgetIds.includes('notes') && (
+            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
+                <span className="text-[9px] text-white/40 font-mono-data uppercase">Quick Notes</span>
+                <button onClick={() => handleRemoveWidget('notes')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+              </div>
+              <NotesWidget notes={notes} onAdd={handleAddNote} />
+            </div>
+          )}
           {customWidgets.filter(w => activeWidgetIds.includes(w.id)).map(w => <CustomWidget key={w.id} widget={w} onRemove={() => handleRemoveWidget(w.id)} />)}
           {activeWidgetIds.includes('ping') && <PingWidget pingResult={pingResult} pingHistory={pingHistory} pingFailed={pingFailed} onTriggerPingTest={handleTriggerPingTest} onRemove={() => handleRemoveWidget('ping')} />}
           {activeWidgetIds.includes('signal') && <SignalWidget onRemove={() => handleRemoveWidget('signal')} />}
-        </div>
-      </div>
-    </div>
-  )
-}
+         </div>
+       </div>
+     </div>
+     </div>
+   )
+ }
