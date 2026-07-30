@@ -87,8 +87,19 @@ export const useThemeStore = create((set, get) => ({
   setPageTransitionEffect: (v) => { try { localStorage.setItem('page_transition_effect', v) } catch {} set({ pageTransitionEffect: v }) },
   setPageTransitionSpeed: (v) => { try { localStorage.setItem('iris_page_transition_speed', v) } catch {} set({ pageTransitionSpeed: v }) },
   setPageTransitionEasing: (v) => { try { localStorage.setItem('page_transition_easing', v) } catch {} set({ pageTransitionEasing: v }) },
-  setDarkGlassTheme: (v) => { try { localStorage.setItem('dark_glass_theme', v) } catch {} set({ darkGlassTheme: v }) },
-  setHomePages: (v) => { try { localStorage.setItem('home_pages', v) } catch {} set({ homePages: v }) },
+  setHomePages: (v) => {
+    let pages = v
+    if (typeof v === 'number') {
+      const current = get().homePages
+      const currentArr = Array.isArray(current) ? current : [{ id: 1, pinnedApps: [], pinnedFolders: [] }]
+      const targetCount = Math.max(1, Math.min(5, v))
+      pages = Array.from({ length: targetCount }, (_, i) => {
+        return currentArr[i] || { id: i + 1, pinnedApps: [], pinnedFolders: [] }
+      })
+    }
+    try { localStorage.setItem('home_pages', JSON.stringify(pages)) } catch {}
+    set({ homePages: pages })
+  },
   setActiveHomePage: (v) => set({ activeHomePage: v }),
   setIconShape: (v) => { try { localStorage.setItem('icon_shape', v) } catch {} set({ iconShape: v }) },
   setDockColumns: (v) => { try { localStorage.setItem('dock_columns', v) } catch {} set({ dockColumns: v }) },

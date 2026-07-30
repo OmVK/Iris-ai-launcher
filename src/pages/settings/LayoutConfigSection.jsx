@@ -10,7 +10,7 @@ export default function LayoutConfigSection({ expandedSections, toggleSection, d
       <SettingSlider label="Global DPI Scale (Zoom)" value={dpiScale} onChange={setDpiScale} min="70" max="130" unit="%" description="SCALES ALL LAYOUTS, FONTS, AND MARGINS NATIVELY" />
       <SettingSlider label="Custom Grid Columns" value={gridColumns} onChange={setGridColumns} min="4" max="10" unit=" Columns" />
       <SettingSlider label="Custom Grid Rows" value={gridRows} onChange={setGridRows} min="4" max="10" unit=" Rows" />
-      <SettingSlider label="Home Screen Pages" value={homePages} onChange={setHomePages} min="1" max="5" unit=" Pages" />
+      <SettingSlider label="Home Screen Pages" value={Array.isArray(homePages) ? homePages.length : (typeof homePages === 'number' ? homePages : 1)} onChange={setHomePages} min="1" max="5" unit=" Pages" />
 
       {/* Dynamic Island Camera Cutout Alignment */}
       <div className="space-y-3 p-3 rounded-lg border border-primary-fixed-dim/20 bg-black/20">
