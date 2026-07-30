@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import { getLS, getLSNum, getLSBool } from '../utils/storage'
 
-const shouldSyncWallpaper = getLS('wallpaper', 'VOID') === 'VOID' && !localStorage.getItem('custom_wallpaper')
+const shouldSyncWallpaper = (getLS('wallpaper', 'SYSTEM') === 'VOID' || getLS('wallpaper', 'SYSTEM') === 'SYSTEM') && !localStorage.getItem('custom_wallpaper')
 
 export const useThemeStore = create((set, get) => ({
   themeColor: getLS('theme_color', 'cyan'),
   glassOpacity: getLSNum('glass_opacity', 75),
-  wallpaper: getLS('wallpaper', 'VOID'),
+  wallpaper: getLS('wallpaper', 'SYSTEM'),
   hasCustomWallpaper: (() => {
     try {
       const cw = getLS('custom_wallpaper', '')
@@ -25,38 +25,51 @@ export const useThemeStore = create((set, get) => ({
   drawerIconSize: getLSNum('drawer_icon_size', 100),
   drawerTextSize: getLSNum('drawer_text_size', 100),
   layoutStyle: getLS('layout_style', 'CENTERED'),
+  drawerLayout: getLS('drawer_layout', 'GRID'),
   showAppLabels: getLSBool('show_app_labels', true),
   showDrawerSearch: getLSBool('show_drawer_search', true),
   showHomeOrb: getLSBool('show_home_orb', true),
-  use24HourClock: getLSBool('iris_use_24h_clock', true),
-  globalIconTheme: getLS('global_icon_theme', 'DEFAULT'),
-  activeLiveWallpaper: getLS('active_live_wallpaper', 'NONE'),
-  fullscreenActive: getLS('fullscreen_active', 'false') === 'true',
-  drawerLayout: getLS('drawer_layout', 'GRID'),
+  use24HourClock: getLSBool('use_24_hour_clock', true),
+  fullscreenActive: getLSBool('fullscreen_active', false),
   pageTransitionEffect: getLS('page_transition_effect', 'SLIDE_UP'),
   pageTransitionSpeed: getLSNum('iris_page_transition_speed', 300),
   pageTransitionEasing: getLS('page_transition_easing', 'SMOOTH'),
-  darkGlassTheme: getLSBool('dark_glass_theme', false),
-  homePages: getLSNum('home_pages', 1),
-  activeHomePage: 0,
-  iconShape: getLS('icon_shape', 'system'),
+  globalIconTheme: getLS('global_icon_theme', 'DEFAULT'),
+  activeLiveWallpaper: getLS('active_live_wallpaper', 'NONE'),
+  darkGlassTheme: getLSBool('dark_glass_theme', true),
+  homePages: (() => {
+    try {
+      const raw = localStorage.getItem('home_pages')
+      return raw ? JSON.parse(raw) : [{ id: 1, pinnedApps: [], pinnedFolders: [] }]
+    } catch { return [{ id: 1, pinnedApps: [], pinnedFolders: [] }] }
+  })(),
+  activeHomePage: 1,
+  iconShape: getLS('icon_shape', 'HEXAGON'),
   dockColumns: getLSNum('dock_columns', 5),
-  dockBackground: getLS('dock_background', 'blur'),
-  homeScreenFolders: (() => { try { const raw = getLS('home_screen_folders', ''); return raw ? JSON.parse(raw) : [] } catch { return [] } })(),
+  dockBackground: getLS('dock_background', 'glass'),
+  homeScreenFolders: (() => {
+    try {
+      const raw = localStorage.getItem('home_screen_folders')
+      return raw ? JSON.parse(raw) : []
+    } catch { return [] }
+  })(),
   wallpaperBlur: getLSNum('wallpaper_blur', 0),
   wallpaperVignette: getLSNum('wallpaper_vignette', 0),
+  islandProfile: getLS('iris_island_profile', 'BALANCED'),
+  islandWidthScale: getLSNum('iris_island_width_scale', 100),
+  islandHeightScale: getLSNum('iris_island_height_scale', 100),
+  islandTopMargin: getLSNum('iris_island_top_margin', 0),
 
   setThemeColor: (v) => { try { localStorage.setItem('theme_color', v) } catch {} set({ themeColor: v }) },
   setGlassOpacity: (v) => { try { localStorage.setItem('glass_opacity', v) } catch {} set({ glassOpacity: v }) },
-  setWallpaper: (v) => { try { localStorage.setItem('wallpaper', v) } catch {} set({ wallpaper: v }) },
-  setCustomWallpaper: (v) => {
-    if (v) {
-      if (v.length > 8000000) return
-      try { localStorage.setItem('custom_wallpaper', v) } catch {} set({ hasCustomWallpaper: true })
-    } else {
-      try { localStorage.removeItem('custom_wallpaper') } catch {} set({ hasCustomWallpaper: false })
+  setWallpaper: (v) => {
+    try { localStorage.setItem('wallpaper', v) } catch {}
+    set({ wallpaper: v })
+    if (v === 'SYSTEM') {
+      get().syncSystemWallpaper()
     }
   },
+  setHasCustomWallpaper: (v) => set({ hasCustomWallpaper: v }),
   setDpiScale: (v) => { try { localStorage.setItem('dpi_scale', v) } catch {} set({ dpiScale: v }) },
   setGridColumns: (v) => { try { localStorage.setItem('grid_columns', v) } catch {} set({ gridColumns: v }) },
   setGridRows: (v) => { try { localStorage.setItem('grid_rows', v) } catch {} set({ gridRows: v }) },
@@ -65,14 +78,14 @@ export const useThemeStore = create((set, get) => ({
   setDrawerIconSize: (v) => { try { localStorage.setItem('drawer_icon_size', v) } catch {} set({ drawerIconSize: v }) },
   setDrawerTextSize: (v) => { try { localStorage.setItem('drawer_text_size', v) } catch {} set({ drawerTextSize: v }) },
   setLayoutStyle: (v) => { try { localStorage.setItem('layout_style', v) } catch {} set({ layoutStyle: v }) },
+  setDrawerLayout: (v) => { try { localStorage.setItem('drawer_layout', v) } catch {} set({ drawerLayout: v }) },
   setShowAppLabels: (v) => { try { localStorage.setItem('show_app_labels', v) } catch {} set({ showAppLabels: v }) },
   setShowDrawerSearch: (v) => { try { localStorage.setItem('show_drawer_search', v) } catch {} set({ showDrawerSearch: v }) },
   setShowHomeOrb: (v) => { try { localStorage.setItem('show_home_orb', v) } catch {} set({ showHomeOrb: v }) },
-  setUse24HourClock: (v) => { try { localStorage.setItem('iris_use_24h_clock', v) } catch {} set({ use24HourClock: v }) },
+  setUse24HourClock: (v) => { try { localStorage.setItem('use_24_hour_clock', v) } catch {} set({ use24HourClock: v }) },
+  setFullscreenActive: (v) => { try { localStorage.setItem('fullscreen_active', v) } catch {} set({ fullscreenActive: v }) },
   setGlobalIconTheme: (v) => { try { localStorage.setItem('global_icon_theme', v) } catch {} set({ globalIconTheme: v }) },
   setActiveLiveWallpaper: (v) => { try { localStorage.setItem('active_live_wallpaper', v) } catch {} set({ activeLiveWallpaper: v }) },
-  setFullscreenActive: (v) => { try { localStorage.setItem('fullscreen_active', v) } catch {} set({ fullscreenActive: v }) },
-  setDrawerLayout: (v) => { try { localStorage.setItem('drawer_layout', v) } catch {} set({ drawerLayout: v }) },
   setPageTransitionEffect: (v) => { try { localStorage.setItem('page_transition_effect', v) } catch {} set({ pageTransitionEffect: v }) },
   setPageTransitionSpeed: (v) => { try { localStorage.setItem('iris_page_transition_speed', v) } catch {} set({ pageTransitionSpeed: v }) },
   setPageTransitionEasing: (v) => { try { localStorage.setItem('page_transition_easing', v) } catch {} set({ pageTransitionEasing: v }) },
@@ -85,6 +98,10 @@ export const useThemeStore = create((set, get) => ({
   setHomeScreenFolders: (v) => { try { localStorage.setItem('home_screen_folders', JSON.stringify(v)) } catch {} set({ homeScreenFolders: v }) },
   setWallpaperBlur: (v) => { try { localStorage.setItem('wallpaper_blur', v) } catch {} set({ wallpaperBlur: v }) },
   setWallpaperVignette: (v) => { try { localStorage.setItem('wallpaper_vignette', v) } catch {} set({ wallpaperVignette: v }) },
+  setIslandProfile: (v) => { try { localStorage.setItem('iris_island_profile', v) } catch {} set({ islandProfile: v }) },
+  setIslandWidthScale: (v) => { try { localStorage.setItem('iris_island_width_scale', v) } catch {} set({ islandWidthScale: v }) },
+  setIslandHeightScale: (v) => { try { localStorage.setItem('iris_island_height_scale', v) } catch {} set({ islandHeightScale: v }) },
+  setIslandTopMargin: (v) => { try { localStorage.setItem('iris_island_top_margin', v) } catch {} set({ islandTopMargin: v }) },
 
   syncSystemWallpaper: async () => {
     try {
@@ -94,9 +111,9 @@ export const useThemeStore = create((set, get) => ({
       if (result?.wallpaper) {
         try {
           localStorage.setItem('custom_wallpaper', result.wallpaper)
-          localStorage.setItem('wallpaper', 'CUSTOM')
+          localStorage.setItem('wallpaper', 'SYSTEM')
         } catch {}
-        set({ wallpaper: 'CUSTOM', hasCustomWallpaper: true })
+        set({ wallpaper: 'SYSTEM', hasCustomWallpaper: true })
       }
     } catch (e) {
       console.warn('System wallpaper sync failed:', e)

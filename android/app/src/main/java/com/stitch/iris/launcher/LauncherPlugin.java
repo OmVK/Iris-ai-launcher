@@ -2456,21 +2456,30 @@ public class LauncherPlugin extends Plugin {
             android.app.WallpaperManager wm = android.app.WallpaperManager.getInstance(getContext());
             Drawable wallpaperDrawable = wm.getDrawable();
             if (wallpaperDrawable == null) {
+                try { wallpaperDrawable = wm.getBuiltInDrawable(); } catch (Exception e) {}
+            }
+            if (wallpaperDrawable == null) {
                 call.reject("No system wallpaper found");
                 return;
             }
+            android.util.DisplayMetrics metrics = getContext().getResources().getDisplayMetrics();
             int width = wallpaperDrawable.getIntrinsicWidth();
             int height = wallpaperDrawable.getIntrinsicHeight();
             if (width <= 0 || height <= 0) {
-                width = 1080;
-                height = 1920;
+                width = metrics.widthPixels > 0 ? metrics.widthPixels : 1080;
+                height = metrics.heightPixels > 0 ? metrics.heightPixels : 1920;
+            }
+            // Limit max dimensions for mobile webview performance
+            if (width > 1440 || height > 2560) {
+                width = width / 2;
+                height = height / 2;
             }
             Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
             wallpaperDrawable.setBounds(0, 0, width, height);
             wallpaperDrawable.draw(canvas);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, baos);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos);
             bitmap.recycle();
             String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
             String dataUri = "data:image/jpeg;base64," + base64;

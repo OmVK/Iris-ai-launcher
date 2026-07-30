@@ -9,6 +9,7 @@ import {
   speakCartesiaNative,
   addAudioFinishedListener,
   stopAudio,
+  checkAndRequestPermission,
   isNative
 } from '../components/LauncherPlugin'
 
@@ -44,95 +45,6 @@ export default function useVoiceEngine() {
 
   const { llmBackend, voiceEnabled, setLlmBackend, voicePitch, voiceRate } = useAIStore()
 
-  const mountedRef = useRef(true)
-  const isLiveVoiceRef = useRef(isLiveVoice)
-  const isListeningRef = useRef(isListening)
-  const isSpeakingRef = useRef(isSpeaking)
-  const isPrivateSessionRef = useRef(isPrivateSession)
-  const lastTtsTextRef = useRef('')
-  const restartTimerRef = useRef(null)
-  const finishSpeakingTimerRef = useRef(null)
-
-  useEffect(() => { isLiveVoiceRef.current = isLiveVoice }, [isLiveVoice])
-  useEffect(() => { isListeningRef.current = isListening }, [isListening])
-  useEffect(() => { isSpeakingRef.current = isSpeaking }, [isSpeaking])
-  useEffect(() => { isPrivateSessionRef.current = isPrivateSession }, [isPrivateSession])
-
-  // Persist sessions on chatLog change
-  useEffect(() => {
-    if (isPrivateSession) return
-    const timeoutId = setTimeout(() => persistSessions(), 1000)
-    return () => clearTimeout(timeoutId)
-  }, [chatLog, activeSessionId, isPrivateSession])
-
-  // Cleanup private sessions on unmount
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current)
-      if (finishSpeakingTimerRef.current) clearTimeout(finishSpeakingTimerRef.current)
-      if (isPrivateSessionRef.current) {
-        setChatLog([{ time: "00:00:00", sender: "IRIS", text: "PRIVATE_SESSION_ENDED // CHATLOG LOGS COMPROMISED AND SELF-DESTRUCTED.", type: "error" }])
-      }
-    }
-  }, [])
-
-  const requestMicrophonePermission = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach(track => track.stop())
-      return true
-    } catch (e) {
-      console.warn('Microphone permission denied:', e)
-      alert('Microphone permission is required for live voice mode. Please allow microphone access in your device settings.')
-      return false
-    }
-  }
-
-  // Recognition event handlers
-  useEffect(() => {
-    if (!recognition) return
-    recognition.onstart = () => {
-      setIsListening(true)
-      isListeningRef.current = true
-    }
-    recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript
-      const lower = transcript.trim().toLowerCase()
-      if (lastTtsTextRef.current) {
-        const ttsSnippet = lastTtsTextRef.current.substring(0, 30)
-        if (lower.includes(ttsSnippet) || ttsSnippet.includes(lower.substring(0, 20))) return
-        stopSpeaking()
-      }
-      if (!backendIsGeneratingRef.current?.current) {
-        submitPrompt(transcript)
-      }
-    }
-    recognition.onerror = (e) => {
-      if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        console.warn("Recognition error:", e.error)
-      }
-      setIsListening(false)
-      isListeningRef.current = false
-    }
-    recognition.onend = () => {
-      setIsListening(false)
-      isListeningRef.current = false
-      if (isLiveVoiceRef.current && !backendIsGeneratingRef.current?.current) {
-        const delay = isSpeakingRef.current ? 300 : 100
-        if (restartTimerRef.current) clearTimeout(restartTimerRef.current)
-        restartTimerRef.current = setTimeout(() => {
-          if (!mountedRef.current) return
-          try {
-            if (isLiveVoiceRef.current && !isListeningRef.current) {
-              recognition.start()
-            }
-          } catch (e) { console.warn("Auto-restart recognition failed:", e) }
-        }, delay)
-      }
-    }
-  }, [])
-
   const startVoiceInput = useCallback(async () => {
     if (!recognition) {
       alert("Browser Speech Recognition blocked. Please type prompts below.")
@@ -141,8 +53,10 @@ export default function useVoiceEngine() {
     if (isListening) {
       recognition.stop()
     } else {
-      const hasPermission = await requestMicrophonePermission()
-      if (!hasPermission) return
+      try {
+        const perm = await checkAndRequestPermission('RECORD_AUDIO')
+        if (perm && !perm.granted) return
+      } catch (_) {}
       window.speechSynthesis?.cancel()
       stopSpeakingNative().catch(() => {})
       setIsSpeaking(false)

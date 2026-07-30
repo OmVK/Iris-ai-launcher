@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
-import IrisVisualizer from '../components/IrisVisualizer'
 import { launchApp, expandNotificationPanel, getSystemStats } from '../components/LauncherPlugin'
 import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
-const OfflineAssistantOverlay = React.lazy(() => import('../components/OfflineAssistantOverlay'))
+import OfflineAssistantOverlay from '../components/OfflineAssistantOverlay'
 import HudIcon from '../components/HudIcon'
 import HudFallbackIcon from '../components/HudFallbackIcon'
 import HomeGrid from '../components/HomeGrid'
@@ -16,6 +15,7 @@ import AppContextMenu from '../components/AppContextMenu'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { routeAppClick } from '../utils/appClickRouter'
 import { useThemeStore } from '../stores/themeStore'
+import { useAIStore } from '../stores/aiStore'
 
 export default function Home({ 
   onNavigate, 
@@ -60,6 +60,14 @@ export default function Home({
   } = useAppContextMenu({ setInstalledApps, onToggleAppLock })
 
   const swipeStartPos = useRef({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const handler = () => {
+      setShowOfflineAssistant(true)
+    }
+    window.addEventListener('iris-trigger-assistant', handler)
+    return () => window.removeEventListener('iris-trigger-assistant', handler)
+  }, [])
 
   useEffect(() => {
     if (!isAppActive) return

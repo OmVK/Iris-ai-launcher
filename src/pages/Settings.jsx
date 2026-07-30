@@ -75,7 +75,7 @@ export default function Settings({
         <p className="text-[9px] text-white/20 font-mono-data mb-3 uppercase">System Configuration</p>
       </div>
 
-      <GestureSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} />
+      <GestureSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} installedApps={installedApps} />
       <AppLockSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <BackupRestoreSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <AdvancedSection expandedSections={expandedSections} toggleSection={toggleSection} />

@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { registerPlugin } from '@capacitor/core'
-import { launchApp } from '../components/LauncherPlugin'
+import { launchApp, getInstalledApps } from '../components/LauncherPlugin'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
@@ -25,6 +25,27 @@ const levenshtein = (a, b) => {
   return result
 }
 
+const COMMON_APP_PACKAGES = {
+  'youtube': 'com.google.android.youtube',
+  'chrome': 'com.android.chrome',
+  'browser': 'com.android.chrome',
+  'settings': 'com.android.settings',
+  'camera': 'com.android.camera',
+  'gallery': 'com.google.android.apps.photos',
+  'photos': 'com.google.android.apps.photos',
+  'phone': 'com.google.android.dialer',
+  'messages': 'com.google.android.apps.messaging',
+  'whatsapp': 'com.whatsapp',
+  'playstore': 'com.android.vending',
+  'play store': 'com.android.vending',
+  'store': 'com.android.vending',
+  'maps': 'com.google.android.apps.maps',
+  'gmail': 'com.google.android.gm',
+  'clock': 'com.google.android.deskclock',
+  'calculator': 'com.google.android.calculator',
+  'calendar': 'com.google.android.calendar'
+}
+
 export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef }) {
   const loadingAppsRef = useRef(false)
   const dispatchCommand = async (command) => {
@@ -33,14 +54,15 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
       switch (action) {
         case 'open': {
           if (!params.app) break
-          const lowerApp = params.app.toLowerCase().replace(/[.,!?\s']/g, '')
+          const lowerApp = params.app.toLowerCase().trim().replace(/[.,!?\s']/g, '')
+          const rawApp = params.app.toLowerCase().trim()
           let apps = appsListRef.current || []
 
-          if (apps.length === 0 && !loadingAppsRef.current) {
+          if ((!apps || apps.length === 0) && !loadingAppsRef.current) {
             try {
               loadingAppsRef.current = true
-              const res = await LauncherPlugin.getInstalledApps()
-              apps = res?.apps || []
+              const res = await getInstalledApps()
+              apps = Array.isArray(res) ? res : (res?.apps || [])
               appsListRef.current = apps
             } catch (e) { console.warn('[IRIS] Failed to get installed apps for open:', e) }
             finally { loadingAppsRef.current = false }
@@ -87,12 +109,10 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
             }
           }
 
-          let launched = false
-          if (match) {
-            launched = await launchApp(match.packageId, match.label)
-          } else {
-            launched = await launchApp(params.app)
-          }
+          let targetPackage = match ? match.packageId : (COMMON_APP_PACKAGES[rawApp] || COMMON_APP_PACKAGES[lowerApp] || params.app)
+          let targetLabel = match ? match.label : params.app
+
+          let launched = await launchApp(targetPackage, targetLabel)
 
           if (launched) {
             return { close: true }
@@ -109,11 +129,11 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
           const lowerApp = params.app.toLowerCase().replace(/[.,!?]/g, '')
           let apps = appsListRef.current || []
 
-          if (apps.length === 0 && !loadingAppsRef.current) {
+          if ((!apps || apps.length === 0) && !loadingAppsRef.current) {
             try {
               loadingAppsRef.current = true
-              const res = await LauncherPlugin.getInstalledApps()
-              apps = res?.apps || []
+              const res = await getInstalledApps()
+              apps = Array.isArray(res) ? res : (res?.apps || [])
               appsListRef.current = apps
             } catch (e) { console.warn('[IRIS] Failed to get installed apps for uninstall/info:', e) }
             finally { loadingAppsRef.current = false }

@@ -30,7 +30,7 @@ export default function IrisVisualizer({
     if (!ctx) return
 
     let animationFrameId
-    const numParticles = 350 // Reduced to separate dots clearly
+    const numParticles = 200 // Optimized particle count for smooth 60fps rendering
     let isVisible = !document.hidden
 
     const handleVisibility = () => {
@@ -53,7 +53,7 @@ export default function IrisVisualizer({
           x0: Math.sin(phi) * Math.cos(theta),
           y0: Math.cos(phi),
           z0: Math.sin(phi) * Math.sin(theta),
-          baseSize: Math.random() * 1.0 + 0.6, // Smaller base size for delicate dots
+          baseSize: Math.random() * 1.0 + 0.6,
           
           // Random properties for organic, amorphous morphing
           phaseX: Math.random() * Math.PI * 2,
@@ -72,7 +72,6 @@ export default function IrisVisualizer({
         animationFrameId = null
         return
       }
-
 
       const time = animState.current.time
 
@@ -96,8 +95,8 @@ export default function IrisVisualizer({
       const g = Math.round(colorState.current.g)
       const b = Math.round(colorState.current.b)
 
-      // Handle high DPI displays dynamically. ONLY reallocate canvas buffer if size actually changed to save GPU!
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      // Handle high DPI displays dynamically. Capped at 1.5 DPR to prevent mobile GPU fill-rate throttling
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       const targetSize = size * dpr
       if (canvas.width !== targetSize) {
         canvas.width = targetSize
@@ -107,14 +106,12 @@ export default function IrisVisualizer({
       // We don't scale context, we just multiply math by dpr to prevent fuzzy scaling
       const cx = (size * dpr) * 0.5
       const cy = (size * dpr) * 0.5
-      // Slightly larger radius to separate dots more
       const radius = (size * dpr) * 0.40
 
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       
-      // Draw extremely subtle background glow to prevent 'over glow'
+      // Draw subtle background glow
       const intensity = isProcessingRef.current ? 1.5 : isListeningRef.current ? 1.0 : 0.5
-      // Ensure gradient ends exactly at canvas edge (cx)
       const glowGradient = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, cx)
       glowGradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.08 * intensity})`)
       glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
@@ -132,24 +129,25 @@ export default function IrisVisualizer({
       const dotG = Math.min(255, g + 80)
       const dotB = Math.min(255, b + 80)
       
-      ctx.fillStyle = `rgba(${dotR}, ${dotG}, ${dotB}, 1.0)` // Solid bright dots
+      ctx.fillStyle = `rgba(${dotR}, ${dotG}, ${dotB}, 0.95)`
 
-      // Pre-calculate rotation trigonometry outside the loop to save 1,400 Math calls per frame
+      // Pre-calculate rotation trigonometry outside the loop
       const cosRotY = Math.cos(rotY)
       const sinRotY = Math.sin(rotY)
       const cosRotX = Math.cos(rotX)
       const sinRotX = Math.sin(rotX)
 
+      const morphAmp = 0.3 * intensity
+
+      // Group rendering into a single batched path to save draw calls
+      ctx.beginPath()
       for (let i = 0; i < numParticles; i++) {
         const p = particles[i]
         
-        // Morph the particle's local position randomly over time so it's not just a rigid sphere
-        const morphAmp = 0.3 * intensity
         const mx = p.x0 + Math.sin(time * p.speedX + p.phaseX) * morphAmp
         const my = p.y0 + Math.sin(time * p.speedY + p.phaseY) * morphAmp
         const mz = p.z0 + Math.sin(time * p.speedZ + p.phaseZ) * morphAmp
 
-        // 3D Rotation Matrix applied to the organically morphed coordinates
         const x1 = mx * cosRotY - mz * sinRotY
         const z1 = mx * sinRotY + mz * cosRotY
         const y1 = my
@@ -158,26 +156,20 @@ export default function IrisVisualizer({
         const z2 = y1 * sinRotX + z1 * cosRotX
         const x2 = x1
 
-        // Sine wave wobble to make it feel alive
         const wobble = Math.sin(y2 * 5 + time * 5) * 0.05 * intensity
         
-        // Simple perspective projection
         const perspective = 3.0 / (3.0 - (z2 + wobble))
         const px = cx + (x2 + wobble) * radius * perspective
         const py = cy + y2 * radius * perspective
         
         const pSize = Math.max(0.6, (p.baseSize * perspective * dpr) * (1 + (isListeningRef.current ? 0.3 : 0)))
 
-        // Cull particles that are behind the sphere for fake depth
         if (z2 > -0.5) {
-          const alpha = Math.min(1, (z2 + 1) * 0.6)
-          ctx.globalAlpha = alpha
-          
-          ctx.beginPath()
+          ctx.moveTo(px + pSize, py)
           ctx.arc(px, py, pSize, 0, Math.PI * 2)
-          ctx.fill()
         }
       }
+      ctx.fill()
 
       ctx.globalAlpha = 1.0
       if (isVisible) {

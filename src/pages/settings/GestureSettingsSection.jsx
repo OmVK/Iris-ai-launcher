@@ -23,10 +23,8 @@ const GESTURE_ACTIONS = [
   { id: 'open_search', label: 'Open Search' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'quick_settings', label: 'Quick Settings' },
-  { id: 'assistant', label: 'AI Assistant' },
   { id: 'recents', label: 'Recent Tasks' },
-  { id: 'open_terminal', label: 'Terminal' },
-  { id: 'open_widgets', label: 'Widgets' },
+  { id: 'launch_app', label: 'Launch App' },
   { id: 'do_nothing', label: 'Do Nothing' },
 ]
 
@@ -59,9 +57,10 @@ function saveGestureMap(map) {
   } catch {}
 }
 
-export default function GestureSettingsSection({ expandedSections, toggleSection }) {
+export default function GestureSettingsSection({ expandedSections, toggleSection, installedApps = [] }) {
   const [a11yEnabled, setA11yEnabled] = useState(false)
   const [gestureMap, setGestureMap] = useState(loadGestureMap)
+  const [selectingAppSlot, setSelectingAppSlot] = useState(null)
 
   useEffect(() => {
     checkAccessibility()
@@ -73,11 +72,24 @@ export default function GestureSettingsSection({ expandedSections, toggleSection
   }
 
   const handleGestureChange = useCallback((gestureId, actionId) => {
+    if (actionId === 'launch_app') {
+      setSelectingAppSlot(gestureId)
+      return
+    }
     setGestureMap(prev => {
       const next = { ...prev, [gestureId]: { action: actionId } }
       saveGestureMap(next)
       return next
     })
+  }, [])
+
+  const handleSelectCustomApp = useCallback((gestureId, app) => {
+    setGestureMap(prev => {
+      const next = { ...prev, [gestureId]: { action: 'launch_app', packageId: app.packageId, appName: app.label } }
+      saveGestureMap(next)
+      return next
+    })
+    setSelectingAppSlot(null)
   }, [])
 
   const activeCount = Object.values(gestureMap).filter(g => g?.action && g.action !== 'do_nothing').length
@@ -104,37 +116,73 @@ export default function GestureSettingsSection({ expandedSections, toggleSection
       )}
 
       <div className="space-y-3">
-        {GESTURE_SLOTS.map(slot => (
-          <div key={slot.id} className="glass-surface rounded-xl p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-rounded text-white/40 text-sm">{slot.icon}</span>
-                <span className="text-xs text-white/70 font-mono-data">{slot.label}</span>
+        {GESTURE_SLOTS.map(slot => {
+          const currentGesture = gestureMap[slot.id]
+          const isLaunchApp = currentGesture?.action === 'launch_app'
+          const actionLabel = isLaunchApp
+            ? (currentGesture?.appName ? `App: ${currentGesture.appName}` : 'Select App')
+            : (GESTURE_ACTIONS.find(a => a.id === currentGesture?.action)?.label || 'Do Nothing')
+
+          return (
+            <div key={slot.id} className="glass-surface rounded-xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-rounded text-white/40 text-sm">{slot.icon}</span>
+                  <span className="text-xs text-white/70 font-mono-data">{slot.label}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[8px] text-white/20 font-mono-data px-1.5 py-0.5 rounded bg-white/5">{slot.surface}</span>
+                  <span className="text-[9px] text-primary-fixed-dim font-mono-data font-semibold">
+                    {actionLabel}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[8px] text-white/20 font-mono-data px-1.5 py-0.5 rounded bg-white/5">{slot.surface}</span>
-                <span className="text-[9px] text-white/30 font-mono-data">
-                  {GESTURE_ACTIONS.find(a => a.id === gestureMap[slot.id]?.action)?.label || 'Do Nothing'}
-                </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {GESTURE_ACTIONS.map(action => (
+                  <button
+                    key={action.id}
+                    onClick={() => handleGestureChange(slot.id, action.id)}
+                    className={`py-1.5 px-1.5 rounded-lg text-[8px] font-mono-data transition-all ${
+                      gestureMap[slot.id]?.action === action.id
+                        ? 'bg-[rgba(var(--primary-rgb),0.2)] text-[var(--primary-color)] border border-[var(--primary-color)]/30 font-bold'
+                        : 'bg-white/5 text-white/40 hover:bg-white/10 border border-transparent'
+                    }`}
+                  >
+                    {action.label}
+                  </button>
+                ))}
               </div>
+
+              {/* Custom App Selector Modal Dropdown for this Slot */}
+              {selectingAppSlot === slot.id && (
+                <div className="mt-3 p-2 rounded-lg bg-black/80 border border-primary-fixed-dim/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-primary-fixed-dim font-mono-data font-bold">SELECT APP FOR {slot.label.toUpperCase()}</span>
+                    <button onClick={() => setSelectingAppSlot(null)} className="text-xs text-white/50 hover:text-white">✕</button>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-1 no-scrollbar">
+                    {installedApps.length > 0 ? (
+                      installedApps.map(app => (
+                        <button
+                          key={app.packageId}
+                          onClick={() => handleSelectCustomApp(slot.id, app)}
+                          className="w-full text-left px-2 py-1 rounded flex items-center gap-2 hover:bg-white/10 text-white/80 text-[10px] font-mono-data"
+                        >
+                          {app.icon && typeof app.icon === 'string' && app.icon.startsWith('data:') && (
+                            <img src={app.icon} className="w-4 h-4 rounded object-contain" alt="" />
+                          )}
+                          <span className="truncate">{app.label}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-[9px] text-white/40 font-mono-data p-2 text-center">No installed applications found</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {GESTURE_ACTIONS.map(action => (
-                <button
-                  key={action.id}
-                  onClick={() => handleGestureChange(slot.id, action.id)}
-                  className={`py-1.5 px-1.5 rounded-lg text-[8px] font-mono-data transition-all ${
-                    gestureMap[slot.id]?.action === action.id
-                      ? 'bg-[rgba(var(--primary-rgb),0.2)] text-[var(--primary-color)] border border-[var(--primary-color)]/30'
-                      : 'bg-white/5 text-white/40 hover:bg-white/10 border border-transparent'
-                  }`}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
       </div>
     </SettingsSection>

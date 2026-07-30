@@ -17,7 +17,7 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
 
     // Handle Resize
     const resizeCanvas = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       canvas.width = getW() * dpr
       canvas.height = getH() * dpr
       canvas.style.width = getW() + 'px'
@@ -80,8 +80,12 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
     let lastTime = performance.now()
 
     const draw = () => {
-      // Completely halt animation and CPU usage when the app is minimized
+      // Completely halt animation and CPU usage when the app is minimized or wallpaper mode is NONE
       if (!isAppActive) return;
+      if (mode === 'NONE') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        return
+      }
 
       animId = requestAnimationFrame(draw)
 
@@ -111,11 +115,6 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
       const m = mouseRef.current
       m.x += (m.targetX - m.x) * 0.08
       m.y += (m.targetY - m.y) * 0.08
-
-      if (mode === 'NONE') {
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        return
-      }
 
       if (mode === 'MATRIX') {
         // Fade existing pixels to transparent for the trailing effect instead of painting black

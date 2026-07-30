@@ -1,5 +1,6 @@
 import SettingsSection from './SettingsSection'
-import { SettingSlider } from './SettingControls'
+import { SettingSlider, SettingToggle } from './SettingControls'
+import { useAIStore } from '../../stores/aiStore'
 
 export default function VoiceSettingsSection({ expandedSections, toggleSection, voicePitch, setVoicePitch, voiceRate, setVoiceRate }) {
   const handlePreview = () => {
@@ -15,7 +16,7 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
       <SettingSlider label="SPEECH RATE (SPEED)" value={voiceRate} onChange={setVoiceRate} min="0.5" max="2.5" step="0.1" unit="x" />
       <div className="flex items-center justify-between gap-4">
         <p className="text-[9px] text-on-surface-variant/50 uppercase leading-relaxed border-l-2 border-primary-fixed-dim/30 pl-2">
-          Configure the vocal tone and playback speed of the offline Voice Engine.
+          Configure vocal tone and speech synthesis speed.
         </p>
         <button onClick={handlePreview}
           className="px-3 py-1.5 rounded bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim font-bold active:scale-95 transition-transform text-[9px] shrink-0 flex items-center gap-1">

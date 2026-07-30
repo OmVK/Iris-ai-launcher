@@ -1,18 +1,17 @@
 import React from 'react'
 
-export default function AssistantStatusPanel({ statusText, canvasRef, isListening, isProcessing }) {
+export default function AssistantStatusPanel({ statusText, canvasRef }) {
+  const isPlaceholder = !statusText || /^(?:listening|starting|starting\.\.\.|i'm listening\.\.\.|tap to speak|microphon access required)$/i.test(statusText.trim())
+
+  if (isPlaceholder) return null
+
   return (
-    <div className={`relative z-10 flex flex-col items-center gap-6 mt-64 transition-all duration-500`}>
-      <canvas ref={canvasRef} width={220} height={44} className="w-[220px] h-[44px] opacity-80" />
-      {statusText ? (
-        <div className="max-w-sm max-h-[350px] overflow-y-auto custom-scrollbar px-6 py-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10">
-          <p className="text-center text-white/90 text-sm font-medium leading-relaxed tracking-wide">
-            {statusText}
-          </p>
-        </div>
-      ) : (
-        <p className="text-white/40 text-xs uppercase tracking-[0.2em]">Tap the orb to speak</p>
-      )}
+    <div className="fixed top-[75px] left-1/2 -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none transition-all duration-300 animate-in fade-in slide-in-from-top-2">
+      <div className="pointer-events-auto max-w-[88vw] sm:max-w-md max-h-[300px] overflow-y-auto custom-scrollbar px-5 py-3 rounded-2xl bg-slate-950/85 backdrop-blur-2xl border border-purple-500/30 shadow-[0_10px_35px_rgba(0,0,0,0.6),0_0_20px_rgba(168,85,247,0.2)]">
+        <p className="text-center text-slate-100 text-sm font-medium leading-relaxed tracking-wide select-none">
+          {statusText}
+        </p>
+      </div>
     </div>
   )
 }

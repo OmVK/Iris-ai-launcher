@@ -33,6 +33,9 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   const touchEndX = useRef(null)
   const touchEndY = useRef(null)
   const touchStartTime = useRef(null)
+  const touchCountRef = useRef(1)
+  const initialPinchDistRef = useRef(0)
+  const currentPinchDistRef = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -70,7 +73,12 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     }
   }, [setActivePage, setShowArcSearch, launchApp])
 
-  const detectGesture = useCallback((deltaX, deltaY, startX, startY, duration) => {
+  const detectGesture = useCallback((deltaX, deltaY, startX, startY, duration, touchCount, pinchRatio) => {
+    if (touchCount === 2) {
+      if (pinchRatio > 0 && pinchRatio < 0.75) return 'pinch_in'
+      if (Math.abs(deltaY) > 60) return deltaY < 0 ? 'two_finger_swipe_up' : 'two_finger_swipe_down'
+    }
+
     const absDeltaX = Math.abs(deltaX)
     const absDeltaY = Math.abs(deltaY)
     const minSwipe = 80
@@ -84,19 +92,26 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
     if (absDeltaX > absDeltaY) {
       const dir = deltaX > 0 ? 'right' : 'left'
-      if (absDeltaY < absDeltaX * 0.4) return `swipe_${dir}`
-      return `swipe_${dir}`
+      return activePage === 'drawer' ? `drawer_swipe_${dir}` : `swipe_${dir}`
     } else {
       const dir = deltaY > 0 ? 'down' : 'up'
-      if (absDeltaX < absDeltaY * 0.4) return `swipe_${dir}`
-      return `swipe_${dir}`
+      return activePage === 'drawer' ? `drawer_swipe_${dir}` : `swipe_${dir}`
     }
-  }, [])
+  }, [activePage])
 
   const handleTouchStart = useCallback((e) => {
+    touchCountRef.current = e.touches.length
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
     touchStartTime.current = Date.now()
+
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      initialPinchDistRef.current = Math.hypot(dx, dy)
+      currentPinchDistRef.current = initialPinchDistRef.current
+    }
+
     if (contextMenuOpen) return
 
     if (!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.app-icon-item') && !e.target.closest('[data-no-arc]')) {
@@ -106,17 +121,18 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
         longPressTimerRef = setTimeout(() => {
           if (tapCountRef === 1) {
             const gesture = getGestureAction('long_press_empty')
-            if (gesture) executeAction(gesture.action, gesture.actionData)
+            if (gesture) executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
             tapCountRef = 0
           }
         }, 600)
       } else if (tapCountRef === 2) {
         if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
-        tripleTapTimerRef = setTimeout(() => {
-          const gesture = getGestureAction('double_tap')
-          if (gesture) executeAction(gesture.action, gesture.actionData)
-          tapCountRef = 0
-        }, 300)
+        if (tripleTapTimerRef) { clearTimeout(tripleTapTimerRef); tripleTapTimerRef = null }
+        const gesture = getGestureAction('double_tap')
+        if (gesture) {
+          executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
+        }
+        tapCountRef = 0
       } else if (tapCountRef >= 3) {
         clearTimeout(tripleTapTimerRef)
         tripleTapTimerRef = null
@@ -131,6 +147,12 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   const handleTouchMove = useCallback((e) => {
     touchEndX.current = e.touches[0].clientX
     touchEndY.current = e.touches[0].clientY
+
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      currentPinchDistRef.current = Math.hypot(dx, dy)
+    }
   }, [])
 
   const handleTouchEnd = useCallback(() => {
@@ -141,12 +163,15 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     const deltaY = touchEndY.current - touchStartY.current
     const duration = Date.now() - (touchStartTime.current || 0)
 
-    const gestureName = detectGesture(deltaX, deltaY, touchStartX.current, touchStartY.current, duration)
+    const pinchRatio = initialPinchDistRef.current > 0 ? currentPinchDistRef.current / initialPinchDistRef.current : 0
+    const gestureName = detectGesture(deltaX, deltaY, touchStartX.current, touchStartY.current, duration, touchCountRef.current, pinchRatio)
+    
     if (gestureName) {
       const gesture = getGestureAction(gestureName)
       if (gesture) {
-        executeAction(gesture.action, gesture.actionData)
+        executeAction(gesture.action, gesture.actionData || gesture.packageId || gesture.app)
         touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
+        initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
         return
       }
     }
@@ -160,6 +185,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     }
 
     touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
+    initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
   }, [activePage, setActivePage, detectGesture, executeAction])
 
   return { handleTouchStart, handleTouchMove, handleTouchEnd }

@@ -27,7 +27,8 @@ export default function HomeGrid({
     alignItems: 'center',
     transform: `perspective(1000px) rotateX(${-tilt.y / 1.5}deg) rotateY(${tilt.x / 1.5}deg)`,
     transformStyle: 'preserve-3d',
-    transition: 'transform 0.1s ease-out'
+    transition: 'transform 0.1s ease-out',
+    willChange: 'transform'
   }
 
   return (
@@ -49,9 +50,7 @@ export default function HomeGrid({
                 width: `${iconPixel}px`,
                 height: `${iconPixel}px`,
                 transform: `translateZ(10px)`,
-                boxShadow: `calc(${-tilt.x / 2}px) calc(${-tilt.y / 2}px) 15px rgba(var(--primary-rgb), 0.3),
-                            calc(${-tilt.x / 4}px) calc(${-tilt.y / 4}px) 30px rgba(var(--primary-rgb), 0.12),
-                            0 0 8px rgba(var(--primary-rgb), 0.08)`
+                boxShadow: '0 4px 16px rgba(var(--primary-rgb), 0.22), 0 0 8px rgba(var(--primary-rgb), 0.08)'
               }}
               className="flex items-center justify-center rounded-xl border transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme.toLowerCase()} border-primary-fixed-dim/20 glass-icon-container app-icon-hover-effect"
             >

@@ -26,6 +26,17 @@ const CONDITION_ICONS = {
   FREEZING_RAIN: 'weather_snowy',
 }
 
+import { useThemeStore } from '../stores/themeStore'
+
+const PROFILE_PRESETS = {
+  AUTO: { baseWidth: 210, baseHeight: 36, topMargin: 8 },
+  PIXEL: { baseWidth: 215, baseHeight: 38, topMargin: 10 },
+  GALAXY: { baseWidth: 190, baseHeight: 32, topMargin: 6 },
+  PILL: { baseWidth: 235, baseHeight: 36, topMargin: 8 },
+  NOTCH: { baseWidth: 220, baseHeight: 42, topMargin: 4 },
+  CUSTOM: { baseWidth: 200, baseHeight: 32, topMargin: 8 }
+}
+
 export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = true, isAppActive = true, powerSaveMode }) {
   const [time, setTime] = useState("")
   const [battery, setBattery] = useState({ level: 100, charging: false })
@@ -39,6 +50,12 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
   const { isListening, isSpeaking } = useAssistantStore()
   const { totalUnread } = useBadgeStore()
+  const { islandProfile, islandWidthScale, islandHeightScale, islandTopMargin } = useThemeStore()
+
+  const preset = PROFILE_PRESETS[islandProfile] || PROFILE_PRESETS.AUTO
+  const collapsedWidth = Math.round(preset.baseWidth * (islandWidthScale / 100))
+  const collapsedHeight = Math.round(preset.baseHeight * (islandHeightScale / 100))
+  const computedTopMargin = islandProfile === 'CUSTOM' ? islandTopMargin : Math.max(0, preset.topMargin + (islandTopMargin - 8))
   
   const [autoExpand, setAutoExpand] = useState(false)
   const previousUnread = useRef(totalUnread)
@@ -177,9 +194,12 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
   let glowColor = 'rgba(0, 0, 0, 0.4)'
   let borderColor = 'rgba(255, 255, 255, 0.08)'
-  if (isAiActive) {
-    glowColor = 'rgba(0, 242, 255, 0.4)'
-    borderColor = 'rgba(0, 242, 255, 0.4)'
+  if (isListening) {
+    glowColor = 'rgba(168, 85, 247, 0.85)'
+    borderColor = 'rgba(168, 85, 247, 0.9)'
+  } else if (isSpeaking) {
+    glowColor = 'rgba(168, 85, 247, 0.75)'
+    borderColor = 'rgba(168, 85, 247, 0.8)'
   } else if (isLowBattery) {
     glowColor = 'rgba(255, 50, 50, 0.4)'
     borderColor = 'rgba(255, 50, 50, 0.3)'
@@ -194,25 +214,34 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
   const expWidth = 360
   const expHeight = 160
 
+  const activeWidth = expanded ? expWidth : (isAiActive ? Math.max(collapsedWidth, 240) : collapsedWidth)
+  const activeHeight = expanded ? expHeight : (isAiActive ? Math.max(collapsedHeight, 40) : collapsedHeight)
+
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-2 pointer-events-none">
+    <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ paddingTop: `${computedTopMargin}px` }}>
       <div
         ref={islandRef}
         onClick={handleToggle}
-        className="pointer-events-auto relative flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        className={`pointer-events-auto relative flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-breathe' : ''}`}
         style={{
-          background: 'rgba(12, 16, 28, 0.82)',
+          background: isAiActive ? 'rgba(8, 12, 24, 0.94)' : 'rgba(12, 16, 28, 0.82)',
           backdropFilter: 'blur(40px) saturate(180%)',
           WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          border: `1px solid ${borderColor}`,
-          boxShadow: expanded
-            ? `0 10px 40px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)`
-            : `0 4px 12px ${glowColor}`,
-          width: expanded ? expWidth : 200,
-          height: expanded ? expHeight : 32,
-          borderRadius: expanded ? 28 : 20,
+          border: isAiActive ? '1px solid rgba(168, 85, 247, 0.85)' : `1px solid ${borderColor}`,
+          boxShadow: isAiActive
+            ? '0 0 40px rgba(168, 85, 247, 0.85), 0 0 70px rgba(147, 51, 234, 0.55), 0 0 100px rgba(16, 185, 129, 0.35), inset 0 0 18px rgba(168, 85, 247, 0.7)'
+            : (expanded ? `0 10px 40px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)` : `0 4px 12px ${glowColor}`),
+          width: activeWidth,
+          height: activeHeight,
+          borderRadius: expanded ? 28 : Math.round(activeHeight * 0.55),
         }}
       >
+        {isAiActive && (
+          <>
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-purple-500 via-emerald-400 to-purple-500 shadow-[0_0_14px_#34d399] animate-pulse" />
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-400 via-purple-500 to-emerald-400 shadow-[0_0_14px_#a855f7] animate-pulse" />
+          </>
+        )}
         {/* Collapsed State */}
         <div 
           className={`absolute inset-0 flex items-center justify-center transition-all ${
@@ -220,18 +249,8 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
           }`}
           style={{ pointerEvents: expanded ? 'none' : 'auto' }}
         >
-          <div className="w-[200px] h-[32px] px-3 flex items-center justify-between">
-            {isListening ? (
-              <div className="flex items-center gap-2 w-full justify-center">
-                <span className="material-symbols-outlined text-primary-fixed-dim animate-pulse" style={{ fontSize: 13 }}>mic</span>
-                <span className="font-mono-data text-[10px] text-primary-fixed-dim font-bold tracking-widest animate-pulse">LISTENING...</span>
-              </div>
-            ) : isSpeaking ? (
-              <div className="flex items-center gap-2 w-full justify-center">
-                <span className="material-symbols-outlined text-primary-fixed-dim animate-spin" style={{ fontSize: 13 }}>graphic_eq</span>
-                <span className="font-mono-data text-[10px] text-primary-fixed-dim font-bold tracking-widest animate-pulse">PROCESSING</span>
-              </div>
-            ) : autoExpand ? (
+          <div className="px-3 flex items-center justify-between" style={{ width: `${activeWidth}px`, height: `${activeHeight}px` }}>
+            {autoExpand ? (
               <div className="flex items-center gap-2 w-full justify-center">
                 <span className="material-symbols-outlined text-primary-fixed-dim animate-bounce" style={{ fontSize: 13 }}>notifications</span>
                 <span className="font-mono-data text-[10px] text-primary-fixed-dim font-bold tracking-widest">{totalUnread} NEW</span>

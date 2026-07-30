@@ -3,14 +3,14 @@ import { registerPlugin } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { LocalNotifications } from '@capacitor/local-notifications'
-import { processCommand as _processCommand, initEngine } from '../utils/OfflineCommandEngine'
-const processCommand = typeof _processCommand === 'function' ? _processCommand : async () => ({ success: false, response: 'Offline engine unavailable.' })
-import IrisVisualizer from './IrisVisualizer'
+import { processCommand, initEngine } from '../utils/OfflineCommandEngine'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { handleSideEffect } from '../utils/offlineSideEffects'
 import useOfflineTTS from '../hooks/useOfflineTTS'
 import useOfflineDispatch from '../hooks/useOfflineDispatch'
 import AssistantStatusPanel from './AssistantStatusPanel'
+import { useAssistantStore } from '../stores/assistantStore'
+import { queryIrisAI } from '../utils/aiQueryBridge'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 const launchApp = async (packageId, label) => {
@@ -36,6 +36,15 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
   const conversationHistoryRef = useRef([])
   const mountedRef = useRef(true)
   const timeoutsRef = useRef([])
+
+  const setIsStoreListening = useAssistantStore(state => state.setIsListening)
+
+  useEffect(() => {
+    setIsStoreListening(isVisible && isListening)
+    return () => {
+      setIsStoreListening(false)
+    }
+  }, [isVisible, isListening, setIsStoreListening])
 
   const { speakTextNative, stopSpeakingNative, canvasRef, activeAudioRef, ttsResolvers } = useOfflineTTS({ isVisible, isAppActive, speechInterruptRef })
 
@@ -63,6 +72,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
       mountedRef.current = false
       timeoutsRef.current.forEach(id => clearTimeout(id))
       timeoutsRef.current = []
+      LauncherPlugin.stopOfflineSpeech().catch(() => {})
     }
   }, [])
 
@@ -80,9 +90,11 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
       speechInterruptRef.current = true
       stopSpeakingNative()
       LauncherPlugin.stopOfflineSpeech().catch(() => {})
+      window.__iris_offline_assistant_active = false
       return
     }
 
+    window.__iris_offline_assistant_active = true
     speechInterruptRef.current = false
     startListening()
 
@@ -148,17 +160,24 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
       if (result?.text) {
         await handleCommand(result.text)
       } else {
-        // No speech recognized — auto-retry up to 10 times to fight Soda timeout bug
-        if (retryCount < 10 && !speechInterruptRef.current && isVisibleRef.current) {
+        if (retryCount < 1 && !speechInterruptRef.current && isVisibleRef.current) {
           setIsProcessing(false)
           setIsListening(false)
           const tid = setTimeout(() => {
               if (mountedRef.current && isVisibleRef.current) startListening(retryCount + 1)
-          }, 50)
+          }, 100)
           timeoutsRef.current.push(tid)
         } else {
           setStatusText('I didn\'t catch that. Tap to try again.')
           setIsListening(false)
+          setIsProcessing(false)
+          LauncherPlugin.stopOfflineSpeech().catch(() => {})
+          const tid = setTimeout(() => {
+            if (mountedRef.current && isVisibleRef.current && !pendingContextRef.current) {
+              if (typeof onClose === 'function') onClose()
+            }
+          }, 4000)
+          timeoutsRef.current.push(tid)
         }
       }
     } catch (e) {
@@ -166,15 +185,16 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
       console.error('[Iris] startListening error:', e)
       setIsProcessing(false)
       setIsListening(false)
-      if (retryCount < 10 && !speechInterruptRef.current && isVisibleRef.current) {
+      if (retryCount < 1 && !speechInterruptRef.current && isVisibleRef.current) {
         const tid = setTimeout(() => {
           if (mountedRef.current && isVisibleRef.current) {
             startListening(retryCount + 1)
           }
-        }, 50)
+        }, 100)
         timeoutsRef.current.push(tid)
       } else {
         setStatusText('Tap to try again.')
+        LauncherPlugin.stopOfflineSpeech().catch(() => {})
       }
     } finally {
       clearTimeout(unguardTimer)
@@ -185,17 +205,19 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
   const handleCommand = async (text) => {
     setIsProcessing(true)
     let didClose = false
-    let shouldKeepListening = false
+    let shouldKeepListening = true
     try {
       let result;
 
-      // Cancel always works regardless of context
-      if (/^(?:cancel|never\s*mind|nevermind|forget\s+it|scratch\s+that)$/i.test(text.trim())) {
+      // Cancel and exit commands close the overlay loop immediately
+      if (/^(?:cancel|never\s*mind|nevermind|forget\s+it|scratch\s+that|exit|close|stop|bye|goodbye)$/i.test(text.trim())) {
         setPendingContext(null)
         pendingSuggestionsRef.current = []
         pendingUninstallAppRef.current = ''
         pendingReminderTextRef.current = ''
-        result = { success: true, response: 'Cancelled.', keepListening: true }
+        result = { success: true, response: 'Goodbye.' }
+        didClose = true
+        shouldKeepListening = false
       } else if (pendingContext === 'WAITING_FOR_NOTE_TEXT') {
         setPendingContext(null)
         result = {
@@ -232,9 +254,10 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
             response: `Uninstalling ${app}.`
           }
           didClose = true
+          shouldKeepListening = false
         } else {
           pendingUninstallAppRef.current = ''
-          result = { success: true, response: 'Uninstall cancelled.', keepListening: true }
+          result = { success: true, response: 'Uninstall cancelled.' }
         }
       } else if (pendingContext === 'WAITING_FOR_CLEAR_NOTES_CONFIRM') {
         setPendingContext(null)
@@ -245,7 +268,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
             response: 'All notes cleared.'
           }
         } else {
-          result = { success: true, response: 'Notes not cleared.', keepListening: true }
+          result = { success: true, response: 'Notes not cleared.' }
         }
       } else if (pendingContext === 'WAITING_FOR_APP_SELECTION') {
         setPendingContext(null)
@@ -257,12 +280,12 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
             await launchApp(selected.packageId, selected.label)
             result = { success: true, response: `Opening ${selected.label}.` }
             didClose = true
+            shouldKeepListening = false
           } catch (e) {
             result = { success: true, response: `I couldn't open ${selected.label}.` }
           }
         } else {
           result = { success: true, response: "Invalid selection. Please say 1, 2, or 3." }
-          shouldKeepListening = true
         }
         pendingSuggestionsRef.current = []
       } else if (pendingContext === 'WAITING_FOR_CONTACT_SELECTION') {
@@ -275,22 +298,41 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
             await LauncherPlugin.makeCall({ number: selected.number, speaker: false })
             result = { success: true, response: `Calling ${selected.label}.` }
             didClose = true
+            shouldKeepListening = false
           } catch (e) {
             try {
               await LauncherPlugin.dialNumber({ number: selected.number })
               result = { success: true, response: `Opening dialer for ${selected.label}.` }
               didClose = true
+              shouldKeepListening = false
             } catch (e2) {
               result = { success: true, response: `I couldn't call ${selected.label}.` }
             }
           }
         } else {
           result = { success: true, response: "Invalid selection. Please say 1, 2, or 3." }
-          shouldKeepListening = true
         }
         pendingSuggestionsRef.current = []
+      } else if (/^(?:iris|hey\s+iris|hi\s+iris|ok\s+iris|hello\s+iris|ask\s+iris|ai|hey\s+ai|hi\s+ai|ok\s+ai|ask\s+ai|ask)\s+(.+)$/i.test(text.trim())) {
+        const query = text.trim().replace(/^(?:iris|hey\s+iris|hi\s+iris|ok\s+iris|hello\s+iris|ask\s+iris|ai|hey\s+ai|hi\s+ai|ok\s+ai|ask\s+ai|ask)\s+/i, '')
+        setStatusText('Connecting to Iris AI...')
+        try {
+          const aiResponse = await queryIrisAI(query, (chunk) => setStatusText(chunk))
+          result = { success: true, response: aiResponse }
+        } catch (err) {
+          result = { success: false, response: err.message || 'Could not connect to Iris AI.' }
+        }
       } else {
         result = await processCommand(text)
+        // If local engine didn't match a hardware/app command, fallback to Iris AI seamlessly if available
+        if (!result.commands?.length && !result.sideEffects?.length && text.trim().length > 6) {
+          try {
+            const aiResponse = await queryIrisAI(text.trim(), (chunk) => setStatusText(chunk))
+            if (aiResponse) {
+              result = { success: true, response: aiResponse }
+            }
+          } catch (_) {}
+        }
         if (result.requireMoreContext) {
           setPendingContext(result.requireMoreContext)
           if (result.requireMoreContext === 'WAITING_FOR_UNINSTALL_CONFIRM') {
@@ -302,7 +344,6 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
         } else {
           setPendingContext(null)
         }
-        if (result.keepListening) shouldKeepListening = true
       }
 
       // Conversation memory: track last 10 exchanges
@@ -316,7 +357,6 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
 
       if (!result.success) {
         setStatusText(result.response)
-        shouldKeepListening = true
         if (!speechInterruptRef.current) await speakTextNative(result.response)
         return
       }
@@ -334,17 +374,17 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
       // Show response text immediately (no "Thinking..." delay for commands)
       setStatusText(responseText)
 
-      // Execute system commands FIRST for instant response (open apps, calls, etc.)
+      // Execute system commands FIRST for instant response (open apps, calls, search, etc.)
       if (result.commands?.length > 0) {
         for (const cmd of result.commands) {
           const res = await dispatchCommand(cmd)
-          if (res?.close) {
+          if (res?.close || cmd.action === 'open' || cmd.action === 'call' || cmd.action === 'search' || cmd.action === 'uninstall') {
             didClose = true
+            shouldKeepListening = false
           }
           if (res?.error) {
             setStatusText(res.error)
             responseText = res.error
-            shouldKeepListening = true
           }
         }
       }
@@ -359,7 +399,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
         return
       }
 
-      // THEN speak the response (only for info/conversational commands)
+      // THEN speak the response (for conversational commands)
       if (!speechInterruptRef.current) {
         await speakTextNative(responseText, () => {
           setStatusText(responseText)
@@ -370,8 +410,8 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
 
     } catch (e) {
       console.error('[Iris] handleCommand error:', e)
-      setStatusText('Something went wrong.')
-      try { await speakTextNative('Something went wrong.') } catch (_) {}
+      setStatusText("I'm listening...")
+      shouldKeepListening = true
     } finally {
       setIsProcessing(false)
       if (isVisibleRef.current) {
@@ -380,7 +420,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
             if (mountedRef.current && isVisibleRef.current) {
               startListening()
             }
-          }, 1500)
+          }, 300)
           timeoutsRef.current.push(tid)
         } else if (didClose) {
           if (typeof onClose === 'function') onClose()
@@ -389,15 +429,10 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
             if (mountedRef.current && isVisibleRef.current) {
               startListening()
             }
-          }, 2000)
+          }, 200)
           timeoutsRef.current.push(tid)
         } else {
-          const tid = setTimeout(() => {
-            if (mountedRef.current && isVisibleRef.current) {
-              if (typeof onClose === 'function') onClose()
-            }
-          }, 3000)
-          timeoutsRef.current.push(tid)
+          if (typeof onClose === 'function') onClose()
         }
       }
     }
@@ -469,39 +504,6 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, sh
         isProcessing={isProcessing}
       />
     </div>
-
-    {/* The Single Animated Orb that flies seamlessly across the screen */}
-    {showHomeOrb && !PowerSaveManager.shouldDisable('orb') && (
-      <div 
-        className={`fixed inset-0 z-[110] pointer-events-none flex flex-col items-center ${
-          isVisible ? 'justify-center pb-32' : 'justify-end pb-[96px]'
-        }`}
-      >
-        <div 
-          style={{ transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-          className="pointer-events-auto cursor-pointer active:scale-95 flex items-center justify-center"
-          onClick={(e) => {
-          e.stopPropagation()
-          if (!isVisible) {
-            onOpen?.()
-          } else {
-            speechInterruptRef.current = false
-            speechStartingRef.current = false
-            stopSpeakingNative()
-            LauncherPlugin.stopOfflineSpeech().catch(() => {})
-            if (!isProcessing) startListening()
-          }
-        }}
-      >
-        <IrisVisualizer 
-          size={isVisible ? 180 : 60}
-          isProcessing={isProcessing}
-          isListening={isListening}
-          isAppActive={isAppActive}
-        />
-        </div>
-      </div>
-    )}
     </>
   )
 }

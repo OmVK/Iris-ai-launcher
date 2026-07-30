@@ -7,6 +7,7 @@ const DAILY_ROTATION_LAST_KEY = 'daily_wallpaper_last_date'
 const WALLPAPER_CACHE_KEY = 'wallpaper_cache'
 
 const WALLPAPERS = [
+  { id: 'SYSTEM', label: 'Phone Wallpaper', desc: 'Android native wallpaper', type: 'system', css: (o) => `radial-gradient(ellipse at 50% 0%, rgba(10,14,23,${o}) 0%, rgba(2,6,23,${o}) 100%)` },
   { id: 'VOID', label: 'Void Space', desc: 'Dark void gradient', type: 'gradient', css: (o) => `radial-gradient(ellipse at 50% 0%, rgba(10,14,23,${o}) 0%, rgba(2,6,23,${o}) 100%)` },
   { id: 'GRID', label: 'Cyber Grid', desc: 'Vector grid matrix', type: 'gradient', css: (o) => `linear-gradient(180deg, rgba(10,14,23,${o}) 0%, rgba(20,25,35,${o}) 50%, rgba(10,14,23,${o}) 100%)` },
   { id: 'NEBULA', label: 'Nebula Dust', desc: 'Nebula cloud gas', type: 'gradient', css: (o) => `radial-gradient(ellipse at top, rgba(30,27,75,${o}) 0%, rgba(2,6,23,${o}) 100%)` },

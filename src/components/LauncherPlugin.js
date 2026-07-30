@@ -221,21 +221,23 @@ export async function setAlarm(hour, minutes, message = "IRIS AI Assistant") {
 }
 
 export async function speakTextNative(text) {
-  if (isNative) {
+  return new Promise((resolve) => {
     try {
-      await NativeLauncher.speakText({ text })
-      return true
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.onend = () => resolve(true)
+        utterance.onerror = () => resolve(false)
+        window.speechSynthesis.speak(utterance)
+        setTimeout(() => resolve(true), Math.max(1200, text.length * 70))
+      } else {
+        setTimeout(() => resolve(true), 1000)
+      }
     } catch (e) {
-      console.error("Native TTS failed", e)
-      return false
+      console.warn('[IRIS] speakTextNative fallback warning:', e)
+      resolve(false)
     }
-  } else {
-    // Simulate finishing after rough delay
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('iris-speech-finished'))
-    }, Math.max(1500, text.length * 80))
-    return true
-  }
+  })
 }
 
 export function addSpeechFinishedListener(callback) {

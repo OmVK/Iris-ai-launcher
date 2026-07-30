@@ -151,30 +151,36 @@ export default function App() {
     }
   }
 
-  const customWallpaperData = useMemo(() => {
-    const raw = localStorage.getItem('custom_wallpaper') || ''
-    if (raw && !raw.startsWith('data:') && !raw.startsWith('blob:')) return ''
-    return raw
-  }, [wallpaper, hasCustomWallpaper])
-
   useEffect(() => {
     const body = document.body
     if (!body) return
-    body.style.background = '#020617'
+    body.style.background = wallpaper === 'SYSTEM' ? 'transparent' : '#020617'
     body.style.margin = '0'
-    body.style.padding = '0'
-  }, [])
+  }, [wallpaper])
 
-  const scale = dpiScale / 100
+  const scale = (dpiScale || 100) / 100
+
+  const customWallpaperData = useMemo(() => {
+    try {
+      let raw = localStorage.getItem('custom_wallpaper') || ''
+      if (!raw) return null
+      if (!raw.startsWith('data:') && !raw.startsWith('blob:') && !raw.startsWith('http')) {
+        raw = 'data:image/jpeg;base64,' + raw
+      }
+      return raw
+    } catch { return null }
+  }, [wallpaper, hasCustomWallpaper])
 
   const rootBgStyle = useMemo(() => {
     const bg = {}
-    if (wallpaper !== 'SYSTEM' && hasCustomWallpaper && wallpaper !== 'VOID' && customWallpaperData) {
+    if ((wallpaper === 'SYSTEM' || wallpaper === 'CUSTOM' || hasCustomWallpaper) && customWallpaperData) {
       bg.backgroundImage = `url("${customWallpaperData}")`
       bg.backgroundSize = 'cover'
       bg.backgroundPosition = 'center'
       bg.backgroundRepeat = 'no-repeat'
-    } else if (wallpaper !== 'SYSTEM' && wallpaper !== 'VOID' && !hasCustomWallpaper) {
+    } else if (wallpaper === 'SYSTEM') {
+      bg.background = 'transparent'
+    } else if (wallpaper !== 'VOID') {
       bg.background = getGradient(wallpaper)
     } else {
       bg.background = getGradient('VOID')
@@ -191,7 +197,7 @@ export default function App() {
 
   return (
     <div
-      style={scale === 1 ? { width: '100vw', height: '100lvh', background: '#020617' } : { zoom: scale, width: `${100 / scale}vw`, height: `${100 / scale}lvh`, background: '#020617' }}
+      style={scale === 1 ? { width: '100vw', height: '100lvh', background: wallpaper === 'SYSTEM' ? 'transparent' : '#020617' } : { zoom: scale, width: `${100 / scale}vw`, height: `${100 / scale}lvh`, background: wallpaper === 'SYSTEM' ? 'transparent' : '#020617' }}
       className={`relative flex flex-col overflow-hidden transition-all duration-300 interactive-glass h-full w-full text-on-surface font-mono selection:bg-primary-fixed-dim/30 ${PowerSaveManager.isEnabled() ? 'power-save-mode' : ''} ${darkGlassTheme ? 'dark-glass-theme' : ''}`}
       onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
     >

@@ -1,11 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useThemeStore } from '../stores/themeStore'
+import { useAssistantStore } from '../stores/assistantStore'
 
 export default function BottomNavBar({ activePage, setActivePage, showAppLabels = true }) {
   const { dockColumns, dockBackground } = useThemeStore()
+  const { isListening, isSpeaking } = useAssistantStore()
   const [collapsed, setCollapsed] = useState(false)
   const collapseTimer = useRef(null)
   const navRef = useRef(null)
+  const holdTimerRef = useRef(null)
+
+  const isAiActive = isListening || isSpeaking
 
   const tabs = [
     { id: 'home', label: 'Home', icon: 'home_app_logo', filled: true },
@@ -58,6 +63,13 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   const colHeight = 32
 
   const getDockBgStyle = () => {
+    if (isAiActive) {
+      return {
+        background: 'rgba(12, 16, 28, 0.95)',
+        backdropFilter: 'blur(40px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(40px) saturate(180%)'
+      }
+    }
     switch(dockBackground) {
       case 'none': return { background: 'transparent', backdropFilter: 'none', WebkitBackdropFilter: 'none' }
       case 'solid': return { background: 'rgba(12, 16, 28, 1)', backdropFilter: 'none', WebkitBackdropFilter: 'none' }
@@ -69,13 +81,29 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
 
   const touchStartX = useRef(null)
   const isSwiping = useRef(false)
+  const holdTriggeredRef = useRef(false)
+
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+  }
 
   const handleTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX
     isSwiping.current = false
+    holdTriggeredRef.current = false
+    clearHoldTimer()
+    holdTimerRef.current = setTimeout(() => {
+      holdTriggeredRef.current = true
+      try { if (navigator.vibrate) navigator.vibrate([20, 30]) } catch (_) {}
+      window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
+    }, 350)
   }, [])
 
   const handleTouchEnd = useCallback((e) => {
+    clearHoldTimer()
     if (touchStartX.current === null) return
     const touchEndX = e.changedTouches[0].clientX
     const diff = touchStartX.current - touchEndX
@@ -95,6 +123,10 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   }, [activePage, setActivePage, startCollapseTimer, tabs])
 
   const handleDockClick = useCallback(() => {
+    if (holdTriggeredRef.current) {
+      holdTriggeredRef.current = false
+      return
+    }
     if (isSwiping.current) {
       isSwiping.current = false
       return
@@ -106,18 +138,23 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-2 pointer-events-none">
       <div
         ref={navRef}
-        className="pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)]"
+        className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
         style={{
           ...getDockBgStyle(),
-          border: dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: dockBackground === 'none' ? 'none' : (collapsed
-            ? '0 -2px 12px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
-            : '0 -4px 24px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)'),
+          border: isAiActive ? '1px solid rgba(168, 85, 247, 0.9)' : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)'),
+          boxShadow: isAiActive
+            ? '0 -10px 50px rgba(168, 85, 247, 0.9), 0 -20px 90px rgba(147, 51, 234, 0.6), 0 -30px 110px rgba(16, 185, 129, 0.4), inset 0 1px 15px rgba(168, 85, 247, 0.8)'
+            : (dockBackground === 'none' ? 'none' : (collapsed
+              ? '0 -2px 12px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
+              : '0 -4px 24px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)')),
           width: collapsed ? colWidth : expWidth,
           height: collapsed ? colHeight : expHeight,
           borderRadius: collapsed ? 20 : 34,
         }}
       >
+        {isAiActive && (
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-purple-500 via-emerald-400 to-purple-500 shadow-[0_0_14px_#34d399] animate-pulse" />
+        )}
         {/* Collapsed State */}
         <div 
           className={`absolute inset-0 flex items-center justify-center transition-all ${

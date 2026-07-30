@@ -2,7 +2,10 @@ import { launchApp } from '../components/LauncherPlugin'
 
 export default function usePageRouter({ setActivePage, setChronoTarget, setShowChronoLock, isVaultUnlocked, setShowVaultExplorer }) {
   const handleLaunchApp = (app) => {
-    if (app.path) {
+    if (!app) return
+    if (typeof app === 'string') {
+      launchApp(app)
+    } else if (app.path) {
       setActivePage(app.path)
     } else if (app.packageId) {
       launchApp(app.packageId, app.label)

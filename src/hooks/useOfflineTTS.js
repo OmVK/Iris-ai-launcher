@@ -207,16 +207,18 @@ export default function useOfflineTTS({ isVisible, isAppActive, speechInterruptR
       } else {
         ttsResolvers.current.delete(jobId)
         if (onAudioStart) onAudioStart()
-        Promise.race([
-          LauncherPlugin.speakText({ text }),
-          new Promise(r => setTimeout(r, 3000))
-        ]).then(() => {
-          if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
-          resolve()
-        }).catch(() => {
-          if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
-          resolve()
-        })
+        if ('speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.cancel()
+            const u = new SpeechSynthesisUtterance(text)
+            u.onend = () => resolve()
+            u.onerror = () => resolve()
+            window.speechSynthesis.speak(u)
+            setTimeout(resolve, Math.max(1500, text.length * 80))
+          } catch (_) { resolve() }
+        } else {
+          setTimeout(resolve, 1000)
+        }
       }
     })
   }

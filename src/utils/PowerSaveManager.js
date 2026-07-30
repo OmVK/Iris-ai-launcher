@@ -27,7 +27,9 @@ const FEATURE_PRESETS = {
     networkPollMs: 5000,
     keepAlivePollMs: 300000,
     taskCheckPollMs: 120000,
-    wallpaperFps: 120,
+    wallpaperFps: 60,
+    maxOrbParticles: 200,
+    maxCanvasDpr: 1.5,
     iconDecodeSize: 64,
     deferredPiperInit: false,
     maxRenderItems: Infinity
@@ -50,7 +52,9 @@ const FEATURE_PRESETS = {
     networkPollMs: 15000,
     keepAlivePollMs: 300000,
     taskCheckPollMs: 120000,
-    wallpaperFps: 0,
+    wallpaperFps: 30,
+    maxOrbParticles: 120,
+    maxCanvasDpr: 1.25,
     iconDecodeSize: 48,
     deferredPiperInit: true,
     maxRenderItems: 50
@@ -74,6 +78,8 @@ const FEATURE_PRESETS = {
     keepAlivePollMs: 120000,
     taskCheckPollMs: 120000,
     wallpaperFps: 0,
+    maxOrbParticles: 60,
+    maxCanvasDpr: 1.0,
     iconDecodeSize: 32,
     deferredPiperInit: true,
     maxRenderItems: 20
