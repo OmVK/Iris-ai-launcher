@@ -43,7 +43,7 @@ export default function Home({
   // Power Save Mode (reactive)
   powerSaveMode
 }) {
-  const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, showHomeOrb, homePages, activeHomePage, setActiveHomePage, homeScreenFolders, setHomeScreenFolders, iconShape } = useThemeStore()
+  const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, homePages, activeHomePage, setActiveHomePage, homeScreenFolders, setHomeScreenFolders, iconShape } = useThemeStore()
   
   const [showOfflineAssistant, setShowOfflineAssistant] = useState(false)
   const [assistantState, setAssistantState] = useState({ isListening: false, isProcessing: false })
@@ -271,7 +271,6 @@ export default function Home({
           isVisible={showOfflineAssistant} 
           onClose={() => setShowOfflineAssistant(false)} 
           onOpen={() => setShowOfflineAssistant(true)}
-          showHomeOrb={showHomeOrb}
           appsList={installedApps}
           onStateChange={setAssistantState}
           isAppActive={isAppActive}

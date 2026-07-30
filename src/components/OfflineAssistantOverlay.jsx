@@ -23,7 +23,7 @@ const launchApp = async (packageId, label) => {
   }
 }
 
-export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, showHomeOrb = true, appsList, onStateChange, isAppActive = true }) {
+export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, appsList, onStateChange, isAppActive = true }) {
   const [statusText, setStatusText] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isListening, setIsListening] = useState(false)

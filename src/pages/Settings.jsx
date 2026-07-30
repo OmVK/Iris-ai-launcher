@@ -39,7 +39,7 @@ export default function Settings({
     showAppLabels, setShowAppLabels, showDrawerSearch, setShowDrawerSearch, activeLiveWallpaper, setActiveLiveWallpaper,
     fullscreenActive, setFullscreenActive, globalIconTheme, setGlobalIconTheme, use24HourClock, setUse24HourClock,
     pageTransitionEffect, setPageTransitionEffect, pageTransitionSpeed, setPageTransitionSpeed,
-    pageTransitionEasing, setPageTransitionEasing, showHomeOrb, setShowHomeOrb, drawerLayout, setDrawerLayout,
+    pageTransitionEasing, setPageTransitionEasing, drawerLayout, setDrawerLayout,
     darkGlassTheme, setDarkGlassTheme, homePages, setHomePages,
     iconShape, setIconShape, dockColumns, setDockColumns, dockBackground, setDockBackground, homeScreenFolders, setHomeScreenFolders
   } = useThemeStore()
@@ -69,7 +69,7 @@ export default function Settings({
       <LLMBackendSection expandedSections={expandedSections} toggleSection={toggleSection} llmBackend={llmBackend} setLlmBackend={setLlmBackend} geminiModel={geminiModel} setGeminiModel={setGeminiModel} />
       <VoiceSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} voicePitch={voicePitch} setVoicePitch={setVoicePitch} voiceRate={voiceRate} setVoiceRate={setVoiceRate} />
       <NeuralSkillsSection expandedSections={expandedSections} toggleSection={toggleSection} showDrawerSearch={showDrawerSearch} setShowDrawerSearch={setShowDrawerSearch} />
-      <TweaksSection expandedSections={expandedSections} toggleSection={toggleSection} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} showAppLabels={showAppLabels} setShowAppLabels={setShowAppLabels} use24HourClock={use24HourClock} setUse24HourClock={setUse24HourClock} fullscreenActive={fullscreenActive} setFullscreenActive={setFullscreenActive} showHomeOrb={showHomeOrb} setShowHomeOrb={setShowHomeOrb} darkGlassTheme={darkGlassTheme} setDarkGlassTheme={setDarkGlassTheme} />
+      <TweaksSection expandedSections={expandedSections} toggleSection={toggleSection} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} showAppLabels={showAppLabels} setShowAppLabels={setShowAppLabels} use24HourClock={use24HourClock} setUse24HourClock={setUse24HourClock} fullscreenActive={fullscreenActive} setFullscreenActive={setFullscreenActive} darkGlassTheme={darkGlassTheme} setDarkGlassTheme={setDarkGlassTheme} />
 
       <div className="border-t border-white/5 pt-4">
         <p className="text-[9px] text-white/20 font-mono-data mb-3 uppercase">System Configuration</p>
