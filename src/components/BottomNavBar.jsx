@@ -136,14 +136,14 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-2 pointer-events-none">
-      <div
-        ref={navRef}
-        className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
+        <div
+          ref={navRef}
+          className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
         style={{
           ...getDockBgStyle(),
-          border: isAiActive ? '1px solid rgba(168, 85, 247, 0.9)' : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)'),
+          border: isAiActive ? undefined : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)'),
           boxShadow: isAiActive
-            ? '0 -10px 50px rgba(168, 85, 247, 0.9), 0 -20px 90px rgba(147, 51, 234, 0.6), 0 -30px 110px rgba(16, 185, 129, 0.4), inset 0 1px 15px rgba(168, 85, 247, 0.8)'
+            ? undefined
             : (dockBackground === 'none' ? 'none' : (collapsed
               ? '0 -2px 12px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
               : '0 -4px 24px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)')),

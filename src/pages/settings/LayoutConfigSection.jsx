@@ -43,16 +43,6 @@ export default function LayoutConfigSection({ expandedSections, toggleSection, d
         <SettingSlider label="Top Offset Margin" value={islandTopMargin} onChange={setIslandTopMargin} min="0" max="24" unit="px" />
       </div>
 
-      <div className="space-y-2">
-        <label className="text-[9px] text-on-surface-variant block">HOME_CORE_PLACEMENT</label>
-        <div className="grid grid-cols-3 gap-2">
-          {[{ id: 'CENTERED', label: 'Center Focus' }, { id: 'CORE_BOTTOM', label: 'Core Bottom' }].map(style => (
-            <button key={style.id} onClick={() => setLayoutStyle(style.id)} className={`py-1.5 px-1 rounded border text-[9px] truncate transition-all active:scale-95 ${layoutStyle === style.id ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim' : 'bg-black/20 border-outline-variant/30 text-on-surface-variant/70 hover:text-white'}`}>
-              {style.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <SettingSlider label="Home Icon Scale" value={homeIconSize} onChange={setHomeIconSize} min="80" max="120" unit="%" />
       <SettingSlider label="Drawer Icon Scale" value={drawerIconSize} onChange={setDrawerIconSize} min="60" max="200" unit="%" />

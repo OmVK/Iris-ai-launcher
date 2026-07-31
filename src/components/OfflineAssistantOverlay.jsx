@@ -40,11 +40,11 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
   const setIsStoreListening = useAssistantStore(state => state.setIsListening)
 
   useEffect(() => {
-    setIsStoreListening(isVisible && isListening)
+    setIsStoreListening(isVisible)
     return () => {
       setIsStoreListening(false)
     }
-  }, [isVisible, isListening, setIsStoreListening])
+  }, [isVisible, setIsStoreListening])
 
   const { speakTextNative, stopSpeakingNative, canvasRef, activeAudioRef, ttsResolvers } = useOfflineTTS({ isVisible, isAppActive, speechInterruptRef })
 
@@ -128,6 +128,68 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
 
   const speechStartingRef = useRef(false)
 
+  const fallbackWebSpeech = async () => {
+    return new Promise((resolve) => {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (!SpeechRecognition) {
+        resolve(null)
+        return
+      }
+      try {
+        const recog = new SpeechRecognition()
+        recog.continuous = false
+        recog.interimResults = true
+        recog.lang = 'en-US'
+
+        let finalTranscript = ''
+
+        recog.onstart = () => {
+          if (mountedRef.current && isVisibleRef.current) {
+            setStatusText('Listening...')
+            setIsListening(true)
+            setIsProcessing(false)
+          }
+        }
+
+        recog.onresult = (event) => {
+          let interim = ''
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript
+            } else {
+              interim += event.results[i][0].transcript
+            }
+          }
+          const text = finalTranscript || interim
+          if (text && mountedRef.current && isVisibleRef.current) {
+            setStatusText(text)
+          }
+        }
+
+        recog.onerror = (err) => {
+          console.warn('[Iris WebSpeech Error]', err)
+          setIsListening(false)
+          setIsProcessing(false)
+          resolve(null)
+        }
+
+        recog.onend = () => {
+          setIsListening(false)
+          if (finalTranscript.trim()) {
+            resolve({ text: finalTranscript.trim() })
+          } else {
+            resolve(null)
+          }
+        }
+
+        recog.start()
+      } catch (e) {
+        console.warn('[Iris WebSpeech start error]', e)
+        resolve(null)
+      }
+    })
+  }
+
   const startListening = async (retryCount = 0) => {
     // Reset guard if stale from a previous session that never completed
     if (speechStartingRef.current) {
@@ -141,7 +203,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
       try {
         await LauncherPlugin.stopOfflineSpeech()
         // Brief delay to let native recognizer fully release
-        await new Promise(r => setTimeout(r, 300))
+        await new Promise(r => setTimeout(r, 150))
       } catch (_) {}
       
       try {
@@ -149,13 +211,24 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
         const micStatus = await checkAndRequestPermission('RECORD_AUDIO')
         if (micStatus && !micStatus.granted && micStatus.sdkRequired) {
           setStatusText('Microphone access required')
+          setIsListening(false)
+          setIsProcessing(false)
           return
         }
       } catch (_) {}
-      setStatusText('Starting...')
-      setIsListening(false)
-      setIsProcessing(true)
-      const result = await LauncherPlugin.startOfflineSpeech()
+
+      setStatusText('Listening...')
+      setIsListening(true)
+      setIsProcessing(false)
+
+      let result = null
+      try {
+        result = await LauncherPlugin.startOfflineSpeech()
+      } catch (nativeErr) {
+        console.warn('[Iris] Native startOfflineSpeech failed/rejected, attempting WebSpeech:', nativeErr)
+        result = await fallbackWebSpeech()
+      }
+
       clearTimeout(unguardTimer)
       if (result?.text) {
         await handleCommand(result.text)
@@ -165,19 +238,13 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
           setIsListening(false)
           const tid = setTimeout(() => {
               if (mountedRef.current && isVisibleRef.current) startListening(retryCount + 1)
-          }, 100)
+          }, 150)
           timeoutsRef.current.push(tid)
         } else {
           setStatusText('I didn\'t catch that. Tap to try again.')
           setIsListening(false)
           setIsProcessing(false)
           LauncherPlugin.stopOfflineSpeech().catch(() => {})
-          const tid = setTimeout(() => {
-            if (mountedRef.current && isVisibleRef.current && !pendingContextRef.current) {
-              if (typeof onClose === 'function') onClose()
-            }
-          }, 4000)
-          timeoutsRef.current.push(tid)
         }
       }
     } catch (e) {
@@ -190,7 +257,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
           if (mountedRef.current && isVisibleRef.current) {
             startListening(retryCount + 1)
           }
-        }, 100)
+        }, 150)
         timeoutsRef.current.push(tid)
       } else {
         setStatusText('Tap to try again.')
@@ -202,10 +269,11 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
     }
   }
 
+
   const handleCommand = async (text) => {
     setIsProcessing(true)
     let didClose = false
-    let shouldKeepListening = true
+    let shouldKeepListening = false
     try {
       let result;
 
@@ -432,7 +500,12 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
           }, 200)
           timeoutsRef.current.push(tid)
         } else {
-          if (typeof onClose === 'function') onClose()
+          const tid = setTimeout(() => {
+            if (mountedRef.current && isVisibleRef.current && !pendingContextRef.current) {
+              if (typeof onClose === 'function') onClose()
+            }
+          }, 2500)
+          timeoutsRef.current.push(tid)
         }
       }
     }
@@ -486,24 +559,26 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
     }
   }
 
-  return (
-    <>
-    <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-all duration-500 pointer-events-none ${
-        isVisible ? 'opacity-100' : 'opacity-0'
-      }`}
-    >
-      {/* Backdrop */}
-      <div className={`absolute inset-0 bg-transparent ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'}`} onClick={() => onClose?.()} />
+  if (!isVisible) return null
 
-      {/* Content */}
-      <AssistantStatusPanel
-        statusText={statusText}
-        canvasRef={canvasRef}
-        isListening={isListening}
-        isProcessing={isProcessing}
-      />
+  return (
+    <div 
+      className="fixed inset-0 z-40 pointer-events-auto"
+      onClick={() => {
+        if (typeof onClose === 'function') onClose()
+      }}
+    >
+      <div onClick={(e) => e.stopPropagation()}>
+        <AssistantStatusPanel
+          statusText={statusText}
+          isListening={isListening}
+          isProcessing={isProcessing}
+          onRetry={() => startListening(0)}
+        />
+      </div>
     </div>
-    </>
   )
 }
+
+
+

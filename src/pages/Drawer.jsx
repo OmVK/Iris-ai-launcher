@@ -239,19 +239,21 @@ export default function Drawer({
 
       <div className="sticky top-0 z-40 bg-background/0 pb-4">
         <div className="max-w-xl mx-auto space-y-4">
-          <div className="glass-chip glass-border rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_15px_rgba(var(--primary-rgb),0.15)]">
-            <span className="material-symbols-outlined text-primary-fixed-dim">search</span>
-            <input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search apps..."
-              className="bg-transparent border-none focus:outline-none focus:ring-0 w-full text-xs font-mono-data text-on-surface placeholder:text-on-surface-variant/40"
-              type="text"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="material-symbols-outlined text-on-surface-variant hover:text-white transition-colors text-sm">close</button>
-            )}
-          </div>
+          {showDrawerSearch && (
+            <div className="glass-chip glass-border rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_15px_rgba(var(--primary-rgb),0.15)]">
+              <span className="material-symbols-outlined text-primary-fixed-dim">search</span>
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search apps..."
+                className="bg-transparent border-none focus:outline-none focus:ring-0 w-full text-xs font-mono-data text-on-surface placeholder:text-on-surface-variant/40"
+                type="text"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="material-symbols-outlined text-on-surface-variant hover:text-white transition-colors text-sm">close</button>
+              )}
+            </div>
+          )}
 
 
           <div className="flex gap-2 justify-center pt-1 flex-wrap items-center">

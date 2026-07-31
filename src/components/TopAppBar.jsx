@@ -219,17 +219,17 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ paddingTop: `${computedTopMargin}px` }}>
-      <div
-        ref={islandRef}
-        onClick={handleToggle}
-        className={`pointer-events-auto relative flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-breathe' : ''}`}
+        <div
+          ref={islandRef}
+          onClick={handleToggle}
+          className={`pointer-events-auto relative flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-breathe' : ''}`}
         style={{
           background: isAiActive ? 'rgba(8, 12, 24, 0.94)' : 'rgba(12, 16, 28, 0.82)',
           backdropFilter: 'blur(40px) saturate(180%)',
           WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          border: isAiActive ? '1px solid rgba(168, 85, 247, 0.85)' : `1px solid ${borderColor}`,
+          border: isAiActive ? undefined : `1px solid ${borderColor}`,
           boxShadow: isAiActive
-            ? '0 0 40px rgba(168, 85, 247, 0.85), 0 0 70px rgba(147, 51, 234, 0.55), 0 0 100px rgba(16, 185, 129, 0.35), inset 0 0 18px rgba(168, 85, 247, 0.7)'
+            ? undefined
             : (expanded ? `0 10px 40px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)` : `0 4px 12px ${glowColor}`),
           width: activeWidth,
           height: activeHeight,
