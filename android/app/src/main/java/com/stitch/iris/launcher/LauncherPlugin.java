@@ -1389,7 +1389,11 @@ public class LauncherPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             try {
                 if (currentRecognizer == null) {
-                    currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && android.speech.SpeechRecognizer.isOnDeviceRecognitionAvailable(getContext())) {
+                        currentRecognizer = android.speech.SpeechRecognizer.createOnDeviceSpeechRecognizer(getContext());
+                    } else {
+                        currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
+                    }
                 }
                 Intent intent = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -1401,6 +1405,7 @@ public class LauncherPlugin extends Plugin {
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000);
                 intent.putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 5000);
                 intent.putExtra("android.speech.extra.DICTATION_MODE", true);
+                intent.putExtra("sound_off", true);
 
                 // Mute system streams to silence Google Assistant activation chime
                 final android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
