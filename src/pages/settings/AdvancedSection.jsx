@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { SettingToggle, SettingSlider } from './SettingControls'
 import SettingsSection from './SettingsSection'
 import { isAccessibilityServiceEnabled, isUsageStatsEnabled, openPermissionSettings } from '../../components/LauncherPlugin'
+import HapticFeedback from '../../utils/HapticFeedback'
 
 export default function AdvancedSection({ expandedSections, toggleSection }) {
   const [settings, setSettings] = useState({
@@ -9,12 +10,14 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
     accessibilityEnabled: false,
     overlayEnabled: false,
     usageStatsEnabled: false,
+    hapticsEnabled: true,
   })
 
   useEffect(() => {
     const savedDebug = localStorage.getItem('iris_debug_mode') === 'true'
     const savedOverlay = localStorage.getItem('iris_overlay_enabled') === 'true'
-    setSettings(s => ({ ...s, debugMode: savedDebug, overlayEnabled: savedOverlay }))
+    const savedHaptics = HapticFeedback.isEnabled()
+    setSettings(s => ({ ...s, debugMode: savedDebug, overlayEnabled: savedOverlay, hapticsEnabled: savedHaptics }))
 
     const checkPerms = async () => {
       const a11y = await isAccessibilityServiceEnabled()
@@ -23,7 +26,6 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
     }
     checkPerms()
     
-    // Listen for window focus to re-check permissions if user returns from settings
     const onFocus = () => checkPerms()
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
@@ -33,11 +35,20 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
     setSettings(s => ({ ...s, [key]: value }))
     if (key === 'debugMode') localStorage.setItem('iris_debug_mode', value ? 'true' : 'false')
     if (key === 'overlayEnabled') localStorage.setItem('iris_overlay_enabled', value ? 'true' : 'false')
+    if (key === 'hapticsEnabled') HapticFeedback.setEnabled(value)
   }
 
   return (
-    <SettingsSection title="ADVANCED" icon="tune" sectionKey="advanced" expandedSections={expandedSections} toggleSection={toggleSection}>
+    <SettingsSection title="ADVANCED & SYSTEM HAPTICS" icon="tune" sectionKey="advanced" expandedSections={expandedSections} toggleSection={toggleSection}>
       <div className="space-y-3">
+      <SettingToggle
+        icon="vibration"
+        label="Haptic Vibration Feedback"
+        sublabel="Enable touch gesture rumble feedback"
+        enabled={settings.hapticsEnabled}
+        onChange={(v) => handleToggle('hapticsEnabled', v)}
+      />
+
       <SettingToggle
         icon="bug_report"
         label="Debug Mode"

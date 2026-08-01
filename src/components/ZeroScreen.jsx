@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAIStore } from '../stores/aiStore'
-import { fetchCurrentWeather } from '../utils/weather'
 import { queryIrisAI } from '../utils/aiQueryBridge'
 import { getSystemStats } from './LauncherPlugin'
 
@@ -24,17 +23,7 @@ const EXPANDED_FALLBACK_QUOTES = [
   '"The advance of technology is based on making it fit in so that you don\'t really even notice it." — Mark Weiser',
   '"Machines take me by surprise with great frequency." — Alan Turing',
   '"The computer was born to solve problems that did not exist before." — Bill Gates',
-  '"Logic will get you from A to Z; imagination will get you everywhere." — Albert Einstein',
-  '"Complexity is your enemy. Any fool can make something complicated. It is hard to keep things simple." — Richard Branson',
-  '"The quietest thoughts are often the loudest in execution." — Cybernetic Proverb',
-  '"First, solve the problem. Then, write the code." — John Johnson',
-  '"Experience is the name everyone gives to their mistakes." — Oscar Wilde',
-  '"In the middle of difficulty lies opportunity." — Albert Einstein',
-  '"Turn your wounds into wisdom." — Oprah Winfrey',
-  '"What we think, we become." — Buddha',
-  '"Yesterday is history, tomorrow is a mystery, today is a gift." — Eleanor Roosevelt',
-  '"Creativity is intelligence having fun." — Albert Einstein',
-  '"Knowledge is power." — Francis Bacon'
+  '"Logic will get you from A to Z; imagination will get you everywhere." — Albert Einstein'
 ]
 
 const recentQuotesHistory = []
@@ -42,7 +31,6 @@ const recentQuotesHistory = []
 async function fetchQuoteFromMultiSources() {
   const apis = [
     async () => {
-      // Pick random quote from dummyjson 100 quote pool
       const randomSkip = Math.floor(Math.random() * 90)
       const res = await fetch(`https://dummyjson.com/quotes?limit=10&skip=${randomSkip}`, { signal: AbortSignal.timeout(3500) })
       const data = await res.json()
@@ -59,18 +47,9 @@ async function fetchQuoteFromMultiSources() {
         return `"${data.text}" — ${data.author}`
       }
       throw new Error('Stoic quote invalid')
-    },
-    async () => {
-      const res = await fetch('https://api.quotable.io/random', { signal: AbortSignal.timeout(3500) })
-      const data = await res.json()
-      if (data?.content && data?.author) {
-        return `"${data.content}" — ${data.author}`
-      }
-      throw new Error('Quotable invalid')
     }
   ]
 
-  // Shuffle APIs
   const shuffled = [...apis].sort(() => Math.random() - 0.5)
 
   for (const fetchFn of shuffled) {
@@ -84,7 +63,6 @@ async function fetchQuoteFromMultiSources() {
     } catch (_) {}
   }
 
-  // Fallback to local array with duplicate filter
   let pool = EXPANDED_FALLBACK_QUOTES.filter(q => !recentQuotesHistory.includes(q))
   if (pool.length === 0) {
     recentQuotesHistory.length = 0
@@ -93,6 +71,41 @@ async function fetchQuoteFromMultiSources() {
   const picked = pool[Math.floor(Math.random() * pool.length)]
   recentQuotesHistory.push(picked)
   return picked
+}
+
+async function fetchTopNewsHeadlines() {
+  try {
+    const topRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json?print=pretty', { signal: AbortSignal.timeout(4000) })
+    const topIds = await topRes.json()
+    if (!Array.isArray(topIds) || topIds.length === 0) throw new Error('No top stories')
+
+    const first5 = topIds.slice(0, 5)
+    const storyPromises = first5.map(id => 
+      fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, { signal: AbortSignal.timeout(3000) })
+        .then(r => r.json())
+        .catch(() => null)
+    )
+    const stories = await Promise.all(storyPromises)
+    const validStories = stories.filter(s => s && s.title)
+    if (validStories.length > 0) {
+      return validStories.map(s => ({
+        id: s.id,
+        title: s.title,
+        url: s.url || `https://news.ycombinator.com/item?id=${s.id}`,
+        score: s.score || 0
+      }))
+    }
+  } catch (e) {
+    console.warn('[ZeroScreen] News fetch error:', e)
+  }
+
+  return [
+    { id: 1, title: 'AI models achieve human-level multimodal reasoning across benchmarks', url: 'https://news.google.com', score: 420 },
+    { id: 2, title: 'Quantum processors demonstrate real-time fault-tolerant error correction', url: 'https://news.google.com', score: 380 },
+    { id: 3, title: 'Next-generation solid-state battery technology enters mass production', url: 'https://news.google.com', score: 290 },
+    { id: 4, title: 'Global open-source web frameworks release major performance architecture updates', url: 'https://news.google.com', score: 215 },
+    { id: 5, title: 'Autonomous neural network agents optimize clean energy grid distribution', url: 'https://news.google.com', score: 195 }
+  ]
 }
 
 const BRIEFING_HEADERS = [
@@ -104,55 +117,34 @@ const BRIEFING_HEADERS = [
   "ORBITAL SYSTEM MATRIX"
 ]
 
-const BRIEFING_FOOTERS = [
-  "ALL SUB-PROCESSES RUNNING AT OPTIMAL EFFICIENCY.",
-  "ENCRYPTION PIPELINES SECURED. SYSTEM ENCLOSURE NORMAL.",
-  "BACKGROUND HEURISTICS SYNCHRONIZING REAL-TIME METRICS.",
-  "ATMOSPHERIC DATA INTEGRATED INTO PRIMARY DATABANKS.",
-  "MEMORY CYCLES CLEARED. RUNTIME HEALTH AT MAXIMUM LEVEL."
-]
-
-async function generateProceduralBriefing(weatherStr) {
+async function generateProceduralBriefing() {
   const hour = new Date().getHours()
   const timeOfDay = hour < 5 ? 'NIGHT' : hour < 12 ? 'MORNING' : hour < 18 ? 'AFTERNOON' : 'EVENING'
   const location = localStorage.getItem('iris_weather_city') || 'LOCAL NODE'
-  const cond = weatherStr && weatherStr !== 'Loading weather...' ? weatherStr : 'CLEAR METRICS'
 
   let statsStr = ''
   try {
     const stats = await getSystemStats()
     if (stats && stats.memUsed && stats.memTotal) {
-      statsStr = ` // SYS_MEM: ${stats.memUsed}G/${stats.memTotal}G`
+      statsStr = ` // MEM: ${stats.memUsed}G/${stats.memTotal}G`
     }
   } catch (_) {}
 
   const header = BRIEFING_HEADERS[Math.floor(Math.random() * BRIEFING_HEADERS.length)]
-  const footer = BRIEFING_FOOTERS[Math.floor(Math.random() * BRIEFING_FOOTERS.length)]
-
-  return `${header} // GOOD ${timeOfDay}. LOCATION: ${location.toUpperCase()}. ATMOSPHERE: ${cond}${statsStr}. ${footer}`
+  return `${header} // GOOD ${timeOfDay}. LOCATION: ${location.toUpperCase()}${statsStr}. INTELLIGENCE FEED SYNCHRONIZED.`
 }
 
 export default function ZeroScreen({ onNavigate, isAppActive }) {
   const [quote, setQuote] = useState("Loading quote...")
   const [briefing, setBriefing] = useState("Generating daily briefing...")
-  const [weather, setWeather] = useState("Loading weather...")
+  const [newsStories, setNewsStories] = useState([])
   const [refreshing, setRefreshing] = useState(false)
 
   const refreshAll = useCallback(async () => {
     setRefreshing(true)
-    let currentWx = weather
 
-    // 1. Fetch Weather
-    try {
-      const weatherData = await fetchCurrentWeather()
-      if (weatherData) {
-        currentWx = weatherData.displayString
-        setWeather(currentWx)
-        localStorage.setItem('iris_cached_weather_string', currentWx)
-      }
-    } catch (e) {
-      console.error('Weather fetch failed:', e)
-    }
+    // 1. Fetch Top 5 Hot News Topics
+    fetchTopNewsHeadlines().then(stories => setNewsStories(stories))
 
     // 2. Fetch Multi-Source Unique Quote
     try {
@@ -170,40 +162,35 @@ export default function ZeroScreen({ onNavigate, isAppActive }) {
       
       if (geminiKey || groqKey) {
         const timeStr = new Date().toLocaleTimeString()
-        const location = localStorage.getItem('iris_weather_city') || 'Unknown Location'
         const randSeed = Math.floor(Math.random() * 1000)
-        const prompt = `Write a fresh, futuristic 2-sentence daily briefing for an Android launcher zero screen. Current time: ${timeStr}. Weather: ${currentWx}. Location: ${location}. Random Seed: ${randSeed}. Keep it under 40 words.`
+        const prompt = `Write a futuristic 2-sentence daily briefing for an Android launcher zero screen. Current time: ${timeStr}. Random Seed: ${randSeed}. Keep it under 35 words.`
         
         try {
           const aiResponse = await queryIrisAI(prompt)
           if (aiResponse && aiResponse.trim().length > 0) {
             setBriefing(aiResponse.trim())
           } else {
-            const proc = await generateProceduralBriefing(currentWx)
+            const proc = await generateProceduralBriefing()
             setBriefing(proc)
           }
         } catch (err) {
-          console.warn('[ZeroScreen] AI Briefing bridge error, fallback to procedural:', err)
-          const proc = await generateProceduralBriefing(currentWx)
+          const proc = await generateProceduralBriefing()
           setBriefing(proc)
         }
       } else {
-        const proc = await generateProceduralBriefing(currentWx)
+        const proc = await generateProceduralBriefing()
         setBriefing(proc)
       }
     } catch (e) {
-      console.error('Briefing fetch failed:', e)
-      const proc = await generateProceduralBriefing(currentWx)
+      const proc = await generateProceduralBriefing()
       setBriefing(proc)
     }
 
     setRefreshing(false)
-  }, [weather])
+  }, [])
 
   useEffect(() => {
     if (!isAppActive) return
-    const cached = localStorage.getItem('iris_cached_weather_string')
-    if (cached) setWeather(cached)
     refreshAll()
   }, [isAppActive])
 
@@ -231,22 +218,50 @@ export default function ZeroScreen({ onNavigate, isAppActive }) {
       </div>
 
       <div className="space-y-6 max-w-lg mx-auto w-full">
-        <div className="glass-surface border border-[#00f2ff]/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(0,242,255,0.1)]">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="material-symbols-outlined text-[#00f2ff]">partly_cloudy_day</span>
-            <h3 className="font-bold text-[10px] tracking-widest uppercase text-[#00f2ff]/80 font-mono-data">Meteorology Node</h3>
-          </div>
-          <p className="font-mono-data text-xs text-white uppercase">{weather}</p>
-        </div>
-
+        {/* AI Daily Briefing + Hot News Topics */}
         <div className="glass-surface border border-[#ff007f]/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(255,0,127,0.1)]">
           <div className="flex items-center gap-3 mb-3">
             <span className="material-symbols-outlined text-[#ff007f] animate-pulse">memory</span>
             <h3 className="font-bold text-[10px] tracking-widest uppercase text-[#ff007f]/80 font-mono-data">AI Daily Briefing</h3>
           </div>
-          <p className="font-mono-data text-xs text-white/90 leading-relaxed tracking-wide uppercase">{briefing}</p>
+          <p className="font-mono-data text-xs text-white/90 leading-relaxed tracking-wide uppercase mb-4">{briefing}</p>
+
+          {/* 5 Hot Daily News Radar */}
+          <div className="pt-4 border-t border-white/10">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined text-[#00f2ff] text-sm">trending_up</span>
+              <h4 className="font-bold text-[9px] tracking-widest uppercase text-[#00f2ff] font-mono-data">5 POPULAR HOT NEWS TOPICS</h4>
+            </div>
+            <div className="space-y-2.5">
+              {newsStories.map((story, idx) => (
+                <a
+                  key={story.id || idx}
+                  href={story.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-2.5 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5"
+                >
+                  <span className="font-mono-data text-[10px] font-bold text-[#00f2ff] bg-[#00f2ff]/10 w-5 h-5 rounded-md flex items-center justify-center shrink-0">
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono-data text-[10px] text-white/90 group-hover:text-[#00f2ff] transition-colors leading-tight line-clamp-2 uppercase">
+                      {story.title}
+                    </p>
+                    {story.score > 0 && (
+                      <span className="font-mono-data text-[8px] text-white/40 mt-0.5 block">
+                        ▲ {story.score} POINTS
+                      </span>
+                    )}
+                  </div>
+                  <span className="material-symbols-outlined text-[12px] text-white/30 group-hover:text-white transition-colors shrink-0 mt-0.5">open_in_new</span>
+                </a>
+              ))}
+            </div>
+          </div>
         </div>
 
+        {/* Quote of the Day */}
         <div className="glass-surface border border-white/10 p-5 rounded-2xl">
           <div className="flex items-center gap-3 mb-3">
             <span className="material-symbols-outlined text-white/50">format_quote</span>
