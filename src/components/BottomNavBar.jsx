@@ -80,6 +80,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   }
 
   const touchStartX = useRef(null)
+  const touchStartY = useRef(null)
   const isSwiping = useRef(false)
   const holdTriggeredRef = useRef(false)
 
@@ -92,6 +93,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
 
   const handleTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
     isSwiping.current = false
     holdTriggeredRef.current = false
     clearHoldTimer()
@@ -99,7 +101,19 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
       holdTriggeredRef.current = true
       try { if (navigator.vibrate) navigator.vibrate([20, 30]) } catch (_) {}
       window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
-    }, 350)
+    }, 600)
+  }, [])
+
+  const handleTouchMove = useCallback((e) => {
+    if (touchStartX.current === null || touchStartY.current === null) return
+    const currentX = e.touches[0].clientX
+    const currentY = e.touches[0].clientY
+    const dx = Math.abs(currentX - touchStartX.current)
+    const dy = Math.abs(currentY - touchStartY.current)
+    if (dx > 10 || dy > 10) {
+      clearHoldTimer()
+      isSwiping.current = true
+    }
   }, [])
 
   const handleTouchEnd = useCallback((e) => {
@@ -120,6 +134,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
       startCollapseTimer()
     }
     touchStartX.current = null
+    touchStartY.current = null
   }, [activePage, setActivePage, startCollapseTimer, tabs])
 
   const handleDockClick = useCallback(() => {
@@ -164,6 +179,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
           <div 
             onClick={handleDockClick}
             onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             className="h-[32px] px-3 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
             style={{ width: colWidth }}

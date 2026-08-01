@@ -59,7 +59,6 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       case 'open_drawer': setActivePage('drawer'); break
       case 'open_settings': setActivePage('settings'); break
       case 'assistant': setActivePage('assistant'); break
-      case 'open_terminal': setActivePage('terminal'); break
       case 'open_widgets': setActivePage('widgets'); break
       case 'open_folder': break
       case 'notifications': expandNotificationPanel(); break
@@ -147,6 +146,17 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   const handleTouchMove = useCallback((e) => {
     touchEndX.current = e.touches[0].clientX
     touchEndY.current = e.touches[0].clientY
+
+    if (touchStartX.current !== null && touchStartY.current !== null) {
+      const dx = Math.abs(touchEndX.current - touchStartX.current)
+      const dy = Math.abs(touchEndY.current - touchStartY.current)
+      if (dx > 15 || dy > 15) {
+        if (longPressTimerRef) {
+          clearTimeout(longPressTimerRef)
+          longPressTimerRef = null
+        }
+      }
+    }
 
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX
