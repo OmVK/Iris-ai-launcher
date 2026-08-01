@@ -3,6 +3,7 @@ import { logNotification, authenticateBiometric } from './LauncherPlugin'
 import PinKeypad from './PinKeypad'
 import ChronoClockDial from './ChronoClockDial'
 import ThreatPhotoCapture from './ThreatPhotoCapture'
+import HapticFeedback from '../utils/HapticFeedback'
 
 export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -121,7 +122,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
           setStatusState('GRANTED')
           addLog("SYS: BIOMETRIC MATCH CONFIRMED!")
           logNotification('BIOMETRIC', 'Access Granted: Fingerprint validation succeeded.', 'success')
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+          HapticFeedback.success()
           setTimeout(() => {
             if (onUnlockSuccess) onUnlockSuccess()
           }, 1200)
@@ -182,7 +183,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     if (pinInput.length >= 4) return
 
     // Trigger haptic rumble feedback if device supports it
-    if (navigator.vibrate) navigator.vibrate(35)
+    HapticFeedback.light()
 
     const nextPin = pinInput + num
     setPinInput(nextPin)
@@ -193,7 +194,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     if (statusState === 'VALIDATING' || statusState === 'GRANTED') return
     if (pinInput.length === 0) return
 
-    if (navigator.vibrate) navigator.vibrate(25)
+    HapticFeedback.light()
     
     setPinInput(prev => prev.slice(0, -1))
     addLog("KEYPAD: ERASED PREVIOUS ENTRY DIGIT")
@@ -203,7 +204,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     if (statusState === 'VALIDATING' || statusState === 'GRANTED') return
     if (pinInput.length === 0) return
 
-    if (navigator.vibrate) navigator.vibrate(40)
+    HapticFeedback.medium()
 
     setPinInput('')
     addLog("KEYPAD: ENTIRE SECURE BUFFER CLEARED")
@@ -222,7 +223,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
         addLog("SYS: COGNITIVE TIME SYNC CONFIRMED!")
         addLog("SYS: ACCESS GRANTED. UNLOCKING VAULT MATRIX INDICES.")
         logNotification('BIOMETRIC', 'Access Granted: Chrono-key validation succeeded.', 'success')
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+        HapticFeedback.success()
         
         const unlockTimeout = setTimeout(() => {
           if (mountedRef.current && onUnlockSuccess) onUnlockSuccess()
@@ -235,7 +236,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
         addLog(`SYS: [ERROR] SECURE SYNAPSE BLOCKED. ROTATING TIME-KEYS.`)
         logNotification('SECURITY', `Access Denied: Unrecognized passcode node: '${input}'`, 'warning')
         captureThreatPhoto()
-        if (navigator.vibrate) navigator.vibrate(300)
+        HapticFeedback.error()
 
         const resetTimeout = setTimeout(() => {
           if (!mountedRef.current) return
@@ -294,7 +295,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
               setStatusState('GRANTED')
               addLog("SYS: BIOMETRIC MATCH CONFIRMED!")
               logNotification('BIOMETRIC', 'Access Granted: Fingerprint validation succeeded.', 'success')
-              if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+              HapticFeedback.success()
               setTimeout(() => {
                 if (onUnlockSuccess) onUnlockSuccess()
               }, 1200)

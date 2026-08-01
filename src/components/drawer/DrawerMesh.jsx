@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react'
 import LetterFilterBar from './LetterFilterBar'
+import HapticFeedback from '../../utils/HapticFeedback'
 
 const CLUSTER_SIZE = 5
 const LONG_PRESS_MS = 500
@@ -401,7 +402,7 @@ function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerT
       dragRef.current.moved = true
       const app = nodesRef.current[hit]?.app
       if (app && onContextMenu) {
-        if (navigator.vibrate) navigator.vibrate(40)
+        HapticFeedback.medium()
         onContextMenu({ clientX, clientY, preventDefault() {}, stopPropagation() {} }, app)
       }
     }, LONG_PRESS_MS), nodeIdx: hit, startX: clientX, startY: clientY, fired: false }

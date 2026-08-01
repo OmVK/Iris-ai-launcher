@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useThemeStore } from '../stores/themeStore'
 import { useAssistantStore } from '../stores/assistantStore'
+import HapticFeedback from '../utils/HapticFeedback'
 
 export default function BottomNavBar({ activePage, setActivePage, showAppLabels = true }) {
   const { dockColumns, dockBackground } = useThemeStore()
@@ -99,7 +100,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     clearHoldTimer()
     holdTimerRef.current = setTimeout(() => {
       holdTriggeredRef.current = true
-      try { if (navigator.vibrate) navigator.vibrate([20, 30]) } catch (_) {}
+      HapticFeedback.double()
       window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
     }, 600)
   }, [])

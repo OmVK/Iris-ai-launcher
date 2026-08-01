@@ -1401,12 +1401,31 @@ public class LauncherPlugin extends Plugin {
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000);
                 intent.putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 5000);
 
+                // Mute system streams to silence Google Assistant activation chime
+                final android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
+                if (audioManager != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    try {
+                        audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_MUTE, 0);
+                        audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_MUTE, 0);
+                    } catch (Exception ignored) {}
+                }
+
+                Runnable restoreAudio = () -> {
+                    if (audioManager != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                        try {
+                            audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_UNMUTE, 0);
+                            audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_UNMUTE, 0);
+                        } catch (Exception ignored) {}
+                    }
+                };
+
                 currentRecognizer.setRecognitionListener(new android.speech.RecognitionListener() {
                     private String lastPartial = null;
                     private boolean isResolving = false;
 
                     @Override
                     public void onReadyForSpeech(android.os.Bundle params) {
+                        restoreAudio.run();
                         notifyListeners("onSpeechStatus", new JSObject().put("status", "listening"));
                     }
                     @Override
@@ -1417,6 +1436,7 @@ public class LauncherPlugin extends Plugin {
                     public void onBufferReceived(byte[] buffer) {}
                     @Override
                     public void onEndOfSpeech() {
+                        restoreAudio.run();
                         notifyListeners("onSpeechStatus", new JSObject().put("status", "processing"));
                         
                         // Prevent the recognizer from hanging indefinitely in the processing phase
@@ -1435,6 +1455,7 @@ public class LauncherPlugin extends Plugin {
                     }
                     @Override
                     public void onError(int error) {
+                        restoreAudio.run();
                         if (isResolving) return;
                         isResolving = true;
                         if (lastPartial != null && !lastPartial.trim().isEmpty()) {
@@ -1443,12 +1464,12 @@ public class LauncherPlugin extends Plugin {
                             call.resolve(ret);
                         } else {
                             android.util.Log.e("IrisSpeech", "Speech error code: " + error);
-                            notifyListeners("onSpeechError", new JSObject().put("error", error));
-                            call.reject("Speech error code: " + error);
+                            call.reject("Speech error: " + error);
                         }
                     }
                     @Override
                     public void onResults(android.os.Bundle results) {
+                        restoreAudio.run();
                         if (isResolving) return;
                         isResolving = true;
                         java.util.ArrayList<String> matches = results.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
@@ -1477,6 +1498,7 @@ public class LauncherPlugin extends Plugin {
                 });
 
                 currentRecognizer.startListening(intent);
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(restoreAudio, 1000);
             } catch (Exception e) {
                 call.reject("Failed to start speech recognition: " + e.getMessage());
             }

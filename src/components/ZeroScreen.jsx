@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useAIStore } from '../stores/aiStore'
 import { fetchCurrentWeather } from '../utils/weather'
 import { queryIrisAI } from '../utils/aiQueryBridge'
+import { getSystemStats } from './LauncherPlugin'
 
 const EXPANDED_FALLBACK_QUOTES = [
   '"The future is already here — it\'s just not evenly distributed." — William Gibson',
@@ -23,70 +24,112 @@ const EXPANDED_FALLBACK_QUOTES = [
   '"The advance of technology is based on making it fit in so that you don\'t really even notice it." — Mark Weiser',
   '"Machines take me by surprise with great frequency." — Alan Turing',
   '"The computer was born to solve problems that did not exist before." — Bill Gates',
-  '"Logic will get you from A to Z; imagination will get you everywhere." — Albert Einstein'
+  '"Logic will get you from A to Z; imagination will get you everywhere." — Albert Einstein',
+  '"Complexity is your enemy. Any fool can make something complicated. It is hard to keep things simple." — Richard Branson',
+  '"The quietest thoughts are often the loudest in execution." — Cybernetic Proverb',
+  '"First, solve the problem. Then, write the code." — John Johnson',
+  '"Experience is the name everyone gives to their mistakes." — Oscar Wilde',
+  '"In the middle of difficulty lies opportunity." — Albert Einstein',
+  '"Turn your wounds into wisdom." — Oprah Winfrey',
+  '"What we think, we become." — Buddha',
+  '"Yesterday is history, tomorrow is a mystery, today is a gift." — Eleanor Roosevelt',
+  '"Creativity is intelligence having fun." — Albert Einstein',
+  '"Knowledge is power." — Francis Bacon'
 ]
 
-const recentQuoteIndexSet = new Set()
+const recentQuotesHistory = []
 
 async function fetchQuoteFromMultiSources() {
-  const sources = [
+  const apis = [
     async () => {
-      const res = await fetch('https://dummyjson.com/quotes/random', { signal: AbortSignal.timeout(3000) })
+      // Pick random quote from dummyjson 100 quote pool
+      const randomSkip = Math.floor(Math.random() * 90)
+      const res = await fetch(`https://dummyjson.com/quotes?limit=10&skip=${randomSkip}`, { signal: AbortSignal.timeout(3500) })
       const data = await res.json()
-      if (data?.quote && data?.author) return `"${data.quote}" — ${data.author}`
-      throw new Error('Invalid dummyjson quote')
-    },
-    async () => {
-      const res = await fetch('https://api.quotable.io/random', { signal: AbortSignal.timeout(3000) })
-      const data = await res.json()
-      if (data?.content && data?.author) return `"${data.content}" — ${data.author}`
-      throw new Error('Invalid quotable quote')
-    },
-    async () => {
-      const res = await fetch('https://type.fit/api/quotes', { signal: AbortSignal.timeout(3000) })
-      const data = await res.json()
-      if (Array.isArray(data) && data.length > 0) {
-        const item = data[Math.floor(Math.random() * data.length)]
-        if (item?.text) {
-          const author = item.author ? item.author.replace(', type.fit', '').replace('type.fit', '').trim() : 'Unknown'
-          return `"${item.text}" — ${author}`
-        }
+      if (data?.quotes && data.quotes.length > 0) {
+        const item = data.quotes[Math.floor(Math.random() * data.quotes.length)]
+        return `"${item.quote}" — ${item.author}`
       }
-      throw new Error('Invalid type.fit quote')
+      throw new Error('DummyJSON empty')
+    },
+    async () => {
+      const res = await fetch('https://stoic-quotes.com/api/quote', { signal: AbortSignal.timeout(3500) })
+      const data = await res.json()
+      if (data?.text && data?.author) {
+        return `"${data.text}" — ${data.author}`
+      }
+      throw new Error('Stoic quote invalid')
+    },
+    async () => {
+      const res = await fetch('https://api.quotable.io/random', { signal: AbortSignal.timeout(3500) })
+      const data = await res.json()
+      if (data?.content && data?.author) {
+        return `"${data.content}" — ${data.author}`
+      }
+      throw new Error('Quotable invalid')
     }
   ]
 
-  // Shuffle source order randomly
-  const shuffledSources = [...sources].sort(() => Math.random() - 0.5)
+  // Shuffle APIs
+  const shuffled = [...apis].sort(() => Math.random() - 0.5)
 
-  for (const fetchFn of shuffledSources) {
+  for (const fetchFn of shuffled) {
     try {
-      const result = await fetchFn()
-      if (result) return result
+      const q = await fetchFn()
+      if (q && !recentQuotesHistory.includes(q)) {
+        recentQuotesHistory.push(q)
+        if (recentQuotesHistory.length > 15) recentQuotesHistory.shift()
+        return q
+      }
     } catch (_) {}
   }
 
-  // Fallback to local curated quote library with duplicate avoidance
-  let candidateIndex = Math.floor(Math.random() * EXPANDED_FALLBACK_QUOTES.length)
-  if (recentQuoteIndexSet.size >= EXPANDED_FALLBACK_QUOTES.length - 1) {
-    recentQuoteIndexSet.clear()
+  // Fallback to local array with duplicate filter
+  let pool = EXPANDED_FALLBACK_QUOTES.filter(q => !recentQuotesHistory.includes(q))
+  if (pool.length === 0) {
+    recentQuotesHistory.length = 0
+    pool = EXPANDED_FALLBACK_QUOTES
   }
-  let attempts = 0
-  while (recentQuoteIndexSet.has(candidateIndex) && attempts < 20) {
-    candidateIndex = Math.floor(Math.random() * EXPANDED_FALLBACK_QUOTES.length)
-    attempts++
-  }
-  recentQuoteIndexSet.add(candidateIndex)
-  return EXPANDED_FALLBACK_QUOTES[candidateIndex]
+  const picked = pool[Math.floor(Math.random() * pool.length)]
+  recentQuotesHistory.push(picked)
+  return picked
 }
 
-function generateProceduralBriefing(weatherStr) {
-  const hour = new Date().getHours()
-  const timeOfDay = hour < 12 ? 'MORNING' : hour < 18 ? 'AFTERNOON' : 'EVENING'
-  const location = localStorage.getItem('iris_weather_city') || 'LOCAL NODE'
-  const cond = weatherStr && weatherStr !== 'Loading weather...' ? weatherStr : 'STABLE'
+const BRIEFING_HEADERS = [
+  "NEURAL LINK STABLE",
+  "QUANTUM TELEMETRY SYNCHRONIZED",
+  "CORE ENGINE OPERATIONAL",
+  "CYBERNETIC NODES ONLINE",
+  "TACTICAL METRICS ACTIVE",
+  "ORBITAL SYSTEM MATRIX"
+]
 
-  return `SYSTEM TELEMETRY SYNCHRONIZED // GOOD ${timeOfDay}. LOCATION: ${location.toUpperCase()}. CURRENT WEATHER METRICS: ${cond}. ALL SUB-PROCESSES ACTIVE & ENCRYPTED.`
+const BRIEFING_FOOTERS = [
+  "ALL SUB-PROCESSES RUNNING AT OPTIMAL EFFICIENCY.",
+  "ENCRYPTION PIPELINES SECURED. SYSTEM ENCLOSURE NORMAL.",
+  "BACKGROUND HEURISTICS SYNCHRONIZING REAL-TIME METRICS.",
+  "ATMOSPHERIC DATA INTEGRATED INTO PRIMARY DATABANKS.",
+  "MEMORY CYCLES CLEARED. RUNTIME HEALTH AT MAXIMUM LEVEL."
+]
+
+async function generateProceduralBriefing(weatherStr) {
+  const hour = new Date().getHours()
+  const timeOfDay = hour < 5 ? 'NIGHT' : hour < 12 ? 'MORNING' : hour < 18 ? 'AFTERNOON' : 'EVENING'
+  const location = localStorage.getItem('iris_weather_city') || 'LOCAL NODE'
+  const cond = weatherStr && weatherStr !== 'Loading weather...' ? weatherStr : 'CLEAR METRICS'
+
+  let statsStr = ''
+  try {
+    const stats = await getSystemStats()
+    if (stats && stats.memUsed && stats.memTotal) {
+      statsStr = ` // SYS_MEM: ${stats.memUsed}G/${stats.memTotal}G`
+    }
+  } catch (_) {}
+
+  const header = BRIEFING_HEADERS[Math.floor(Math.random() * BRIEFING_HEADERS.length)]
+  const footer = BRIEFING_FOOTERS[Math.floor(Math.random() * BRIEFING_FOOTERS.length)]
+
+  return `${header} // GOOD ${timeOfDay}. LOCATION: ${location.toUpperCase()}. ATMOSPHERE: ${cond}${statsStr}. ${footer}`
 }
 
 export default function ZeroScreen({ onNavigate, isAppActive }) {
@@ -111,15 +154,16 @@ export default function ZeroScreen({ onNavigate, isAppActive }) {
       console.error('Weather fetch failed:', e)
     }
 
-    // 2. Fetch Multi-Source Quote
+    // 2. Fetch Multi-Source Unique Quote
     try {
       const fetchedQuote = await fetchQuoteFromMultiSources()
       setQuote(fetchedQuote)
     } catch (e) {
-      setQuote(EXPANDED_FALLBACK_QUOTES[Math.floor(Math.random() * EXPANDED_FALLBACK_QUOTES.length)])
+      const fallback = EXPANDED_FALLBACK_QUOTES[Math.floor(Math.random() * EXPANDED_FALLBACK_QUOTES.length)]
+      setQuote(fallback)
     }
 
-    // 3. Generate AI Daily Briefing
+    // 3. Generate Dynamic AI / Procedural Daily Briefing
     try {
       await useAIStore.getState().loadKeys()
       const { geminiKey, groqKey } = useAIStore.getState()
@@ -127,25 +171,30 @@ export default function ZeroScreen({ onNavigate, isAppActive }) {
       if (geminiKey || groqKey) {
         const timeStr = new Date().toLocaleTimeString()
         const location = localStorage.getItem('iris_weather_city') || 'Unknown Location'
-        const prompt = `Write a short, aesthetic 2-sentence daily briefing for an Android launcher zero screen. Current time: ${timeStr}. Weather: ${currentWx}. Location: ${location}. Keep it under 40 words.`
+        const randSeed = Math.floor(Math.random() * 1000)
+        const prompt = `Write a fresh, futuristic 2-sentence daily briefing for an Android launcher zero screen. Current time: ${timeStr}. Weather: ${currentWx}. Location: ${location}. Random Seed: ${randSeed}. Keep it under 40 words.`
         
         try {
           const aiResponse = await queryIrisAI(prompt)
           if (aiResponse && aiResponse.trim().length > 0) {
             setBriefing(aiResponse.trim())
           } else {
-            setBriefing(generateProceduralBriefing(currentWx))
+            const proc = await generateProceduralBriefing(currentWx)
+            setBriefing(proc)
           }
         } catch (err) {
           console.warn('[ZeroScreen] AI Briefing bridge error, fallback to procedural:', err)
-          setBriefing(generateProceduralBriefing(currentWx))
+          const proc = await generateProceduralBriefing(currentWx)
+          setBriefing(proc)
         }
       } else {
-        setBriefing(generateProceduralBriefing(currentWx))
+        const proc = await generateProceduralBriefing(currentWx)
+        setBriefing(proc)
       }
     } catch (e) {
       console.error('Briefing fetch failed:', e)
-      setBriefing(generateProceduralBriefing(currentWx))
+      const proc = await generateProceduralBriefing(currentWx)
+      setBriefing(proc)
     }
 
     setRefreshing(false)
@@ -156,7 +205,7 @@ export default function ZeroScreen({ onNavigate, isAppActive }) {
     const cached = localStorage.getItem('iris_cached_weather_string')
     if (cached) setWeather(cached)
     refreshAll()
-  }, [isAppActive, refreshAll])
+  }, [isAppActive])
 
   const handleTouchStart = useCallback((e) => {
     e.currentTarget._startY = e.touches[0].clientY

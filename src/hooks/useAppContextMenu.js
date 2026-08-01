@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { uninstallApp, openAppSettings } from '../components/LauncherPlugin'
 import { setContextMenuOpen } from './useAppGestures'
+import HapticFeedback from '../utils/HapticFeedback'
 
 export function useAppContextMenu({ setInstalledApps, onToggleAppLock }) {
   const [activeContextMenu, setActiveContextMenu] = useState(null)
@@ -28,7 +29,7 @@ export function useAppContextMenu({ setInstalledApps, onToggleAppLock }) {
       x: Math.min(clientX, window.innerWidth - 200),
       y: Math.min(clientY, window.innerHeight - 150)
     })
-    if (navigator.vibrate) navigator.vibrate(40)
+    HapticFeedback.medium()
   }, [])
 
   const handleLockApp = (app) => {
