@@ -3,14 +3,14 @@ import { launchApp } from './LauncherPlugin'
 import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
 import HudFallbackIcon from './HudFallbackIcon'
 
-const HudIcon = React.memo(({ packageId, size }) => (
+const HudIcon = React.memo(function HudIcon({ packageId, size }) {
   <div style={{
     width: `${size}px`,
     height: `${size}px`,
   }} className="flex items-center justify-center icon-circle-minimal-outline hud-icon-transition">
     {IRIS_ICON_PACK[packageId]}
   </div>
-))
+})
 
 export default function FolderModal({ 
   folder, 

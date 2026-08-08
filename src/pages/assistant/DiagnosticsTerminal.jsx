@@ -61,8 +61,8 @@ export default function DiagnosticsTerminal({ onClose }) {
     try {
       let testRes
       if (backend === 'GEMINI') {
-        testRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + (apiKey || ''), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'Say "pong"' }] }] })
+        testRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': (apiKey || '') }, body: JSON.stringify({ contents: [{ parts: [{ text: 'Say "pong"' }] }] })
         })
       } else if (backend === 'GROQ') {
         testRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {

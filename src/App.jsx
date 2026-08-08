@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import TopAppBar from './components/TopAppBar'
 import BottomNavBar from './components/BottomNavBar'
 import ChronoPinLock from './components/ChronoPinLock'
@@ -43,8 +43,8 @@ import usePageRouter from './hooks/usePageRouter'
 export default function App() {
   const { activePage, setActivePage, showChronoLock, setShowChronoLock, chronoTarget, setChronoTarget, isVaultUnlocked, setIsVaultUnlocked, showVaultExplorer, setShowVaultExplorer, vaultTab, setVaultTab, lockedApps, toggleAppLock, showArcSearch, setShowArcSearch, isAppActive, setIsAppActive, setupComplete, setSetupComplete, showVpnBrowser, setShowVpnBrowser, vpnBrowserUrl, setVpnBrowserUrl } = useAppStore()
   const { themeColor, glassOpacity, wallpaper, hasCustomWallpaper, dpiScale, showAppLabels, use24HourClock, globalIconTheme, activeLiveWallpaper, pageTransitionEffect, pageTransitionSpeed, pageTransitionEasing, fullscreenActive, darkGlassTheme, wallpaperBlur, wallpaperVignette, setThemeColor, setGlassOpacity } = useThemeStore()
-  const { llmBackend, setLlmBackend, geminiKey, geminiModel, groqKey, voiceEnabled, setVoiceEnabled, voicePitch, voiceRate } = useAIStore()
-  const { isLiveVoice, isListening, isPrivateSession, setIsPrivateSession, showLiveConfigModal, setShowLiveConfigModal, liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey, sessions, setSessions, activeSessionId, setActiveSessionId, chatLog, setChatLog, textPrompt, setTextPrompt } = useAssistantStore()
+  const { llmBackend, setLlmBackend, geminiKey, geminiModel, groqKey, voicePitch, voiceRate } = useAIStore()
+  const { isLiveVoice, isListening, showLiveConfigModal, setShowLiveConfigModal, liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey } = useAssistantStore()
   const { installedApps, setInstalledApps, loadNativeApps, resetToDefaults } = useAppsStore()
   const { powerSaveMode, setPowerSaveMode } = usePowerStore()
   const [showFeatureTour, setShowFeatureTour] = useState(false)

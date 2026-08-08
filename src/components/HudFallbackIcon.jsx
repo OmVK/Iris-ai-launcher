@@ -1,6 +1,6 @@
 import React from 'react'
 
-const HudFallbackIcon = React.memo(({ src, size }) => (
+const HudFallbackIcon = React.memo(function HudFallbackIcon({ src, size }) {
   <div style={{
     width: `${size}px`,
     height: `${size}px`,
@@ -12,6 +12,6 @@ const HudFallbackIcon = React.memo(({ src, size }) => (
       alt="" 
     />
   </div>
-))
+})
 
 export default HudFallbackIcon

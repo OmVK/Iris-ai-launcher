@@ -28,7 +28,6 @@ async function initSession() {
         piperWasm: origin + '/piper/piper_phonemize.wasm'
       }
     }), 8000, 'Piper init');
-    console.log('Piper TTS Session initialized');
   } catch (err) {
     console.error('Failed to initialize Piper:', err);
   } finally {

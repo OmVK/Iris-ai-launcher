@@ -26,7 +26,8 @@
     "react/react-in-jsx-scope": "off",
     "react/prop-types": "off",
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
-    "no-console": "warn",
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-empty": ["error", { "allowEmptyCatch": true }],
     "no-debugger": "warn",
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn"

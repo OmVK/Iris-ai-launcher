@@ -79,6 +79,7 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
           setFolderName={setFolderName}
           isEditing={isEditing}
           setIsEditing={setIsEditing}
+          onNameSubmit={handleNameSubmit}
           onAppClick={handleAppClick}
           onClose={() => setIsOpen(false)}
           onRemove={onRemove}
@@ -89,7 +90,7 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
   )
 }
 
-function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing, setIsEditing, onAppClick, onClose, onRemove, globalIconTheme }) {
+function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing, setIsEditing, onNameSubmit, onAppClick, onClose, onRemove, globalIconTheme }) {
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -99,8 +100,8 @@ function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing
             <input
               value={folderName}
               onChange={(e) => setFolderName(e.target.value)}
-              onBlur={handleNameSubmit}
-              onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
+              onBlur={onNameSubmit}
+              onKeyDown={(e) => e.key === 'Enter' && onNameSubmit()}
               className="text-sm text-white/80 font-mono-data bg-transparent border-b border-white/20 focus:outline-none focus:border-[var(--primary-color)] flex-1 mr-2"
               autoFocus
             />

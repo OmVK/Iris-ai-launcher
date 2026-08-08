@@ -192,7 +192,7 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
       <div className="flex-1 overflow-y-auto pt-12 px-margin pb-28 scroll-container select-none">
         <div className="max-w-xl mx-auto mb-6">
           <h1 className="font-mono-data text-lg text-primary-fixed-dim tracking-widest uppercase mb-1">
-            IRIS <span className="text-on-surface-variant/40">//</span> Tools
+            IRIS <span className="text-on-surface-variant/40">{'//'}</span> Tools
           </h1>
           <p className="font-mono-data text-[10px] text-on-surface-variant/40 tracking-wider">
             CYBERSECURITY & NETWORK UTILITIES

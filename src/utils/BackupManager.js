@@ -1,14 +1,15 @@
+import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
+import { APP_VERSION } from './constants'
 
 const BACKUP_VERSION = 1
-const BACKUP_PREFIX = 'iris_backup_'
 
 async function createBackupBundle() {
   const bundle = {
     version: BACKUP_VERSION,
     createdAt: new Date().toISOString(),
-    appVersion: '4.6.2',
+    appVersion: APP_VERSION,
     stores: {},
     localStorage: {},
   }

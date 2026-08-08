@@ -105,7 +105,7 @@ export default function Assistant({
   useEffect(() => { if (llmBackend === 'OLLAMA') fetchOllamaModels() }, [llmBackend, fetchOllamaModels])
 
   // Dynamic model fetching
-  const fetchGeminiModels = async (key) => { if (!key) return; try { const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`); if (res.ok) { const data = await res.json(); if (data.models) { setDynamicGeminiModels(data.models.filter(m => m.supportedGenerationMethods?.includes('generateContent') || m.name.includes('gemini')).map(m => m.name.replace('models/', ''))) } } } catch (_e) { /* model fetch failed */ } }
+  const fetchGeminiModels = async (key) => { if (!key) return; try { const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } }); if (res.ok) { const data = await res.json(); if (data.models) { setDynamicGeminiModels(data.models.filter(m => m.supportedGenerationMethods?.includes('generateContent') || m.name.includes('gemini')).map(m => m.name.replace('models/', ''))) } } } catch (_e) { /* model fetch failed */ } }
   const fetchGroqModels = async (key) => { if (!key) return; try { const res = await fetch('https://api.groq.com/openai/v1/models', { headers: { 'Authorization': `Bearer ${key}` } }); if (res.ok) { const data = await res.json(); if (data.data) setDynamicGroqModels(data.data.map(m => m.id)) } } catch (_e) { /* model fetch failed */ } }
   const fetchNvidiaModels = async (key) => { const fb = ['meta/llama-3.1-405b-instruct', 'meta/llama-3.1-70b-instruct', 'meta/llama-3.1-8b-instruct', 'mistralai/mixtral-8x22b-instruct-v0.1', 'google/gemma-2-27b-it']; if (!key) return; try { const res = await fetch('https://integrate.api.nvidia.com/v1/models', { headers: { 'Authorization': `Bearer ${key}` } }); if (res.ok) { const data = await res.json(); if (data.data) { setDynamicNvidiaModels(data.data.map(m => m.id).filter(id => id.includes('instruct') || id.includes('chat')).slice(0, 20) || fb) } } } catch (e) { setDynamicNvidiaModels(fb) } }
 
@@ -132,7 +132,7 @@ export default function Assistant({
     setTestingConnection(true)
     try {
       let res
-      if (provider === 'GEMINI') res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`)
+      if (provider === 'GEMINI') res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } })
       else if (provider === 'GROQ') res = await fetch('https://api.groq.com/openai/v1/models', { headers: { 'Authorization': `Bearer ${key}` } })
       else if (provider === 'NVIDIA') { 
         try { 

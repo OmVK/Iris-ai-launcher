@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { lookupContactMultiple, makeCall, sendSMS, checkAndRequestPermission } from '../components/LauncherPlugin'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 

@@ -32,6 +32,14 @@ fix.txt
 camera_logs.txt
 chromium_logs.txt
 
+# Signing material
+*.keystore
+*.jks
+
+# Generated diffs
+diff.txt
+diff_utf8.txt
+
 # Screenshots/artifacts
 screen*.png
 screen_shodan.png

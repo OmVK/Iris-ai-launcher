@@ -2,19 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
 import HudFallbackIcon from './HudFallbackIcon'
 import { useSearchViewModel } from '../utils/SearchViewModel'
+import { safeEvaluate } from '../utils/safeMath'
 
 function InteractiveCalculator({ initialExpr = '', onClose }) {
   const [expr, setExpr] = useState(initialExpr)
   
   const handleBtn = (val) => setExpr(p => p + val)
   const calc = () => { 
-    try { 
-      // eslint-disable-next-line no-eval
-      const result = eval(expr)
-      setExpr(String(result)) 
-    } catch { 
-      setExpr('Error') 
-    } 
+    const result = safeEvaluate(expr)
+    setExpr(Number.isFinite(result) ? String(result) : 'Error')
   }
   const copyAndClose = () => {
     if (expr && expr !== 'Error') {
@@ -331,7 +327,7 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
         {query && results.length === 0 && !isSearching && !calculatorResult && !unitResult && activeSource !== 'calculator' && activeSource !== 'unit' && (
           <div className="glass-surface border border-primary-fixed/10 rounded-2xl p-6 text-center">
             <span className="material-symbols-outlined text-primary-fixed/30 text-4xl block mb-2">search_off</span>
-            <p className="text-[10px] text-primary-fixed/40 font-mono-data uppercase">No results found for "{query}"</p>
+            <p className="text-[10px] text-primary-fixed/40 font-mono-data uppercase">No results found for &quot;{query}&quot;</p>
           </div>
         )}
       </div>

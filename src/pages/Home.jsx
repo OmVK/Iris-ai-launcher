@@ -7,7 +7,6 @@ import HudFallbackIcon from '../components/HudFallbackIcon'
 import HomeGrid from '../components/HomeGrid'
 import HomePager from '../components/HomePager'
 
-import HomeScreenWidgetHost from '../components/HomeScreenWidgetHost'
 import PinnedContacts from '../components/PinnedContacts'
 import HomeScreenFolder from '../components/HomeScreenFolder'
 import { useAppContextMenu } from '../hooks/useAppContextMenu'
@@ -15,7 +14,6 @@ import AppContextMenu from '../components/AppContextMenu'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { routeAppClick } from '../utils/appClickRouter'
 import { useThemeStore } from '../stores/themeStore'
-import { useAIStore } from '../stores/aiStore'
 
 export default function Home({ 
   onNavigate, 

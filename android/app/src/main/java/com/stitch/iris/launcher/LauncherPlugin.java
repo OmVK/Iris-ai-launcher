@@ -230,6 +230,30 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
+    public static void onWindowChanged(String packageName) {
+        if (instance != null) {
+            try {
+                JSObject data = new JSObject();
+                data.put("packageName", packageName);
+                instance.notifyListeners("onWindowChanged", data);
+            } catch (Exception e) {
+                android.util.Log.e("IrisLauncher", "Error notifying window change", e);
+            }
+        }
+    }
+
+    public static void onScreenshotCaptured(String base64) {
+        if (instance != null) {
+            try {
+                JSObject data = new JSObject();
+                data.put("screenshot", base64);
+                instance.notifyListeners("onScreenshotCaptured", data);
+            } catch (Exception e) {
+                android.util.Log.e("IrisLauncher", "Error notifying screenshot", e);
+            }
+        }
+    }
+
     public static Set<String> getVaultPackages() {
         return vaultPackages;
     }
@@ -1962,7 +1986,7 @@ public class LauncherPlugin extends Plugin {
         String[] allPerms = {
             "SET_WALLPAPER", "QUERY_ALL_PACKAGES", "REQUEST_INSTALL_PACKAGES",
             "BIND_ACCESSIBILITY_SERVICE", "PACKAGE_USAGE_STATS", "READ_CONTACTS",
-            "READ_CALL_LOG", "CAMERA", "RECORD_AUDIO", "ACCESS_FINE_LOCATION",
+            "CAMERA", "RECORD_AUDIO", "ACCESS_FINE_LOCATION",
             "ACCESS_COARSE_LOCATION", "READ_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES",
             "POST_NOTIFICATIONS", "WRITE_SETTINGS", "SYSTEM_ALERT_WINDOW",
             "ACCESS_NOTIFICATION_POLICY", "USE_BIOMETRIC", "VIBRATE",
@@ -1993,7 +2017,6 @@ public class LauncherPlugin extends Plugin {
             case "ACCESS_FINE_LOCATION": return android.Manifest.permission.ACCESS_FINE_LOCATION;
             case "ACCESS_COARSE_LOCATION": return android.Manifest.permission.ACCESS_COARSE_LOCATION;
             case "READ_CONTACTS": return android.Manifest.permission.READ_CONTACTS;
-            case "READ_CALL_LOG": return android.Manifest.permission.READ_CALL_LOG;
             case "POST_NOTIFICATIONS":
                 if (android.os.Build.VERSION.SDK_INT >= 33) return android.Manifest.permission.POST_NOTIFICATIONS;
                 return "POST_NOTIFICATIONS";
@@ -2014,7 +2037,6 @@ public class LauncherPlugin extends Plugin {
             case "ACCESS_FINE_LOCATION":
             case "ACCESS_COARSE_LOCATION":
             case "READ_CONTACTS":
-            case "READ_CALL_LOG":
             case "POST_NOTIFICATIONS":
             case "READ_EXTERNAL_STORAGE":
             case "READ_MEDIA_IMAGES":

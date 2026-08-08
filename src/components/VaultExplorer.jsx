@@ -28,7 +28,7 @@ export default function VaultExplorer({
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-outline-variant/30 rounded-lg bg-black/20">
                   <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 mb-2">lock_open</span>
                   <p className="font-mono-data text-[10px] text-on-surface-variant/60 uppercase tracking-wider max-w-[320px]">NO SECURED COGNITIVE INTERFACES MOUNTED.</p>
-                  <p className="font-mono-data text-[8px] text-on-surface-variant/40 mt-1 uppercase max-w-[280px]">LONG-PRESS ANY APPLICATION IN HOME OR DRAWER AND SELECT "SECURE LOCK" TO ISOLATE.</p>
+                  <p className="font-mono-data text-[8px] text-on-surface-variant/40 mt-1 uppercase max-w-[280px]">LONG-PRESS ANY APPLICATION IN HOME OR DRAWER AND SELECT &quot;SECURE LOCK&quot; TO ISOLATE.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 overflow-y-auto pr-1">

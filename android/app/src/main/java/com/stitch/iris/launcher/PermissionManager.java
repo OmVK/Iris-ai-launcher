@@ -78,7 +78,6 @@ public class PermissionManager {
 
         // Contacts & call log
         put("READ_CONTACTS", "IRIS shows your contacts for quick dial and pinned contacts.", 9108, true);
-        put("READ_CALL_LOG", "IRIS displays recent calls on pinned contacts.", 9109, true);
 
         // Haptic
         put("VIBRATE", "IRIS uses vibration for haptic feedback on gestures and taps.", 9110, false);

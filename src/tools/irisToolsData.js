@@ -82,7 +82,7 @@ export const TOOLS = [
         }}
       } catch (e1) {
         try {
-          const url2 = target ? `http://ip-api.com/json/${target}` : 'http://ip-api.com/json/'
+          const url2 = target ? `https://ip-api.com/json/${target}` : 'https://ip-api.com/json/'
           const res2 = await fetch(url2)
           const data2 = await res2.json()
           if (data2.status === 'fail') return { error: data2.message || 'Lookup failed' }

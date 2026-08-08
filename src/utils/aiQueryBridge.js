@@ -1,5 +1,4 @@
 import { useAIStore } from '../stores/aiStore'
-import { SecureStorage } from './secureStorage'
 
 export async function queryIrisAI(prompt, onChunk) {
   const { geminiKey, groqKey, llmBackend } = useAIStore.getState()
@@ -7,9 +6,9 @@ export async function queryIrisAI(prompt, onChunk) {
 
   if (activeBackend === 'GEMINI' && geminiKey) {
     let model = (localStorage.getItem('gemini_model') || 'gemini-2.0-flash').trim().replace(/\s+/g, '-')
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${geminiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         systemInstruction: { parts: [{ text: 'You are Iris AI, a smart Android voice assistant. Answer directly and concisely in 1 to 3 sentences so it reads cleanly via voice.' }] }
@@ -25,6 +24,7 @@ export async function queryIrisAI(prompt, onChunk) {
     const decoder = new TextDecoder('utf-8')
     let fullText = ''
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { done, value } = await reader.read()
       if (done) break

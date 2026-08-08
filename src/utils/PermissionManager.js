@@ -9,7 +9,6 @@ const PERMISSION_RATIONALES = {
   BIND_ACCESSIBILITY_SERVICE: 'IRIS uses accessibility services for gesture navigation and app usage tracking.',
   PACKAGE_USAGE_STATS: 'IRIS uses usage data to sort apps by frequency.',
   READ_CONTACTS: 'IRIS shows your contacts for quick dial and pinned contacts.',
-  READ_CALL_LOG: 'IRIS displays recent calls on pinned contacts.',
   CAMERA: 'IRIS uses the camera for silent threat capture and icon scanning.',
   RECORD_AUDIO: 'IRIS uses the microphone for voice commands and live conversation.',
   ACCESS_FINE_LOCATION: 'IRIS uses GPS for weather data and location-aware widgets.',
@@ -47,7 +46,6 @@ const OPTIONAL_PERMISSIONS = [
   'BIND_ACCESSIBILITY_SERVICE',
   'SET_WALLPAPER',
   'REQUEST_INSTALL_PACKAGES',
-  'READ_CALL_LOG',
 ]
 
 const DENIED_PERMISSIONS_KEY = 'iris_denied_permissions'
@@ -279,7 +277,6 @@ export function getDegradedFeatures(deniedPermissions) {
     ACCESS_FINE_LOCATION: 'Precise GPS weather',
     ACCESS_COARSE_LOCATION: 'Location-aware widgets',
     READ_CONTACTS: 'Contact quick-dial and pinned contacts',
-    READ_CALL_LOG: 'Recent call badges',
     POST_NOTIFICATIONS: 'Task reminders and alerts',
     USE_BIOMETRIC: 'Biometric app lock',
     WRITE_SETTINGS: 'Brightness control from quick settings',

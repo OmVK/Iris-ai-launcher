@@ -137,6 +137,7 @@ export default function useAIBackend(speakTextFn) {
     sseReaderRef.current = reader
     const decoder = new TextDecoder("utf-8")
     let partialText = ''
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -171,9 +172,9 @@ export default function useAIBackend(speakTextFn) {
       .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
       .slice(-20)
       .map(msg => ({ role: msg.type === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }))
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:streamGenerateContent?alt=sse&key=${apiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:streamGenerateContent?alt=sse`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents: [...history, { role: 'user', parts: [{ text: prompt }] }],
         systemInstruction: { parts: [{ text: systemInstruction }] }
@@ -361,7 +362,7 @@ export default function useAIBackend(speakTextFn) {
           }
           break
         } catch (e) {
-          if (e.name === 'AbortError') { console.log('Inference aborted by user.'); return }
+          if (e.name === 'AbortError') { return }
           lastError = e
           console.warn(`Backend ${backend} failed:`, e.message)
           continue
@@ -370,7 +371,7 @@ export default function useAIBackend(speakTextFn) {
 
       if (!responseText) throw lastError || new Error("No backend available")
     } catch (err) {
-      if (err.name === 'AbortError') { console.log('Inference aborted by user.'); return }
+      if (err.name === 'AbortError') { return }
       if (topMatch && topMatch.score > 0.15) {
         responseText = `Cognitive cache synchronized. I retrieved a RAG vector match in ${topMatch.name} with similarity index of ${(topMatch.score * 100).toFixed(0)}%: "${topMatch.snippet}"`
       } else {

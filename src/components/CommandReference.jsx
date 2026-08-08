@@ -189,7 +189,7 @@ export default function CommandReference({ glassBg, onClose }) {
                     </div>
                     <span className="font-mono-data text-[9px] text-on-surface-variant/40 leading-relaxed">{cmd.desc}</span>
                     {cmd.example && (
-                      <span className="font-mono-data text-[8px] text-on-surface-variant/25 italic">e.g. "{cmd.example}"</span>
+                      <span className="font-mono-data text-[8px] text-on-surface-variant/25 italic">e.g. &quot;{cmd.example}&quot;</span>
                     )}
                   </div>
                 ))}

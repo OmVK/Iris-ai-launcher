@@ -46,8 +46,9 @@ const checkCloud = async (backend) => {
   try {
     let url, headers, body
     if (backend === 'GEMINI') {
-      url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
-      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(8000) })
+      url = 'https://generativelanguage.googleapis.com/v1beta/models'
+      headers = { 'x-goog-api-key': key }
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) })
       if (res.ok) return { available: true, error: null }
       const data = await res.json().catch(() => ({}))
       return { available: false, error: data?.error?.message || `HTTP ${res.status}` }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 const WIDGET_TYPES = {
   clock: { label: 'Clock', icon: 'schedule', minWidth: 2, minHeight: 1, defaultWidth: 2, defaultHeight: 1 },

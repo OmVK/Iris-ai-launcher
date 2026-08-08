@@ -19,7 +19,7 @@ async function getOrCreateKey() {
     const req = tx.objectStore(STORE_NAME).get(KEY_NAME)
     req.onsuccess = () => {
       if (req.result) { resolve(req.result); return }
-      crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']).then(key => {
+      crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']).then(key => {
         const tx2 = db.transaction(STORE_NAME, 'readwrite')
         tx2.objectStore(STORE_NAME).put(key, KEY_NAME)
         tx2.oncomplete = () => resolve(key)

@@ -5,6 +5,7 @@
 npm install          # Install dependencies
 npm run dev          # Start dev server
 npm run build        # Build for production
+npm run lint         # ESLint on src/ (.js,.jsx)
 npm run deploy:android  # Build + sync + compile APK
 ```
 
@@ -14,163 +15,190 @@ $env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe
 ```
 
 ## Project Info
-- **Version**: 4.6.0
+- **Version**: 4.8.7
 - **App ID**: com.stitch.iris.launcher
 - **Platform**: Android (Capacitor 8)
 - **Stack**: React 18, Zustand 5, Tailwind 3, Vite 5
+- **Native**: 16 Java files under `android/app/src/main/java/com/stitch/iris/launcher/`
 
 ## Code Style
 - Functional components with hooks
 - Zustand stores for shared state
 - `useCallback`/`useMemo` for expensive computations
 - TailwindCSS utility classes
-- Components under 300 lines
+- Components under 300 lines (hooks/utils have more slack)
 - No comments unless asked
 - No emojis unless asked
+- ESLint: `eslint:recommended` + `plugin:react/recommended` + `plugin:react-hooks/recommended`; `no-console` allows warn/error, `no-empty` allows empty catches
 
 ---
 
-## PROJECT STRUCTURE (120 JS/JSX files, ~13,200 lines)
+## PROJECT STRUCTURE (142 JS/JSX files, ~19,300 lines)
 
 ```
 src/
-├── main.jsx                    (80 lines)  Entry point
-├── App.jsx                     (204 lines) Root router, all props from stores
-├── ErrorBoundary.jsx           (46 lines)  Error boundary
-├── index.css                   (493 lines) Tailwind + custom CSS
-├── stores/                                 Zustand state (7 files, 342 lines)
-│   ├── appStore.js             (59 lines)  App state: activePage, vault, chronoLock
-│   ├── appsStore.js            (68 lines)  Installed apps, custom folders
-│   ├── themeStore.js           (63 lines)  22 visual settings with persistence
-│   ├── aiStore.js              (26 lines)  API keys, LLM backend, voice settings
-│   ├── assistantStore.js       (110 lines) Chat sessions, live voice, text prompt
-│   ├── powerStore.js           (10 lines)  Power save mode (delegates to PowerSaveManager)
-│   └── index.js                (6 lines)   Barrel re-export
-├── hooks/                                   Custom hooks (10 files, 1,401 lines)
-│   ├── useVoiceEngine.js       (342 lines) Speech recognition + TTS pipeline
-│   ├── useAIBackend.js         (300 lines) AI inference (5 backends) + RAG + search
-│   ├── useOfflineTTS.js        (220 lines) Piper TTS Web Worker + audio pipeline
-│   ├── useOfflineDispatch.js   (204 lines) Offline voice command dispatch (8 actions)
-│   ├── useAppEffects.js        (108 lines) App lifecycle, fullscreen, vault auto-lock
-│   ├── useStockData.js         (94 lines)  Binance + Yahoo Finance live data
-│   ├── useAppContextMenu.js    (48 lines)  Long-press context menu
-│   ├── useAppGestures.js       (42 lines)  Swipe/long-press gesture detection
-│   ├── useThemeVars.js         (25 lines)  CSS custom property injection
-│   └── usePageRouter.js        (18 lines)  Navigation helpers
-├── utils/                                  Utilities (8 files, 1,023 lines)
-│   ├── OfflineCommandEngine.js (349 lines) RiveScript + 31 regex command matchers
-│   ├── offlineSideEffects.js   (223 lines) 18 side effect handlers (timer, notes, weather)
-│   ├── PowerSaveManager.js     (211 lines) Singleton, 3 tiers, 21 features per tier
-│   ├── secureStorage.js        (99 lines)  AES-GCM encryption via Web Crypto API
-│   ├── IrisIconPack.jsx        (72 lines)  13 custom sci-fi SVG icons
-│   ├── weather.js              (65 lines)  Open-Meteo API, WMO code mapping
-│   ├── storage.js              (12 lines)  Shared getLS/getLSNum/getLSBool helpers
-│   ├── appClickRouter.js       (8 lines)   Route app clicks (path vs native)
-│   └── constants.js            (2 lines)   BUILTIN_APPS=[], APP_VERSION='4.6.0'
-├── components/                             Reusable UI (38 files, 4,439 lines)
-│   ├── LauncherPlugin.js       (671 lines) Native bridge wrapper (40+ functions)
-│   ├── OfflineAssistantOverlay (391 lines) Full offline voice assistant overlay
-│   ├── SetupWizard.jsx         (312 lines) First-run 4-step wizard
-│   ├── ChronoPinLock.jsx       (311 lines) Vault lock (time-based PIN + biometric)
-│   ├── FileExplorer.jsx        (302 lines) Virtual filesystem with drag-drop
-│   ├── StockChart.jsx          (294 lines) Dual-ticker SVG chart
-│   ├── InteractiveWallpaper.jsx(222 lines) Canvas wallpaper (Matrix/CyberGrid/Neon)
-│   ├── FolderModal.jsx         (194 lines) Folder view/edit modal
-│   ├── IrisVisualizer.jsx      (183 lines) 3D particle sphere orb
-│   ├── RagEngine.js            (151 lines) TF-IDF local file search
-│   ├── ArcSearch.jsx           (136 lines) Global search (apps, files, web, LLM)
-│   ├── GlobeVisualizer.jsx     (125 lines) 3D wireframe globe with aurora
-│   ├── TaskAlarmOverlay.jsx    (123 lines) Task reminder with alert tone
-│   ├── ThreatLogs.jsx          (122 lines) Security threat photo gallery
-│   ├── CyberSynth.js           (120 lines) Web Audio ambient synth engine
-│   ├── TopAppBar.jsx           (103 lines) Status bar (clock, battery, network)
-│   ├── AnimatedCardBuilder.jsx (100 lines) GSAP/Tailwind code preview renderer
-│   ├── HomeGrid.jsx            (92 lines)  3D-tilted home screen app grid
-│   ├── ToolResultDisplay.jsx   (91 lines)  Tool result renderer (IP, pw, hash, crypto)
-│   ├── ZeroScreen.jsx          (86 lines)  Daily briefing (weather, AI, quotes)
-│   ├── AppContextMenu.jsx      (82 lines)  Long-press context menu
-│   ├── BottomNavBar.jsx        (64 lines)  5-tab bottom navigation
-│   ├── VaultExplorer.jsx       (62 lines)  Vault tabs (Files, Apps, Threats)
-│   ├── LiveConfigModal.jsx     (48 lines)  AI engine config for live voice
-│   ├── PinKeypad.jsx           (44 lines)  Numeric PIN input
-│   ├── ChronoClockDial.jsx     (39 lines)  Animated clock dial
-│   ├── HudFallbackIcon.jsx     (15 lines)  Cyan-filtered icon fallback
-│   ├── HudIcon.jsx             (13 lines)  IRIS icon pack renderer
-│   ├── HomeClockBanner.jsx     (13 lines)  Weather+battery pill
-│   ├── AssistantStatusPanel.jsx(25 lines)  Offline assistant status text + audio canvas
-│   ├── LetterFilterBar.jsx     (30 lines)  A-Z filter bar for drawer ring
-│   ├── ThreatPhotoCapture.jsx  (10 lines)  Threat photo capture status badge
-│   ├── PermissionsStep.jsx     (65 lines)  Setup wizard permissions step
-│   ├── FileCreator.jsx         (45 lines)  File explorer new file form
-│   └── LiveVoiceFAB.jsx        (8 lines)   Floating voice button
-│   └── drawer/                              Drawer layouts (5 files, 514 lines)
-│       ├── DrawerRing.jsx      (339 lines) 3D sphere with drag rotation + A-Z filter
-│       ├── DrawerList.jsx      (57 lines)  Vertical list layout
-│       ├── DrawerCategories.jsx(54 lines)  Category/folder cards
-│       ├── DrawerGrid.jsx      (34 lines)  Grid layout
-│       └── DrawerIcon.jsx      (30 lines)  Single app icon renderer
-├── pages/                                  Page components (11 files, 1,933 lines)
-│   ├── Drawer.jsx              (288 lines) App drawer, 4 layouts, search, folders
-│   ├── Home.jsx                (255 lines) Home screen with orb, weather, battery
-│   ├── Widgets.jsx             (232 lines) Widget dashboard (8 widget types)
-│   ├── Assistant.jsx           (223 lines) AI chat interface
-│   ├── Terminal.jsx            (219 lines) Full terminal with commands + particles
-│   ├── IrisNews.jsx            (197 lines) Hacker News + BBC RSS feed
-│   ├── IrisTools.jsx           (182 lines) 12 cybersecurity tools
-│   ├── PrivateVault.jsx        (171 lines) Encrypted photo gallery
-│   ├── Settings.jsx            (90 lines)  Settings page (48 props from App)
-│   └── VpnBrowser.jsx         (48 lines)  Native WebView browser overlay
-│   ├── settings/                           Settings sections (16 files, 698 lines)
-│   │   ├── WallpaperThemeSection.jsx (104 lines) Theme + wallpaper + live wallpaper
-│   │   ├── AppIconsSection.jsx       (94 lines) Per-app icon customization
-│   │   ├── ApiKeysSection.jsx        (71 lines) API key management
-│   │   ├── SettingControls.jsx       (64 lines) Toggle, Slider, OptionGrid
-│   │   ├── AboutSection.jsx          (50 lines) App info
-│   │   ├── VaultLockSection.jsx      (46 lines) Vault lock + auto-lock
-│   │   ├── PowerSaveSection.jsx      (45 lines) Power save mode selector
-│   │   ├── TransitionsSection.jsx    (45 lines) Transitions + icon theme
-│   │   ├── FactoryResetSection.jsx   (36 lines) Factory reset
-│   │   ├── LayoutConfigSection.jsx   (36 lines) DPI, grid, icon/text scale
-│   │   ├── LLMBackendSection.jsx     (34 lines) Backend + Gemini model selector
-│   │   ├── LauncherEngineSection.jsx (30 lines) Set as default launcher
-│   │   ├── SettingsSection.jsx       (27 lines) Accordion wrapper
-│   │   ├── VoiceSettingsSection.jsx  (26 lines) Voice pitch + rate
-│   │   ├── NeuralSkillsSection.jsx   (14 lines) TTS toggle + drawer search
-│   │   └── TweaksSection.jsx         (13 lines) Glass opacity, labels, 24h, fullscreen
-│   ├── assistant/                          Assistant sub-components (5 files, 370 lines)
-│   │   ├── OllamaManager.jsx    (146 lines) Ollama model manager
-│   │   ├── EngineModelBar.jsx   (80 lines) Backend/model selector bar
-│   │   ├── DiagnosticsTerminal.jsx (78 lines) System diagnostics
-│   │   ├── SessionSidebar.jsx   (38 lines) Session list sidebar
-│   │   └── ChatMessage.jsx      (28 lines) Chat message component
-│   └── widgets/                            Widget components (10 files, 439 lines)
-│       ├── WidgetConfig.jsx     (90 lines) Widget workshop manager
-│       ├── PerformanceWidget.jsx(82 lines) Battery, memory, CPU temp
-│       ├── SignalWidget.jsx     (82 lines) Battery/signal/RAM bars
-│       ├── WeatherWidget.jsx    (70 lines) Weather station display
-│       ├── TasksWidget.jsx      (55 lines) Day task manager
-│       ├── CustomWidget.jsx     (27 lines) User-created widget
-│       ├── PingWidget.jsx       (22 lines) Network latency tester
-│       ├── StockWidget.jsx      (10 lines) Stock chart wrapper
-│       └── RemoveButton.jsx     (7 lines)  Close button
-├── terminal/                               Terminal (3 files, 604 lines)
-│   ├── commands.js              (544 lines) 40 registered commands
-│   ├── llmQuery.js              (58 lines)  LLM query for terminal
-│   └── index.js                 (2 lines)  Barrel re-export
-├── tools/                                  IRIS Tools data (1 file, 118 lines)
-│   └── irisToolsData.js         (118 lines) 12 tool definitions
+├── main.jsx                    (98 lines)   Entry point
+├── App.jsx                     (247 lines)  Root router, all props from stores
+├── ErrorBoundary.jsx           (55 lines)   Error boundary
+├── index.css                   (662 lines)  Tailwind + custom CSS
+├── stores/                                 Zustand state (8 files, 625 lines)
+│   ├── themeStore.js           (136 lines)  Visual settings with persistence
+│   ├── assistantStore.js       (129 lines)  Chat sessions, live voice, text prompt
+│   ├── appsStore.js            (123 lines)  Installed apps, custom folders, hidden apps
+│   ├── appListRepository.js    (67 lines)   Derived app list (hidden filtering) from appsStore
+│   ├── appStore.js             (55 lines)   App state: activePage, vault, chronoLock
+│   ├── badgeStore.js           (55 lines)   Notification badge state
+│   ├── aiStore.js              (45 lines)   API keys, LLM backend, voice settings
+│   └── powerStore.js           (15 lines)   Power save mode (delegates to PowerSaveManager)
+├── hooks/                                 Custom hooks (12 files, 2,680 lines)
+│   ├── useDrawerMeshEngine.js  (574 lines)  DrawerMesh 3D sphere engine + render loop
+│   ├── useAIBackend.js         (402 lines)  AI inference (5 backends) + RAG + search
+│   ├── useOfflineAssistantCommand.js (318)  Offline assistant command state machine
+│   ├── useVoiceEngine.js       (314 lines)  Speech recognition + TTS pipeline
+│   ├── useOfflineDispatch.js   (254 lines)  Offline voice command dispatch (8 actions)
+│   ├── useOfflineTTS.js        (242 lines)  Piper TTS Web Worker + audio pipeline
+│   ├── useAppGestures.js       (202 lines)  Swipe/long-press gesture detection
+│   ├── useStockData.js         (133 lines)  Binance + Yahoo Finance live data
+│   ├── useAppEffects.js        (126 lines)  App lifecycle, fullscreen, vault auto-lock
+│   ├── useAppContextMenu.js    (61 lines)   Long-press context menu
+│   ├── useThemeVars.js         (29 lines)   CSS custom property injection
+│   └── usePageRouter.js        (25 lines)   Navigation helpers
+├── utils/                                 Utilities (21 files, 3,316 lines)
+│   ├── OfflineCommandEngine.js (456 lines)  RiveScript + 31 regex command matchers
+│   ├── SearchViewModel.js      (403 lines)  App/file search view model
+│   ├── offlineSideEffects.js   (350 lines)  18 side effect handlers (timer, notes, weather)
+│   ├── PermissionManager.js    (298 lines)  Runtime permission rationales/list/degradation
+│   ├── PowerSaveManager.js     (230 lines)  Singleton, 4 tiers, 21 features per tier
+│   ├── WallpaperManager.js     (183 lines)  Wallpaper + live wallpaper management
+│   ├── BackupManager.js        (182 lines)  Local backup/restore (localStorage + Preferences)
+│   ├── MaterialYou.js          (159 lines)  Material You color extraction
+│   ├── secureStorage.js        (156 lines)  AES-GCM encryption via Web Crypto API
+│   ├── ThemePresets.js         (156 lines)  Preset theme palettes
+│   ├── DataStore.js            (156 lines)  Key/value data access layer
+│   ├── AIProviderManager.js    (129 lines)  LLM provider registry (Gemini/Groq/NVIDIA/HF/Ollama)
+│   ├── safeMath.js             (126 lines)  eval-free math expression parser (calculator)
+│   ├── weather.js              (77 lines)   Open-Meteo API, WMO code mapping
+│   ├── IrisIconPack.jsx        (75 lines)   13 custom sci-fi SVG icons
+│   ├── aiQueryBridge.js        (70 lines)   Shared LLM query helper (SSE, Gemini header auth)
+│   ├── IconShapeMask.js        (48 lines)   Adaptive icon shape masking
+│   ├── HapticFeedback.js       (37 lines)   Vibration/haptic helpers
+│   ├── storage.js              (14 lines)   Shared getLS/getLSNum/getLSBool helpers
+│   ├── appClickRouter.js       (8 lines)    Route app clicks (path vs native)
+│   └── constants.js            (3 lines)    BUILTIN_APPS=[], APP_VERSION='4.8.7'
+├── components/                             Reusable UI (51 files, 7,361 lines)
+│   ├── LauncherPlugin.js       (791 lines)  Native bridge wrapper (40+ functions)
+│   ├── ChronoPinLock.jsx       (366 lines)  Vault lock (time-based PIN + biometric)
+│   ├── TopAppBar.jsx           (350 lines)  Status bar (clock, battery, network)
+│   ├── ArcSearch.jsx           (336 lines)  Global search (apps, files, web, LLM)
+│   ├── StockChart.jsx          (319 lines)  Dual-ticker SVG chart
+│   ├── SetupWizard.jsx         (300 lines)  First-run 4-step wizard
+│   ├── OfflineAssistantOverlay.jsx (287)    Offline voice assistant overlay
+│   ├── ZeroScreen.jsx          (277 lines)  Daily briefing (weather, AI, quotes)
+│   ├── InteractiveWallpaper.jsx(276 lines)  Canvas wallpaper (Matrix/CyberGrid/Neon)
+│   ├── FileExplorer.jsx        (276 lines)  Virtual filesystem with drag-drop
+│   ├── BottomNavBar.jsx        (273 lines)  5-tab bottom navigation
+│   ├── HomeScreenWidgetHost.jsx(238 lines)  Home screen widget host
+│   ├── CommandReference.jsx    (209 lines)  Command reference sheet
+│   ├── FolderModal.jsx         (200 lines)  Folder view/edit modal
+│   ├── RecentsOverlay.jsx      (183 lines)  Recents/task switcher overlay
+│   ├── ThreatDashboard.jsx     (180 lines)  Threat monitoring dashboard
+│   ├── RagEngine.js            (171 lines)  TF-IDF local file search
+│   ├── FeatureTour.jsx         (169 lines)  First-run feature tour
+│   ├── HomeScreenFolder.jsx    (158 lines)  Home screen folder widget
+│   ├── BuiltInWidgets.jsx      (158 lines)  Built-in widget gallery
+│   ├── CyberSynth.js           (152 lines)  Web Audio ambient synth engine
+│   ├── TaskAlarmOverlay.jsx    (136 lines)  Task reminder with alert tone
+│   ├── ThreatLogs.jsx          (129 lines)  Security threat photo gallery
+│   ├── GracefulDegradation.jsx (128 lines)  Feature availability fallbacks
+│   ├── ToolResultDisplay.jsx   (100 lines)  Tool result renderer (IP, pw, hash, crypto)
+│   ├── HomeGrid.jsx            (96 lines)   3D-tilted home screen app grid
+│   ├── AppContextMenu.jsx      (90 lines)   Long-press context menu
+│   ├── HomePager.jsx           (89 lines)   Home screen page pager
+│   ├── PinnedContacts.jsx      (64 lines)   Pinned contacts drawer
+│   ├── VaultExplorer.jsx       (63 lines)   Vault tabs (Files, Apps, Threats)
+│   ├── LiveConfigModal.jsx     (52 lines)   AI engine config for live voice
+│   ├── AssistantStatusPanel.jsx(50 lines)   Offline assistant status text + audio canvas
+│   ├── GenAIPlugin.js          (49 lines)   On-device speech recognizer bridge
+│   ├── PermissionsStep.jsx     (45 lines)   Setup wizard permissions step
+│   ├── ChronoClockDial.jsx     (44 lines)   Animated clock dial
+│   ├── ProviderBadge.jsx       (43 lines)   LLM provider badge
+│   ├── FileCreator.jsx         (43 lines)   File explorer new file form
+│   ├── PinKeypad.jsx           (40 lines)   Numeric PIN input
+│   ├── KeystorePlugin.js       (39 lines)   Keystore bridge wrapper
+│   ├── HudFallbackIcon.jsx     (17 lines)   Cyan-filtered icon fallback
+│   ├── HudIcon.jsx             (13 lines)   IRIS icon pack renderer
+│   ├── ThreatPhotoCapture.jsx  (10 lines)   Threat photo capture status badge
+│   ├── LiveVoiceFAB.jsx        (8 lines)    Floating voice button
+│   └── drawer/                              Drawer layouts (8 files)
+│       ├── DrawerCategories.jsx(91 lines)   Category/folder cards
+│       ├── DrawerList.jsx      (63 lines)   Vertical list layout
+│       ├── drawerMeshUtils.js  (39 lines)   Cluster building + color helpers
+│       ├── DrawerGrid.jsx      (38 lines)   Grid layout
+│       ├── DrawerIcon.jsx      (37 lines)   Single app icon renderer
+│       ├── DrawerMesh.jsx      (31 lines)   3D sphere layout (engine in hook)
+│       ├── LetterFilterBar.jsx (28 lines)   A-Z filter bar
+│       └── drawerMeshData.js   (17 lines)   HUD_SVG_PATHS + HUD_COLOR
+├── pages/                                 Page components (43 files, 4,620 lines)
+│   ├── Drawer.jsx              (381 lines)  App drawer, 4 layouts, search, folders
+│   ├── Assistant.jsx           (336 lines)  AI chat interface
+│   ├── Widgets.jsx             (318 lines)  Widget dashboard (10 widget types)
+│   ├── Home.jsx                (281 lines)  Home screen with orb, weather, battery
+│   ├── IrisTools.jsx           (231 lines)  12 cybersecurity tools
+│   ├── PrivateVault.jsx        (217 lines)  Encrypted photo gallery
+│   ├── Settings.jsx            (101 lines)  Settings page (48 props from App)
+│   └── VpnBrowser.jsx          (53 lines)   Native WebView browser overlay
+│   ├── settings/                           Settings sections (21 files)
+│   │   ├── WallpaperThemeSection.jsx (218) Theme + wallpaper + live wallpaper
+│   │   ├── GestureSettingsSection.jsx (190) Gesture configuration
+│   │   ├── BackupRestoreSection.jsx (138)  Local backup/restore
+│   │   ├── AdvancedSection.jsx  (110 lines) Advanced options
+│   │   ├── AppIconsSection.jsx  (106 lines) Per-app icon customization
+│   │   ├── LayoutConfigSection.jsx (89)    DPI, grid, icon/text scale
+│   │   ├── AppLockSection.jsx   (87 lines)  App locking
+│   │   ├── AboutSection.jsx     (86 lines)  App info
+│   │   ├── ApiKeysSection.jsx   (84 lines)  API key management (header auth)
+│   │   ├── SettingControls.jsx  (75 lines)  Toggle, Slider, OptionGrid
+│   │   ├── LLMBackendSection.jsx(65 lines)  Backend + Gemini model selector
+│   │   ├── VaultLockSection.jsx (51 lines)  Vault lock + auto-lock
+│   │   ├── PowerSaveSection.jsx (50 lines)  Power save mode selector
+│   │   ├── TransitionsSection.jsx (48)     Transitions + icon theme
+│   │   ├── VoiceSettingsSection.jsx (39)   Voice pitch + rate
+│   │   ├── FactoryResetSection.jsx (39)    Factory reset
+│   │   ├── LauncherEngineSection.jsx (32)  Set as default launcher
+│   │   ├── SettingsSection.jsx  (27 lines)  Accordion wrapper
+│   │   ├── TweaksSection.jsx    (24 lines)  Glass opacity, labels, 24h, fullscreen
+│   │   └── NeuralSkillsSection.jsx (16)    TTS toggle + drawer search
+│   ├── assistant/                          Assistant sub-components (5 files)
+│   │   ├── OllamaManager.jsx    (159 lines) Ollama model manager
+│   │   ├── DiagnosticsTerminal.jsx (140)   System diagnostics
+│   │   ├── EngineModelBar.jsx   (84 lines)  Backend/model selector bar
+│   │   ├── ChatMessage.jsx      (52 lines)  Chat message component
+│   │   └── SessionSidebar.jsx   (44 lines)  Session list sidebar
+│   └── widgets/                            Widget components (10 files)
+│       ├── MediaWidget.jsx      (154 lines) Media player widget
+│       ├── WidgetConfig.jsx     (121 lines) Widget workshop manager
+│       ├── SignalWidget.jsx     (88 lines)  Battery/signal/RAM bars
+│       ├── PerformanceWidget.jsx(85 lines)  Battery, memory, CPU temp
+│       ├── WeatherWidget.jsx    (74 lines)  Weather station display
+│       ├── TasksWidget.jsx      (58 lines)  Day task manager
+│       ├── CustomWidget.jsx     (28 lines)  User-created widget
+│       ├── PingWidget.jsx       (23 lines)  Network latency tester
+│       ├── StockWidget.jsx      (11 lines)  Stock chart wrapper
+│       └── RemoveButton.jsx     (7 lines)   Close button
+├── tools/                                  IRIS Tools data (1 file, 137 lines)
+│   └── irisToolsData.js         (137 lines) 12 tool definitions
 ├── data/                                   Data files (2 files, 140 lines)
 │   ├── stockData.js             (83 lines)  9 mock stock/crypto entries
 │   └── oemData.js               (57 lines)  11 OEM battery optimization instructions
-├── workers/                                Web Workers (1 file, 57 lines)
-│   └── piperWorker.js           (57 lines) Piper TTS Web Worker
-└── rivescript/                             RiveScript files (3 binary files)
-    ├── brain.rive, personality/eliza.rive, personality/begin.rive
+├── workers/                                Web Workers (1 file, 66 lines)
+│   └── piperWorker.js           (66 lines)  Piper TTS Web Worker
+└── rivescript/                             RiveScript files (3 files)
+    ├── brain.rive, personality/begin.rive, personality/eliza.rive
 ```
 
 ---
 
-## ZUSTAND STORES (6 stores, 342 lines)
+## ZUSTAND STORES (8 stores, 625 lines)
 
 ### appStore.js — App State
 | Field | Type | Default | Persisted |
@@ -190,16 +218,18 @@ src/
 
 Key actions: `setActivePage`, `setSetupComplete` (writes localStorage), `toggleAppLock` (writes localStorage), `setShowChronoLock`, `setIsVaultUnlocked`, `setShowArcSearch`, `setShowVpnBrowser`.
 
-### appsStore.js — Installed Apps
+### appsStore.js — Installed Apps + Hidden Apps
 | Field | Type | Default | Persisted |
 |-------|------|---------|-----------|
 | `installedApps` | Object[] | `loadApps()` | `installed_apps` |
+| `hiddenApps` | string[] | `loadHidden()` | `iris_hidden_apps` |
 
-Key actions: `setInstalledApps`, `mergeNativeApps` (dedupes by packageId, filters IRIS packages), `loadNativeApps` (calls native `getInstalledApps()`), `resetToDefaults`.
+Key actions: `setInstalledApps`, `mergeNativeApps` (dedupes by packageId, filters IRIS packages), `loadNativeApps` (calls native `getInstalledApps()`), `setHiddenApp(packageId, hidden)` (single source of truth for hidden apps), `resetToDefaults`.
 
-Side effect at import: filters `IRIS_PACKAGE_IDS` from `installed_apps` and `iris_custom_folders` in localStorage.
+### appListRepository.js — Derived App List
+Reads `useAppsStore.getState()` for installed + hidden apps; `hideApp`/`unhideApp` delegate to `appsStore.setHiddenApp`. Consumed by app list UI.
 
-### themeStore.js — 22 Visual Settings
+### themeStore.js — Visual Settings
 All fields persist to localStorage. Key fields:
 - `themeColor` (default `'cyan'`), `glassOpacity` (75), `wallpaper` (`'VOID'`)
 - `dpiScale` (100), `gridColumns` (5), `gridRows` (5)
@@ -231,148 +261,150 @@ Sessions capped at 10, chat logs at 50 entries. `persistSessions()` writes to `i
 ### powerStore.js — Power Save Mode
 1 field: `powerSaveMode` (delegates to `PowerSaveManager`). Sets `window.__powerSaveMode` global.
 
+### badgeStore.js — Notification Badges
+Tracks unread notification badge counts per app.
+
 ---
 
-## HOOKS (10 files, 1,401 lines)
+## HOOKS (12 files, 2,680 lines)
 
-### useVoiceEngine.js (342 lines) — Speech Recognition + TTS
+### useVoiceEngine.js (314 lines) — Speech Recognition + TTS
 **Bridge hook**: connects useAIBackend via `setSubmitPrompt(submitPrompt, isGeneratingRef, abortControllerRef)`.
 
 **Module-level singleton**: `recognition` (SpeechRecognition instance, created at import).
 
 **TTS pipeline** (speakText): Cartesia TTS (native or web) → native Android TTS → browser SpeechSynthesis.
 
-**Key refs**: `submitPromptRef`, `backendIsGeneratingRef`, `backendAbortRef`, `lastTtsTextRef`.
+**Refs**: `submitPromptRef`, `backendIsGeneratingRef`, `backendAbortRef`, `lastTtsTextRef`, `isListeningRef`, `isLiveVoiceRef`, `isSpeakingRef`, `finishSpeakingTimerRef`, `mountedRef`.
 
 **useCallbacks**: `startVoiceInput`, `stopVoiceInput`, `speakText`, `stopSpeaking`, `handleOpenLiveMode`, `handleExitLiveModeOnly`, `handleStopLiveModeCompletely`, `isLiveConfigured`, `handleEngageLiveClick`, `handleSaveLiveConfig`, `setSubmitPrompt`, `submitPrompt`.
 
-### useAIBackend.js (300 lines) — AI Inference
+### useAIBackend.js (402 lines) — AI Inference
 **Constructor**: `speakTextFn` (from useVoiceEngine).
 
-**5 backends**: GEMINI (SSE), GROQ (SSE), NVIDIA (SSE), HUGGINGFACE (SSE), OLLAMA (non-streaming).
+**5 backends**: GEMINI (SSE), GROQ (SSE), NVIDIA (SSE), HUGGINGFACE (SSE), OLLAMA (non-streaming). Gemini keys sent via `x-goog-api-key` header (never URL).
 
 **Inner functions**: `fetchWebSearch(query)` (DuckDuckGo + Wikipedia), `streamSSE(res, loadingId)` (SSE parser).
 
 **SEARCH_KEYWORDS**: 35+ keywords triggering web search.
 
-### useOfflineTTS.js (220 lines) — Piper TTS Web Worker
+### useOfflineAssistantCommand.js (318 lines) — Offline Command State Machine
+Extracted `handleCommand` + `handleWeather` + `handleNotifications` from OfflineAssistantOverlay. Handles WAITING_FOR_* multi-turn contexts, IRIS AI queries, conversation memory, side effects, and command dispatch.
+
+### useOfflineTTS.js (242 lines) — Piper TTS Web Worker
 Manages Piper Web Worker lifecycle, audio queue, AudioContext + AnalyserNode, visualizer animation loop, 30s idle cleanup timer.
 
-### useOfflineDispatch.js (204 lines) — Offline Voice Commands
+### useOfflineDispatch.js (254 lines) — Offline Voice Commands
 8 actions: `open` (Levenshtein fuzzy match), `close_overlay`, `uninstall`, `app_info`, `call` (contact lookup), `timer`, `alarm`.
 
-### useAppEffects.js (108 lines) — App Lifecycle
+### useDrawerMeshEngine.js (574 lines) — DrawerMesh Engine
+Fibonacci sphere distribution, drag rotation, pinch zoom, A-Z filter, icon caching, requestAnimationFrame render loop. Backs `drawer/DrawerMesh.jsx`.
+
+### useAppEffects.js (126 lines) — App Lifecycle
 7 useEffects: vault package sync, fullscreen+backButton+appStateChange, keepAlive polling, task alarm polling, vault auto-lock, task state events, notification interception.
 
-### useAppGestures.js (42 lines) — Swipe/Long-Press
+### useAppGestures.js (202 lines) — Swipe/Long-Press
 Swipe right → home, swipe left → iris_news, swipe up → drawer, swipe down → notification panel, long-press → ArcSearch.
 
-### useAppContextMenu.js (48 lines) — Context Menu
+### useAppContextMenu.js (61 lines) — Context Menu
 `handleContextMenu`, `handleLockApp`, `handleTriggerUninstall`, `handleOpenAppInfo`. Used by Home.jsx and Drawer.jsx.
 
-### useThemeVars.js (25 lines) — CSS Variables
+### useThemeVars.js (29 lines) — CSS Variables
 Sets `--primary-rgb`, `--primary-color`, `--primary-color-secondary`, `--glass-opacity` on `document.documentElement`.
 
-### usePageRouter.js (18 lines) — Navigation
+### usePageRouter.js (25 lines) — Navigation
 `handleLaunchApp(app)`, `handleTriggerVault()`, `handleTriggerChronoLock(t)`.
 
-### useStockData.js (94 lines) — Live Market Data
+### useStockData.js (133 lines) — Live Market Data
 Fetches from Binance API (crypto) and Yahoo Finance via allorigins proxy (stocks).
 
 ---
 
-## UTILITIES (10 files, 1,055 lines)
+## UTILITIES (21 files, 3,316 lines)
 
-### secureStorage.js (99 lines) — AES-GCM Encryption
-- Key stored in IndexedDB (`IrisSecureDB`)
+### secureStorage.js (156 lines) — AES-GCM Encryption
+- Key stored in IndexedDB (`IrisSecureDB`), **non-extractable** (`extractable: false`)
 - `setItem(key, value)`: encrypts with AES-GCM-256, stores in localStorage as `iris_enc_{key}`
 - `getItem(key)`: reads from localStorage, decrypts
 - `migrateAll()`: auto-encrypts plaintext API keys
 - Special cases: `nvidia_api_key` and `huggingface_api_key` also set boolean flags `iris_has_nvidia_key`/`iris_has_hf_key`
-- **8 consumers**: aiStore, useAIBackend, useVoiceEngine, llmQuery, Assistant, DiagnosticsTerminal, ApiKeysSection, LiveConfigModal
 
-### PowerSaveManager.js (234 lines) — Power Save Singleton
+### PowerSaveManager.js (230 lines) — Power Save Singleton
 - 4 modes: AUTO, HIGH, MEDIUM, LOW
 - 21 features per tier: use3DOrb, useWallpaper, particleCanvas, backdropBlur, pageTransitions, liveWidgetUpdates, backgroundNotifications, animatedIcons, gridAnimations, batteryPollMs, weatherPollMs, widgetMetricsPollMs, clockPollMs, networkPollMs, keepAlivePollMs, taskCheckPollMs, terminalNetPollMs, wallpaperFps, iconDecodeSize, deferredPiperInit, maxRenderItems
 - `detectDeviceTier()`: reads `navigator.deviceMemory` and `navigator.hardwareConcurrency`
 - `getPollingInterval(key)`: returns ms value for current tier
 - `shouldDisable(feature)`: checks if boolean feature is false
-- **13 consumers** across the codebase
-- **Battery optimized (v4.6.1)**: keepAlivePollMs=300s (was 30-60s), taskCheckPollMs=120s (was 30-60s)
+- **Battery optimized (v4.6.1)**: keepAlivePollMs=300s, taskCheckPollMs=120s, both skip when document hidden
 
-### OfflineCommandEngine.js (349 lines) — Voice Command Engine
+### OfflineCommandEngine.js (456 lines) — Voice Command Engine
 - 31 regex-based command matchers in `rules` array
-- RiveScript integration for fallback responses
+- RiveScript integration for fallback responses (persistent engine — one-shot bug fixed)
 - Unit conversion via `convert-units`
 - RiveScript macros for flashlight, wifi, bluetooth, volume, battery, app launch, call, timer, alarm, weather, notes
 
-### offlineSideEffects.js (223 lines) — Side Effect Handlers
+### offlineSideEffects.js (350 lines) — Side Effect Handlers
 18 actions: battery_result, contact_result, weather, notifications, notes_result, check_ram, check_temp, optimize_memory, toggle_flashlight, set_brightness, set_volume, open_settings, timer, sleep_mode, driving_mode, save_note, read_notes, clear_notes, delete_last_note, remind, search_web, stealth_capture.
 
-### weather.js (65 lines) — Weather API
+### safeMath.js (126 lines) — Eval-Free Calculator
+Tokenizer + recursive-descent parser. Used by ArcSearch calculator (replaces `eval()`).
+
+### aiQueryBridge.js (70 lines) — Shared LLM Query
+SSE streaming helper used by Assistant + offline overlay + terminal. Gemini auth via `x-goog-api-key` header.
+
+### weather.js (77 lines) — Weather API
 Open-Meteo API. WMO code mapping. Reads coordinates from localStorage.
 
-### IrisIconPack.jsx (72 lines) — Custom Icons
-13 sci-fi SVG icons for common Android packages (Chrome, Phone, Messages, Camera, Settings, Maps, YouTube, Gmail, Photos, Play Store, Clock, Calendar, Calculator).
+### IrisIconPack.jsx (75 lines) — Custom Icons
+13 sci-fi SVG icons for common Android packages.
 
 ### appClickRouter.js (8 lines)
 If `app.path` exists → `onNavigate(app.path)`. Otherwise → `launchApp(app.packageId)`.
 
-### constants.js (2 lines)
-`BUILTIN_APPS = []` (empty), `APP_VERSION = '4.5.0'`.
-
-### DEAD CODE: logger.js, timing.js, iris.rive
+### constants.js (3 lines)
+`BUILTIN_APPS = []` (empty), `APP_VERSION = '4.8.7'`.
 
 ---
 
-## PAGES (11 files, 1,933 lines)
+## PAGES (8 root pages + subdirectories)
 
-### App.jsx (204 lines) — Root Router
-- Reads all 6 stores (massive prop surface)
+### App.jsx (247 lines) — Root Router
+- Reads all 8 stores (massive prop surface)
 - Instantiates useVoiceEngine, useAIBackend (with bridge), useAppGestures, useThemeVars, useAppEffects, usePageRouter
-- Renders: TopAppBar, BottomNavBar, page switch, InteractiveWallpaper, ChronoPinLock, VaultExplorer, SetupWizard, ArcSearch, ZeroScreen, TaskAlarmOverlay, LiveVoiceFAB, LiveConfigModal, VpnBrowser
+- Renders: TopAppBar, BottomNavBar, page switch, InteractiveWallpaper, ChronoPinLock, VaultExplorer, SetupWizard, ArcSearch, ZeroScreen, TaskAlarmOverlay, LiveVoiceFAB, LiveConfigModal, VpnBrowser, FeatureTour
+- Lazy-loaded routes (`React.lazy`) for Home, Drawer, Assistant, Widgets, IrisTools, PrivateVault, Settings, VpnBrowser
 - DPI scaling via CSS `zoom: dpiScale/100`
 - Page transitions via CSS classes
 
-### Home.jsx (255 lines)
-Props (20): onNavigate, onTriggerChronoLock, onTriggerVault, isVaultUnlocked, gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, setLayoutStyle, installedApps, setInstalledApps, lockedApps, onToggleAppLock, showAppLabels, globalIconTheme, isAppActive, showHomeOrb, powerSaveMode.
+### Home.jsx (281 lines)
+Renders: HomeGrid, HomePager, HomeScreenWidgetHost, HomeScreenFolder, AppContextMenu, OfflineAssistantOverlay (React.lazy). Swipe gestures.
 
-Renders: HomeClockBanner, HomeGrid, AppContextMenu, OfflineAssistantOverlay (React.lazy). Swipe gestures: up→drawer, left→iris_news, right→zero_screen.
+### Drawer.jsx (381 lines)
+4 layouts: DrawerGrid, DrawerList, DrawerCategories, DrawerMesh. FolderModal for folder view/edit. Search, sort, category filters.
 
-### Drawer.jsx (288 lines)
-Props (17): All grid/layout settings, installedApps, setInstalledApps, lockedApps, onToggleAppLock, showAppLabels, showDrawerSearch, globalIconTheme, drawerIconSize, drawerTextSize, drawerLayout, setDrawerLayout.
+### Assistant.jsx (336 lines)
+Reads aiStore and assistantStore directly. Renders SessionSidebar, EngineModelBar, OllamaManager, DiagnosticsTerminal, ChatMessage. Biometric lock, live voice controls.
 
-4 layouts: DrawerGrid, DrawerList, DrawerCategories, DrawerRing. FolderModal for folder view/edit. Search, sort, category filters.
+### Settings.jsx (101 lines)
+Props (48) — largest prop count. Passes all to 20 settings section components. Accordion behavior via `expandedSections` state.
 
-### Settings.jsx (90 lines)
-Props (48) — largest prop count. Passes all to 14 settings section components. Accordion behavior via `expandedSections` state.
+### IrisTools.jsx (231 lines)
+Reads useAppStore (setShowVpnBrowser, setVpnBrowserUrl) and useThemeStore (glassOpacity). 12 tools from irisToolsData.js. `ip_info` now uses HTTPS (`https://ip-api.com`).
 
-### Assistant.jsx (223 lines)
-Reads aiStore and assistantStore directly. 16 useState, 5 useEffect. Renders SessionSidebar, EngineModelBar, OllamaManager, DiagnosticsTerminal, ChatMessage, GlobeVisualizer. Biometric lock, live voice controls.
+### Widgets.jsx (318 lines)
+10 widget types: Performance, Weather, Stock, Media, Tasks, Ping, Signal, Custom + built-ins. WidgetConfig for add/remove. CyberSynth audio engine. localStorage persistence.
 
-### IrisTools.jsx (182 lines)
-Reads useAppStore (setShowVpnBrowser, setVpnBrowserUrl) and useThemeStore (glassOpacity). 12 tools from irisToolsData.js. Navigation returns from tool execute.
-
-### IrisNews.jsx (197 lines)
-Reads usePowerStore. Fetches Hacker News (Firebase API) + BBC RSS (World, Tech). Auto-refresh interval.
-
-### Terminal.jsx (219 lines)
-Full terminal with 40 commands, boot sequence animation, particle canvas, glow effect, tab completion, command history (localStorage: `iris_terminal_history`), quick command buttons.
-
-### Widgets.jsx (232 lines)
-8 widget types: Performance, Weather, Stock, Media, Tasks, Ping, Signal, Custom. WidgetConfig for add/remove. CyberSynth audio engine. localStorage persistence for widget IDs, tasks, weather city, media mode.
-
-### PrivateVault.jsx (171 lines)
+### PrivateVault.jsx (217 lines)
 Encrypted photo gallery from `silent_captures/` directory. Filesystem API for load/delete/download. Batch loading (20 at a time).
 
-### VpnBrowser.jsx (48 lines)
+### VpnBrowser.jsx (53 lines)
 Native WebView overlay. Opens via IrisVpnBrowserPlugin → BrowserActivity.java.
 
 ---
 
-## COMPONENTS (38 files, 4,439 lines)
+## COMPONENTS
 
-### LauncherPlugin.js (671 lines) — Native Bridge (32 importers)
+### LauncherPlugin.js (791 lines) — Native Bridge
 **Most imported module in the codebase.**
 
 Exports 40+ async functions wrapping Capacitor native bridge:
@@ -390,34 +422,23 @@ Exports 40+ async functions wrapping Capacitor native bridge:
 - Screen: `startScreenShare`, `stopScreenShare`, `captureSilentPhotos`
 - Shell: `execCommand` (whitelisted, 40+ allowed commands)
 - OEM: `openOemBatterySettings` (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus)
-- Media: `speakTextNative` (Android TTS), `playAudioFile`, `dispatchMediaKey`
+- Offline speech: `startOfflineSpeech`, `stopOfflineSpeech`, `onSpeechStatus`, `onSpeechPartial`
 
-### ChronoPinLock.jsx (311 lines) — Vault Lock Screen
+### ChronoPinLock.jsx (366 lines) — Vault Lock Screen
 Time-based PIN (HHMM format) + biometric. Threat photo capture on failed auth. Animated clock dial, diagnostic log console.
 
-### OfflineAssistantOverlay.jsx (391 lines) — Offline Assistant
-Full offline voice assistant with IrisVisualizer orb, audio frequency canvas, speech recognition retry loop (up to 10 retries), multi-turn command context handling.
+### TopAppBar.jsx (350 lines) — Status Bar
+Clock, battery, network status. Polling via PowerSaveManager.
 
-### InteractiveWallpaper.jsx (222 lines) — Canvas Wallpaper
-3 modes: MATRIX (green rain), CYBER_GRID (perspective grid), NEON_PARTICLES (bouncing particles with mouse gravity). 24fps throttle off-home.
+### OfflineAssistantOverlay.jsx (287 lines) — Offline Assistant
+Full offline voice assistant. Speech recognition retry loop (up to 10 retries), multi-turn command context handling. Command logic lives in `useOfflineAssistantCommand`.
 
-### DrawerRing.jsx (339 lines) — 3D Sphere Layout
+### DrawerMesh (useDrawerMeshEngine.js + DrawerMesh.jsx) — 3D Sphere Layout
 Fibonacci sphere distribution, drag rotation, pinch zoom, A-Z filter bar, icon image caching, requestAnimationFrame render loop.
-
-### Other notable components:
-- **TopAppBar.jsx** (103 lines): Clock, battery, network status. Polling via PowerSaveManager.
-- **FolderModal.jsx** (194 lines): Folder view/edit with app checklist.
-- **HomeGrid.jsx** (92 lines): 3D-tilted app grid with perspective transforms.
-- **ArcSearch.jsx** (136 lines): Global search with apps, files, web, LLM options.
-- **GlobeVisualizer.jsx** (125 lines): 3D wireframe globe with aurora bands.
-- **RagEngine.js** (151 lines): TF-IDF local file search engine.
-- **CyberSynth.js** (120 lines): Web Audio ambient synth (sub-bass + LFO + arpeggiator).
-- **FileExplorer.jsx** (302 lines): Virtual filesystem with drag-drop upload.
-- **StockChart.jsx** (294 lines): Dual-ticker SVG chart with hover crosshair.
 
 ---
 
-## SETTINGS SECTIONS (16 files, 698 lines)
+## SETTINGS SECTIONS (21 files)
 
 | Section | Controls | Key Settings |
 |---------|----------|--------------|
@@ -435,15 +456,20 @@ Fibonacci sphere distribution, drag rotation, pinch zoom, A-Z filter bar, icon i
 | FactoryResetSection | Factory reset with confirmation | resetToDefaults() |
 | VaultLockSection | Lock vault, auto-lock timeout (4 options) | vault_auto_lock (raw LS) |
 | AboutSection | App info, device info | APP_VERSION, device OEM |
+| BackupRestoreSection | Local backup/restore | BackupManager (localStorage + Preferences) |
+| GestureSettingsSection | Gesture config | swipe/long-press bindings |
+| AppLockSection | Per-app locking | lockedApps |
+| AdvancedSection | Advanced options | misc |
+| SettingControls | Reusable controls | Toggle, Slider, OptionGrid |
 
 ---
 
-## NATIVE JAVA FILES (9 files, 3,558 lines)
+## NATIVE JAVA FILES (16 files, 5,316 lines)
 
-### LauncherPlugin.java (2,570 lines) — Main Native Plugin
-- 64 @PluginMethod methods
+### LauncherPlugin.java (3,083 lines) — Main Native Plugin
+- 64+ @PluginMethod methods
 - TTS engine with UtteranceProgressListener
-- SpeechRecognizer with partial results
+- SpeechRecognizer with partial results + on-device recognizer
 - MediaPlayer for audio playback
 - Port scanner (TCP connect, 50 threads, CountDownLatch)
 - Whois via RDAP API
@@ -455,17 +481,18 @@ Fibonacci sphere distribution, drag rotation, pinch zoom, A-Z filter bar, icon i
 - Screen capture via MediaProjection + ImageReader
 - OEM battery settings (6 manufacturers)
 - Notification management via IrisNotificationListenerService
+- Screenshot/window-change forwarding from IrisAccessibilityService via static `onScreenshotCaptured`/`onWindowChanged` + `notifyListeners`
 
-### MainActivity.java (158 lines)
+### MainActivity.java (160 lines)
 Registers plugins, starts keepalive, requests battery optimization, sets 120Hz refresh rate, immersive fullscreen, display cutout mode.
 
-### BrowserActivity.java (240 lines)
+### BrowserActivity.java (243 lines)
 Native WebView with dark theme, programmatic layout, "INCOGNITO" label, progress bar, back/refresh buttons. Launched by IrisVpnBrowserPlugin.
 
-### IrisKeepAliveService.java (133 lines)
+### IrisKeepAliveService.java (136 lines)
 Foreground service with PARTIAL_WAKE_LOCK (5min timeout, reacquires on restart), IMPORTANCE_MIN notification, auto-restart on task removed.
 
-### IrisNotificationListenerService.java (107 lines)
+### IrisNotificationListenerService.java (140 lines)
 Intercepts notifications, filters vault packages, broadcasts updates to LauncherPlugin.
 
 ### IrisScreenCaptureService.java (209 lines)
@@ -480,36 +507,37 @@ Launches BrowserActivity with URL. No actual VPN.
 ### BootReceiver.java (31 lines)
 Starts IrisKeepAliveService on boot.
 
+### IrisAccessibilityService.java (145 lines)
+Monitors window changes + takes screenshots; forwards to JS in-process (not via broadcast).
+
+### IrisGenAIPlugin.java (291 lines)
+On-device silent speech recognizer.
+
+### IrisKeystorePlugin.java (117 lines)
+Encrypted keystore for sensitive values.
+
+### PermissionManager.java (292 lines)
+Runtime permission rationales/list/degradation. No phantom permissions (READ_CALL_LOG removed).
+
+### PackageChangeReceiver.java (98 lines)
+Package install/uninstall events → app list refresh.
+
+### LauncherTileService.java (53 lines)
+Quick settings tile (keeps the launcher alive / shortcuts).
+
+### IrisBackupAgent.java (76 lines)
+Legacy backup agent. **Not referenced by the manifest** (`allowBackup="false"`).
+
 ---
 
-## TERMINAL (40 commands, 589 lines)
-
-| Category | Commands |
-|----------|----------|
-| System | `help`, `clear`, `diagnostic`, `whoami`, `date`, `uptime`, `id` |
-| Files | `ls`, `cat`, `mkdir`, `write`, `rm`, `cp`, `mv`, `touch` |
-| Process | `ps`, `top`, `kill` |
-| Disk | `df`, `du` |
-| Memory | `free` |
-| Network | `ifconfig`/`ip`, `ping`, `nmap`, `dns`, `whois`, `traceroute`, `sqlmap` |
-| System Info | `uname`, `chmod` |
-| AI | `search` (Wikipedia), `weather` (Open-Meteo), `build` (GSAP card), `consult oracle` (RAG) |
-| UI | `vault` (chrono lock), `mobile` (sync portal), `hack` (mock), `ingest codebase` (mock) |
-| Scripting | `sh <path>` (run shell script from virtual FS) |
-| History | `history` (handled inline) |
-
-All commands route through `LauncherPlugin.execCommand()` (whitelisted) or Capacitor Filesystem.
-
----
-
-## IRIS TOOLS (12 tools, 118 lines)
+## IRIS TOOLS (12 tools, 137 lines)
 
 | Tool | Type | Implementation |
 |------|------|----------------|
 | pw_gen | Local | `crypto.getRandomValues()` + Fisher-Yates shuffle |
 | hash_gen | Local | `crypto.subtle.digest()` SHA-256/SHA-1 |
 | crypto | Local | `btoa`/`atob` + `encodeURIComponent` |
-| ip_info | API | `ipinfo.io` + `ip-api.com` fallback |
+| ip_info | API | `ipinfo.io` + `ip-api.com` fallback (HTTPS) |
 | censys | Browser | Opens `search.censys.io` in native WebView |
 | shodan | Browser | Opens `shodan.io` |
 | virustotal | Browser | Opens `virustotal.com` |
@@ -524,7 +552,8 @@ All commands route through `LauncherPlugin.execCommand()` (whitelisted) or Capac
 ## CONFIG FILES
 
 ### package.json
-16 dependencies: Capacitor 8 (android, app, browser, camera, core, device, filesystem, geolocation, local-notifications, preferences), capacitor-native-biometric, piper-tts-web, convert-units, jszip, onnxruntime-web, react 18, react-dom, rivescript, zustand 5.
+Dependencies (19): Capacitor 8 (android, app, camera, core, device, filesystem, geolocation, local-notifications, preferences), @capgo/capacitor-native-biometric, @mintplex-labs/piper-tts-web, convert-units, jszip, onnxruntime-web, react 18, react-dom, rivescript, zustand 5.
+Scripts: `dev`, `build`, `preview`, `lint`, `deploy:android`, `postinstall: patch-package`.
 
 ### vite.config.js
 React plugin, polyfills for `process.env`/`process.platform`/`global`, ES module workers.
@@ -543,7 +572,7 @@ Loads Inter, JetBrains Mono, Material Symbols Outlined. Process polyfill. Entry:
 ## DATA FLOW MAP
 
 ```
-App.jsx (reads all 6 stores)
+App.jsx (reads all 8 stores)
 ├── useVoiceEngine ←→ useAIBackend (bidirectional bridge)
 │   ├── useVoiceEngine: SpeechRecognition → submitPrompt → useAIBackend
 │   └── useAIBackend: response → speakText → useVoiceEngine
@@ -554,35 +583,31 @@ App.jsx (reads all 6 stores)
 │
 ├── Home.jsx (20 props from App)
 │   ├── HomeGrid → HudIcon → IRIS_ICON_PACK
-│   ├── HomeClockBanner
+│   ├── HomePager / HomeScreenWidgetHost / HomeScreenFolder
 │   ├── OfflineAssistantOverlay (React.lazy)
 │   │   ├── useOfflineTTS (Piper Worker)
-│   │   └── useOfflineDispatch (voice commands)
+│   │   ├── useOfflineDispatch (voice commands)
+│   │   └── useOfflineAssistantCommand (state machine)
 │   └── AppContextMenu → useAppContextMenu
 │
 ├── Drawer.jsx (17 props from App)
-│   ├── DrawerGrid/List/Ring/Categories
+│   ├── DrawerGrid/List/Categories/Mesh (useDrawerMeshEngine)
 │   ├── FolderModal
 │   └── AppContextMenu → useAppContextMenu
 │
 ├── Settings.jsx (48 props from App)
-│   └── 14 SettingsSection components
+│   └── 20 SettingsSection components
 │
 ├── Assistant.jsx (reads aiStore + assistantStore directly)
 │   ├── SessionSidebar, EngineModelBar
-│   ├── ChatMessage, GlobeVisualizer
+│   ├── ChatMessage
 │   └── OllamaManager, DiagnosticsTerminal
 │
 ├── IrisTools.jsx (reads useAppStore + useThemeStore)
 │   └── ToolResultDisplay
 │
-├── Terminal.jsx (reads usePowerStore)
-│   ├── commands.js → LauncherPlugin (native)
-│   ├── MobileSync
-│   └── AnimatedCardBuilder
-│
 ├── Widgets.jsx
-│   ├── 8 widget components
+│   ├── 10 widget components
 │   └── CyberSynth (Web Audio)
 │
 └── ChronoPinLock → ChronoClockDial + PinKeypad
@@ -594,9 +619,9 @@ App.jsx (reads all 6 stores)
 
 ```
 JS (LauncherPlugin.js) → Capacitor Bridge → Java (LauncherPlugin.java)
-├── App management → PackageManager
+├── App management → PackageManager (+ PackageChangeReceiver)
 ├── TTS → android.speech.tts.TextToSpeech
-├── Speech → android.speech.SpeechRecognizer
+├── Speech → android.speech.SpeechRecognizer (+ IrisGenAPIPlugin on-device)
 ├── Camera → Camera2 API (SilentCameraHelper)
 ├── Screen → MediaProjection + ImageReader (IrisScreenCaptureService)
 ├── Notifications → IrisNotificationListenerService
@@ -606,15 +631,29 @@ JS (LauncherPlugin.js) → Capacitor Bridge → Java (LauncherPlugin.java)
 ├── Shell → Runtime.exec (whitelisted)
 ├── Network → Socket + InetAddress
 ├── WebView → BrowserActivity (IrisVpnBrowserPlugin)
-└── KeepAlive → IrisKeepAliveService + BootReceiver
+├── Keystore → IrisKeystorePlugin
+├── Accessibility → IrisAccessibilityService (screenshots, window changes)
+└── KeepAlive → IrisKeepAliveService + BootReceiver + LauncherTileService
 ```
 
 ---
 
-## ALL localStorage KEYS (33 unique)
+## SECURITY CONFIG
+
+- **allowBackup="false"** — cloud backup disabled; only on-device mirroring (localStorage ↔ Preferences) via BackupManager
+- **network_security_config.xml**: `cleartextTrafficPermitted="false"` globally, loopback-only whitelist (`localhost`, `127.0.0.1`, `10.0.2.2`)
+- **secureStorage**: AES-GCM-256 key stored in IndexedDB, **non-extractable**
+- **Gemini API keys**: sent via `x-goog-api-key` header — never in URL query string
+- **No eval()**: calculator uses safeMath.js tokenizer/parser
+- **Keystore file** (`release.keystore`) is gitignored + untracked; password stays env-gated
+- **Permissions**: no phantom `READ_CALL_LOG`; `QUERY_ALL_PACKAGES` (drawer), `MANAGE_EXTERNAL_STORAGE` (file search), `READ_CONTACTS` (contacts) kept as they back real features
+
+---
+
+## ALL localStorage KEYS
 
 **appStore (2):** `iris_setup_complete`, `iris_locked_apps`
-**appsStore (2):** `installed_apps`, `iris_custom_folders`
+**appsStore (3):** `installed_apps`, `iris_custom_folders`, `iris_hidden_apps`
 **themeStore (22):** `theme_color`, `glass_opacity`, `wallpaper`, `custom_wallpaper`, `dpi_scale`, `grid_columns`, `grid_rows`, `home_icon_size`, `home_text_size`, `drawer_icon_size`, `drawer_text_size`, `layout_style`, `show_app_labels`, `show_drawer_search`, `show_home_orb`, `iris_use_24h_clock`, `global_icon_theme`, `active_live_wallpaper`, `fullscreen_active`, `drawer_layout`, `page_transition_effect`, `iris_page_transition_speed`, `page_transition_easing`
 **aiStore (5):** `system_llm_backend`, `gemini_model`, `iris_voice_enabled`, `iris_voice_pitch`, `iris_voice_rate`
 **assistantStore (1):** `iris_assistant_sessions`
@@ -627,24 +666,29 @@ JS (LauncherPlugin.js) → Capacitor Bridge → Java (LauncherPlugin.java)
 ## KNOWN ISSUES
 
 - **Settings prop drilling**: Settings.jsx receives 48 props from App.jsx — architectural, acceptable for now
-- **StockChart (294 lines)**: Just under 300-line limit, acceptable
+- **Over-300-line components**: Drawer.jsx (381), ChronoPinLock.jsx (366), TopAppBar.jsx (350), Assistant.jsx (336), ArcSearch.jsx (336), StockChart.jsx (319), Widgets.jsx (318) — targeted splits for the largest remaining; OfflineAssistantOverlay split completed (584→287)
+- **useOfflineAssistantCommand**: `handleCommand` recreated each render (depends on non-memoized `startListening`) — behavior-preserving, minor perf cost
 
 ---
 
-## FIXES APPLIED (v4.6.0 audit pass)
+## FIXES APPLIED (v4.8.7 audit pass)
 
-| # | Issue | Fix |
-|---|-------|-----|
-| 1 | Version mismatch `4.5.0` in constants.js | Updated to `4.6.0` |
-| 2 | Dead code: `logger.js`, `timing.js`, `iris.rive`, `CameraConsent.jsx` | Deleted all 4 files |
-| 3 | Dead import: `Preferences` in OfflineCommandEngine.js | Removed unused import |
-| 4 | Cross-store conflict: `system_llm_backend` written by both aiStore and assistantStore | `assistantStore.setLiveSetupEngine` no longer writes to localStorage (aiStore is single source of truth) |
-| 5 | RiveScript one-shot bug: `rs = null` after first `processCommand()` | Removed rs=null so engine persists across calls |
-| 6 | `window.open` in offlineSideEffects `search_web` | Replaced with `LauncherPlugin.execCommand('am start -a android.intent.action.VIEW -d ...')` |
-| 7 | Duplicated helpers: `getLS`/`getLSNum`/`getLSBool` in 3 stores | Extracted to `src/utils/storage.js`, all stores import from shared util |
-| 8 | Levenshtein recomputed on every call in useOfflineDispatch | Moved to module-level with LRU cache (200 entries, auto-clear) |
-| 9 | Components over 300 lines | Extracted: `AssistantStatusPanel`, `LetterFilterBar`, `ThreatPhotoCapture`, `PermissionsStep`, `FileCreator` |
-| 10 | FileExplorer dead state variables | Removed unused `newFileName`/`newFileContent` state and `handleCreateFile` function |
-| 11 | KeepAlive WakeLock held 30min draining battery | Reduced to 5min, reacquires on restart |
-| 12 | KeepAlive polling every 30-60s wasting power | Increased to 300s (5min), skips when document hidden |
-| 13 | Task check polling runs when backgrounded | Only runs when document is visible |
+| # | Severity | Issue | Fix |
+|---|----------|-------|-----|
+| 1 | CRITICAL | useVoiceEngine.js: missing refs (`lastTtsTextRef`, `isListeningRef`, `isLiveVoiceRef`, `isSpeakingRef`, `finishSpeakingTimerRef`, `mountedRef`) caused ReferenceError | Added missing refs + mount/unmount effect + local mic-permission callback |
+| 2 | CRITICAL | HomeScreenFolder: `handleNameSubmit` referenced out of scope → ReferenceError on rename | Threaded as `onNameSubmit` prop to FolderExpandedView |
+| 3 | CRITICAL | HomeScreenWidgetHost: `useEffect` undefined | Added missing import |
+| 4 | HIGH | IrisAccessibilityService broadcast screenshots/window changes via implicit `sendBroadcast` (unexported class, dead delivery) | Switched to in-process static forwarders + `notifyListeners` |
+| 5 | HIGH | Keystore + debug artifacts (`release.keystore`, `diff.txt`, `diff_utf8.txt`) committed | `git rm --cached`, gitignored (kept on disk for builds) |
+| 6 | HIGH | Cleartext HTTP allowed globally | `cleartextTrafficPermitted="false"` + loopback whitelist; `ip-api.com` → HTTPS |
+| 7 | MEDIUM | Cloud backup enabled (`IrisBackupAgent` + dataExtractionRules) | `allowBackup="false"`, agent reference removed from manifest |
+| 8 | MEDIUM | secureStorage CryptoKey extractable | `crypto.subtle.generateKey(..., false, ...)` — non-extractable |
+| 9 | MEDIUM | Phantom `READ_CALL_LOG` permission | Removed from manifest, LauncherPlugin.java, PermissionManager.java, PermissionManager.js |
+| 10 | LOW | `eval()` in ArcSearch calculator | New `safeMath.js` tokenizer + recursive-descent parser |
+| 11 | LOW | Gemini API keys in URL query string | Moved to `x-goog-api-key` header (all 6 call sites) |
+| 12 | LOW | Duplicate hidden-app systems | Unified on `appsStore.setHiddenApp`; appListRepository derives from it |
+| 13 | HOUSE | Version drift (web 4.8.7 vs native 4.7.0) | build.gradle versionCode 248 / versionName "4.8.7"; BackupManager uses APP_VERSION |
+| 14 | HOUSE | ESLint: 27 errors / 468 issues | 0 errors; fixed real no-undef (BackupManager, etc.), removed debug console.log, no-useless-escape, display-name, unescaped entities, no-constant-condition |
+| 15 | HOUSE | DrawerMesh.jsx 642 lines | Split into `useDrawerMeshEngine` + `drawerMeshData` + `drawerMeshUtils`; DrawerMesh now 31 lines |
+| 16 | HOUSE | OfflineAssistantOverlay.jsx 584 lines | Split into `useOfflineAssistantCommand` hook; overlay now 287 lines |
+| 17 | HOUSE | AGENTS.md stale (v4.6.0, 120 files) | Rewritten to v4.8.7 reality (142 files, ~19,300 lines) |

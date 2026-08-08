@@ -124,7 +124,7 @@ export default function FileExplorer({ isVaultUnlocked = false, onTriggerUnlock 
 
     reader.onload = (event) => {
       const content = event.target.result
-      const sanitizedName = file.name.replace(/[\/\s]/g, '_')
+      const sanitizedName = file.name.replace(/[/\s]/g, '_')
       const fullPath = currentPath === '/' ? `/${sanitizedName}` : `${currentPath}/${sanitizedName}`
 
       if (fs[fullPath]) {
@@ -246,7 +246,7 @@ export default function FileExplorer({ isVaultUnlocked = false, onTriggerUnlock 
         {showCreator && (
           <FileCreator
             onCreated={(name, content) => {
-              const sanitizedName = name.replace(/[\/\s]/g, '_')
+              const sanitizedName = name.replace(/[/\s]/g, '_')
               const fullPath = currentPath === '/' ? `/${sanitizedName}` : `${currentPath}/${sanitizedName}`
               if (fs[fullPath]) { setAlertMsg("Error: Object already exists."); return }
               const updatedFs = {

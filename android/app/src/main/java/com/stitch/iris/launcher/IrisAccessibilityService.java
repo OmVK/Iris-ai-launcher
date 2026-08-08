@@ -2,7 +2,6 @@ package com.stitch.iris.launcher;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
-import android.content.Intent;
 import android.os.Build;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
@@ -126,11 +125,9 @@ public class IrisAccessibilityService extends AccessibilityService {
 
     private void broadcastWindowChanged(String packageName) {
         try {
-            Intent intent = new Intent("com.stitch.iris.launcher.WINDOW_CHANGED");
-            intent.putExtra("packageName", packageName);
-            sendBroadcast(intent);
+            LauncherPlugin.onWindowChanged(packageName);
         } catch (Exception e) {
-            Log.e(TAG, "Error broadcasting window change", e);
+            Log.e(TAG, "Error notifying window change", e);
         }
     }
 
@@ -140,12 +137,9 @@ public class IrisAccessibilityService extends AccessibilityService {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 40, baos);
             byte[] bytes = baos.toByteArray();
             String base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
-
-            Intent intent = new Intent("com.stitch.iris.launcher.SCREENSHOT_CAPTURED");
-            intent.putExtra("screenshot", base64);
-            sendBroadcast(intent);
+            LauncherPlugin.onScreenshotCaptured(base64);
         } catch (Exception e) {
-            Log.e(TAG, "Error broadcasting screenshot", e);
+            Log.e(TAG, "Error notifying screenshot", e);
         }
     }
 }

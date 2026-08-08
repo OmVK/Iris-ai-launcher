@@ -267,7 +267,7 @@ export default function StockChart() {
             ) : (
               <>
                 <span className={candles1[hoverIndex].isBullish ? 'text-green-400' : 'text-error'}>
-                  {ticker1} DAY_{hoverIndex + 1} // O: ${candles1[hoverIndex].open.toFixed(2)} C: ${candles1[hoverIndex].close.toFixed(2)}
+                  {ticker1} DAY_{hoverIndex + 1}{' '}{'//'} O: ${candles1[hoverIndex].open.toFixed(2)} C: ${candles1[hoverIndex].close.toFixed(2)}
                 </span>
                 <span className="text-on-surface-variant/40">
                   {ticker2}: ${p2[hoverIndex].y.toFixed(0)}Y

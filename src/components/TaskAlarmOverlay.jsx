@@ -112,7 +112,7 @@ export default function TaskAlarmOverlay({ setActivePage }) {
         </h2>
         
         <p className="text-lg text-primary-color font-bold mb-6 break-words w-full">
-          "{activeTask.text}"
+          &quot;{activeTask.text}&quot;
         </p>
         
         <div className="w-full flex flex-col gap-3">

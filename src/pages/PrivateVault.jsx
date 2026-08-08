@@ -40,7 +40,7 @@ export default function PrivateVault() {
         } catch (e) { /* skip failed thumbnails */ }
       }
     } catch (e) {
-      console.log('No silent_captures directory yet or read error:', e)
+      console.warn('No silent_captures directory yet or read error:', e)
     } finally {
       setLoading(false)
     }
@@ -95,7 +95,7 @@ export default function PrivateVault() {
         setImages([])
         setSelectedImage(null)
       } catch (e) {
-        console.log("Wipe error", e)
+        console.error("Wipe error", e)
       }
     }
   }
@@ -142,7 +142,7 @@ export default function PrivateVault() {
         <div className="flex-1 flex flex-col items-center justify-center text-on-surface-variant/40">
           <span className="material-symbols-outlined text-6xl mb-4">no_photography</span>
           <p className="font-mono-data text-xs uppercase text-center max-w-xs">
-            No secure captures found.<br/><br/>Use voice commands in Comm:<br/>"capture silent front" or "capture silent back"
+            No secure captures found.<br/><br/>Use voice commands in Comm:<br/>&quot;capture silent front&quot; or &quot;capture silent back&quot;
           </p>
         </div>
       ) : (

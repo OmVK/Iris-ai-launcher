@@ -1,11 +1,10 @@
 import { create } from 'zustand'
 import { getInstalledApps, addPackageChangeListener } from '../components/LauncherPlugin'
-import { HiddenAppsStore } from '../utils/DataStore'
+import { useAppsStore } from './appsStore'
 
 const useAppListStore = create((set, get) => ({
   allApps: [],
   homeApps: [],
-  hiddenApps: [],
   isLoading: false,
   lastUpdated: 0,
 
@@ -13,7 +12,7 @@ const useAppListStore = create((set, get) => ({
     set({ isLoading: true })
     try {
       const apps = await getInstalledApps()
-      const hidden = await HiddenAppsStore.get('hidden', [])
+      const hidden = useAppsStore.getState().hiddenApps
       const hiddenSet = new Set(hidden)
 
       const filtered = apps.filter(app => !hiddenSet.has(app.packageId))
@@ -22,7 +21,6 @@ const useAppListStore = create((set, get) => ({
       set({
         allApps: filtered,
         homeApps: home,
-        hiddenApps: hidden,
         isLoading: false,
         lastUpdated: Date.now(),
       })
@@ -37,22 +35,12 @@ const useAppListStore = create((set, get) => ({
   },
 
   async hideApp(packageId) {
-    const hidden = [...get().hiddenApps, packageId]
-    const hiddenSet = new Set(hidden)
-    const filtered = get().allApps.filter(app => !hiddenSet.has(app.packageId))
-
-    set({
-      hiddenApps: hidden,
-      allApps: filtered,
-      homeApps: filtered.filter(app => app.isHome),
-    })
-    await HiddenAppsStore.set('hidden', hidden)
+    useAppsStore.getState().setHiddenApp(packageId, true)
+    await get().loadApps()
   },
 
   async unhideApp(packageId) {
-    const hidden = get().hiddenApps.filter(p => p !== packageId)
-    set({ hiddenApps: hidden })
-    await HiddenAppsStore.set('hidden', hidden)
+    useAppsStore.getState().setHiddenApp(packageId, false)
     await get().loadApps()
   },
 

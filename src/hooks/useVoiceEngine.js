@@ -29,21 +29,33 @@ try {
 export default function useVoiceEngine() {
   const {
     isListening, setIsListening,
-    isSpeaking, setIsSpeaking,
-    isLiveVoice, setIsLiveVoice,
-    isPrivateSession,
-    chatLog, setChatLog,
-    sessions, activeSessionId,
-    textPrompt, setTextPrompt,
-    activeUserTranscript, setActiveUserTranscript,
-    activeAiResponse, setActiveAiResponse,
-    showLiveConfigModal, setShowLiveConfigModal,
+    setIsSpeaking,
+    setIsLiveVoice,
+    setChatLog,
+    setShowLiveConfigModal,
     liveSetupEngine, setLiveSetupEngine,
     liveSetupKey, setLiveSetupKey,
-    persistSessions,
   } = useAssistantStore()
 
-  const { llmBackend, voiceEnabled, setLlmBackend, voicePitch, voiceRate } = useAIStore()
+  const { setLlmBackend, voicePitch, voiceRate } = useAIStore()
+
+  const lastTtsTextRef = useRef('')
+  const isListeningRef = useRef(false)
+  const isLiveVoiceRef = useRef(false)
+  const isSpeakingRef = useRef(false)
+  const finishSpeakingTimerRef = useRef(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (finishSpeakingTimerRef.current) {
+        clearTimeout(finishSpeakingTimerRef.current)
+        finishSpeakingTimerRef.current = null
+      }
+    }
+  }, [])
 
   const startVoiceInput = useCallback(async () => {
     if (!recognition) {
@@ -197,6 +209,16 @@ export default function useVoiceEngine() {
     utterance.onerror = finishSpeaking
     window.speechSynthesis.speak(utterance)
   }, [voicePitch, voiceRate])
+
+  const requestMicrophonePermission = useCallback(async () => {
+    try {
+      const perm = await checkAndRequestPermission('RECORD_AUDIO')
+      if (!perm) return true
+      return perm.granted
+    } catch (_) {
+      return true
+    }
+  }, [])
 
   const handleOpenLiveMode = useCallback(async () => {
     const hasPermission = await requestMicrophonePermission()

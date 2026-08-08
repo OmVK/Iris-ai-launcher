@@ -72,6 +72,15 @@ export const useAppsStore = create((set, get) => ({
     return { hiddenApps: hidden }
   }),
 
+  setHiddenApp: (packageId, hidden) => set((s) => {
+    const alreadyHidden = s.hiddenApps.includes(packageId)
+    const next = hidden
+      ? (alreadyHidden ? s.hiddenApps : [...s.hiddenApps, packageId])
+      : (alreadyHidden ? s.hiddenApps.filter(id => id !== packageId) : s.hiddenApps)
+    localStorage.setItem(HIDDEN_APPS_KEY, JSON.stringify(next))
+    return { hiddenApps: next }
+  }),
+
   isAppHidden: (packageId) => get().hiddenApps.includes(packageId),
 
   recordAppLaunch: (packageId) => set((s) => {

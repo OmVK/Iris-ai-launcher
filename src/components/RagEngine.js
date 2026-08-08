@@ -15,7 +15,7 @@ function tokenize(text) {
   if (!text || typeof text !== 'string') return [];
   return text
     .toLowerCase()
-    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'\[\]]/g, " ")
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'[\]]/g, " ")
     .split(/\s+/)
     .filter(word => word.length > 1 && !STOP_WORDS.has(word));
 }
