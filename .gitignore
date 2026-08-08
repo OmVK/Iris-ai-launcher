@@ -34,6 +34,7 @@ chromium_logs.txt
 
 # Signing material
 *.keystore
+*.keystore.*
 *.jks
 
 # Generated diffs
