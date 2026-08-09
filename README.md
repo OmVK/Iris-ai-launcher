@@ -53,13 +53,6 @@ npm run lint
 npm run deploy:android
 ```
 
-**Signed release APK:**
-
-```bash
-export IRIS_STORE_PASSWORD="<store password>"
-export IRIS_KEY_ALIAS="<key alias>"
-export IRIS_KEY_PASSWORD="<key password>"
-
 cd android && ./gradlew assembleRelease
 ```
 
