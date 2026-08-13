@@ -28,13 +28,15 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 4.9.1
+- **Version**: 4.9.2
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android
 
-## 🧹 v4.9.1 Architectural Audit & Cleanup
+## 🧹 v4.9.2 Architectural Audit & Wallpaper Fix
 
-IRIS v4.9.1 includes a comprehensive top-down architectural audit of all 521 project files:
+IRIS v4.9.2 resolves wallpaper selection bugs and incorporates top-down audit refactorings:
+- **Wallpaper Selection Fix**: Fixed root wallpaper styling in `App.jsx` allowing preset gradients (`GRID`, `NEBULA`, `AURORA`, `FIBER`, `OCEAN`, `SUNSET`, `FOREST`, `VOID`) and custom photos to render properly.
+- **Custom Ingestion Fix**: Connected `WallpaperManager.setCustomWallpaper` & `setHasCustomWallpaper` state handlers in `WallpaperThemeSection.jsx` and `Settings.jsx`.
 - **State Store Consolidation**: Unified `AppLockSection` into `useAppsStore` and removed redundant store code.
 - **Native Bridge Optimization**: Pruned 11 unreferenced native helper exports in `LauncherPlugin.js`.
 - **Bundle Optimization**: Cleaned up unused static binary assets in `public/piper/` for a leaner build footprint.

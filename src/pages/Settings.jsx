@@ -35,7 +35,7 @@ export default function Settings({
     dpiScale, setDpiScale, gridColumns, setGridColumns, gridRows, setGridRows,
     homeIconSize, setHomeIconSize, drawerIconSize, setDrawerIconSize, drawerTextSize, setDrawerTextSize,
     homeTextSize, setHomeTextSize, layoutStyle, setLayoutStyle, glassOpacity, setGlassOpacity,
-    themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setCustomWallpaper,
+    themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setHasCustomWallpaper,
     showAppLabels, setShowAppLabels, showDrawerSearch, setShowDrawerSearch, activeLiveWallpaper, setActiveLiveWallpaper,
     fullscreenActive, setFullscreenActive, globalIconTheme, setGlobalIconTheme, use24HourClock, setUse24HourClock,
     pageTransitionEffect, setPageTransitionEffect, pageTransitionSpeed, setPageTransitionSpeed,
@@ -61,7 +61,7 @@ export default function Settings({
         <p className="font-mono-data text-[9px] text-on-surface-variant/40 mt-1 uppercase">UNAUTHORIZED MODIFICATION MAY CAUSE SYSTEM INSTABILITY</p>
       </div>
 
-      <WallpaperThemeSection expandedSections={expandedSections} toggleSection={toggleSection} themeColor={themeColor} setThemeColor={setThemeColor} wallpaper={wallpaper} setWallpaper={setWallpaper} hasCustomWallpaper={hasCustomWallpaper} setCustomWallpaper={setCustomWallpaper} activeLiveWallpaper={activeLiveWallpaper} setActiveLiveWallpaper={setActiveLiveWallpaper} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} iconShape={iconShape} setIconShape={setIconShape} />
+      <WallpaperThemeSection expandedSections={expandedSections} toggleSection={toggleSection} themeColor={themeColor} setThemeColor={setThemeColor} wallpaper={wallpaper} setWallpaper={setWallpaper} hasCustomWallpaper={hasCustomWallpaper} setHasCustomWallpaper={setHasCustomWallpaper} activeLiveWallpaper={activeLiveWallpaper} setActiveLiveWallpaper={setActiveLiveWallpaper} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} iconShape={iconShape} setIconShape={setIconShape} />
       <ApiKeysSection expandedSections={expandedSections} toggleSection={toggleSection} geminiKey={geminiKey} setGeminiKey={setGeminiKey} groqKey={groqKey} setGroqKey={setGroqKey} />
       <LayoutConfigSection expandedSections={expandedSections} toggleSection={toggleSection} dpiScale={dpiScale} setDpiScale={setDpiScale} gridColumns={gridColumns} setGridColumns={setGridColumns} gridRows={gridRows} setGridRows={setGridRows} layoutStyle={layoutStyle} setLayoutStyle={setLayoutStyle} homeIconSize={homeIconSize} setHomeIconSize={setHomeIconSize} drawerIconSize={drawerIconSize} setDrawerIconSize={setDrawerIconSize} drawerTextSize={drawerTextSize} setDrawerTextSize={setDrawerTextSize} homeTextSize={homeTextSize} setHomeTextSize={setHomeTextSize} drawerLayout={drawerLayout} setDrawerLayout={setDrawerLayout} iconShape={iconShape} setIconShape={setIconShape} dockColumns={dockColumns} setDockColumns={setDockColumns} dockBackground={dockBackground} setDockBackground={setDockBackground} homePages={homePages} setHomePages={setHomePages} />
       <AppIconsSection expandedSections={expandedSections} toggleSection={toggleSection} installedApps={installedApps} setInstalledApps={setInstalledApps} />

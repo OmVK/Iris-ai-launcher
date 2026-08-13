@@ -173,7 +173,7 @@ export default function App() {
 
   const rootBgStyle = useMemo(() => {
     const bg = {}
-    if ((wallpaper === 'SYSTEM' || wallpaper === 'CUSTOM' || hasCustomWallpaper) && customWallpaperData) {
+    if ((wallpaper === 'CUSTOM' || wallpaper === 'SYSTEM') && customWallpaperData) {
       bg.backgroundImage = `url("${customWallpaperData}")`
       bg.backgroundSize = 'cover'
       bg.backgroundPosition = 'center'

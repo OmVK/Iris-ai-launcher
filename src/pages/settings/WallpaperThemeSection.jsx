@@ -24,7 +24,7 @@ const LIVE_WALLPAPERS = [
   { id: 'NEON_PARTICLES', label: 'Constellations', desc: 'Pointer gravity networks', icon: 'star' }
 ]
 
-export default function WallpaperThemeSection({ expandedSections, toggleSection, themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setCustomWallpaper, activeLiveWallpaper, setActiveLiveWallpaper, glassOpacity, setGlassOpacity, iconShape, setIconShape }) {
+export default function WallpaperThemeSection({ expandedSections, toggleSection, themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setHasCustomWallpaper, activeLiveWallpaper, setActiveLiveWallpaper, glassOpacity, setGlassOpacity, iconShape, setIconShape }) {
   const [dailyRotation, setDailyRotation] = useState(WallpaperManager.shouldRotateDaily())
   const [dynamicColor, setDynamicColor] = useState(MaterialYou.isDynamicColorEnabled())
   const [showPresets, setShowPresets] = useState(false)
@@ -39,19 +39,21 @@ export default function WallpaperThemeSection({ expandedSections, toggleSection,
         })
         if (image.dataUrl) {
           const resized = await WallpaperManager.resizeForWallpaper(image.dataUrl)
-          setCustomWallpaper(resized)
+          WallpaperManager.setCustomWallpaper(resized)
+          if (setHasCustomWallpaper) setHasCustomWallpaper(true)
           setWallpaper('CUSTOM')
           if (dynamicColor) {
             MaterialYou.extractAndApplyFromWallpaper(resized)
           }
         }
       } else {
-        const file = e.target.files[0]
+        const file = e.target.files?.[0]
         if (!file) return
         const reader = new FileReader()
         reader.onload = async (event) => {
           const resized = await WallpaperManager.resizeForWallpaper(event.target.result)
-          setCustomWallpaper(resized)
+          WallpaperManager.setCustomWallpaper(resized)
+          if (setHasCustomWallpaper) setHasCustomWallpaper(true)
           setWallpaper('CUSTOM')
           if (dynamicColor) {
             MaterialYou.extractAndApplyFromWallpaper(resized)
