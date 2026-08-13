@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect } from 'react'
 import SettingsSection from './SettingsSection'
-import useAppListStore from '../../stores/appListRepository'
+import { useAppsStore } from '../../stores/appsStore'
 import { openPermissionSettings } from '../../components/LauncherPlugin'
 import { useAppStore } from '../../stores/appStore'
 
 export default function AppLockSection({ expandedSections, toggleSection }) {
-  const { allApps } = useAppListStore()
+  const { installedApps: allApps } = useAppsStore()
   const { lockedApps, toggleAppLock } = useAppStore()
   const [showEnrolled, setShowEnrolled] = useState(false)
   const [timeoutSetting, setTimeoutSetting] = useState('Immediate')

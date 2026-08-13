@@ -240,15 +240,6 @@ export async function speakTextNative(text) {
   })
 }
 
-export function addSpeechFinishedListener(callback) {
-  if (isNative) {
-    return NativeLauncher.addListener('onSpeechFinished', callback)
-  } else {
-    const handler = () => callback()
-    window.addEventListener('iris-speech-finished', handler)
-    return { remove: () => window.removeEventListener('iris-speech-finished', handler) }
-  }
-}
 
 export async function speakCartesiaNative(text, voiceId, apiKey) {
   if (isNative) {
@@ -261,16 +252,6 @@ export async function speakCartesiaNative(text, voiceId, apiKey) {
   }
 }
 
-export async function playAudioFile(path) {
-  if (isNative) {
-    try {
-      return await NativeLauncher.playAudioFile({ path })
-    } catch (e) {
-      console.error('Play audio failed:', e)
-      throw e
-    }
-  }
-}
 
 export async function stopAudio() {
   if (isNative) {
@@ -324,17 +305,6 @@ export async function setVoiceSettingsNative(pitch, rate) {
   }
 }
 
-export async function requestNotificationAccess() {
-  if (isNative) {
-    try {
-      await NativeLauncher.requestNotificationAccess()
-    } catch (e) {
-      console.error("Failed to request notification access", e)
-    }
-  } else {
-    alert("Notification access is an Android-only feature.")
-  }
-}
 
 export async function getActiveNotifications() {
   if (isNative) {
@@ -588,17 +558,6 @@ export async function performGlobalAction(action) {
   return false
 }
 
-export async function getInstalledAppsCount() {
-  if (isNative) {
-    try {
-      const result = await NativeLauncher.getInstalledAppsCount()
-      return result?.count || 0
-    } catch (e) {
-      return 0
-    }
-  }
-  return 0
-}
 
 export function addPackageChangeListener(callback) {
   if (isNative) {
@@ -653,72 +612,6 @@ export async function getSystemWallpaper() {
   return null
 }
 
-export async function listProcesses(sort = 'cpu') {
-  if (isNative) {
-    try {
-      return await NativeLauncher.listProcesses({ sort })
-    } catch (e) {
-      console.error('Failed to list processes:', e)
-      return null
-    }
-  }
-  return null
-}
-
-export async function portScan(host, startPort = 1, endPort = 1024, timeout = 2000) {
-  if (isNative) {
-    try {
-      return await NativeLauncher.portScan({ host, startPort, endPort, timeout })
-    } catch (e) {
-      return { host, ip: '', openPorts: [], scanned: 0, error: e.message }
-    }
-  }
-  return { host, ip: '', openPorts: [], scanned: 0, error: 'Not available on web' }
-}
-
-export async function dnsLookup(host) {
-  if (isNative) {
-    try {
-      return await NativeLauncher.dnsLookup({ host })
-    } catch (e) {
-      return { host, records: [], error: e.message }
-    }
-  }
-  return { host, records: [], error: 'Not available on web' }
-}
-
-export async function whoisLookup(domain) {
-  if (isNative) {
-    try {
-      return await NativeLauncher.whoisLookup({ domain })
-    } catch (e) {
-      return { domain, error: e.message }
-    }
-  }
-  return { domain, error: 'Not available on web' }
-}
-
-export async function traceroute(host, maxHops = 15) {
-  if (isNative) {
-    try {
-      return await NativeLauncher.traceroute({ host, maxHops })
-    } catch (e) {
-      return { host, hops: [], error: e.message }
-    }
-  }
-  return { host, hops: [], error: 'Not available on web' }
-}
-
-export async function sqlmapCheck(url) {
-  if (isNative) {
-    try {
-      return await NativeLauncher.sqlmapCheck({ url })
-    } catch (e) {
-      return { url, vulnerabilities: [], error: e.message }
-    }
-  }
-  return { url, vulnerabilities: [], error: 'Not available on web' }
-}
 
 // ─── VPN Browser ─────────────────────────────────────────
 export async function startVpnBrowser(url = 'https://search.censys.io') {
@@ -745,16 +638,6 @@ export async function stopVpnBrowser() {
   return { status: 'web_unsupported' }
 }
 
-export async function isVpnBrowserActive() {
-  if (isNative) {
-    try {
-      return await VpnBrowser.isVpnActive()
-    } catch (e) {
-      return { active: false }
-    }
-  }
-  return { active: false }
-}
 
 
 export async function lookupContactMultiple(name) {

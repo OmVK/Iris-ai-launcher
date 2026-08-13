@@ -32,6 +32,14 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android
 
+## 🧹 v4.9.0 Architectural Audit & Cleanup
+
+IRIS v4.9.0 includes a comprehensive top-down architectural audit of all 521 project files:
+- **State Store Consolidation**: Unified `AppLockSection` into `useAppsStore` and removed redundant store code.
+- **Native Bridge Optimization**: Pruned 11 unreferenced native helper exports in `LauncherPlugin.js`.
+- **Bundle Optimization**: Cleaned up unused static binary assets in `public/piper/` for a leaner build footprint.
+- **Zero Circular Dependencies**: Graph verified as 100% DAG reachable from `src/main.jsx`.
+
 ## 📦 Build & Run
 
 Ensure you have Node.js (17+) and the Android SDK (platform 36) installed.
