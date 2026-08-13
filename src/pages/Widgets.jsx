@@ -29,9 +29,22 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
   const [customWidgets, setCustomWidgets] = useState(() => {
     try { const cached = localStorage.getItem('iris_custom_widgets'); return cached ? JSON.parse(cached) : [] } catch { return [] }
   })
+  const [widgetSpans, setWidgetSpans] = useState(() => {
+    try { const cached = localStorage.getItem('iris_widget_spans'); return cached ? JSON.parse(cached) : {} } catch { return {} }
+  })
 
   useEffect(() => { localStorage.setItem('iris_active_widgets', JSON.stringify(activeWidgetIds)) }, [activeWidgetIds])
   useEffect(() => { localStorage.setItem('iris_custom_widgets', JSON.stringify(customWidgets)) }, [customWidgets])
+
+  const toggleWidgetSpan = useCallback((id) => {
+    setWidgetSpans(prev => {
+      const current = prev[id] || 'col-span-1'
+      const next = current === 'col-span-1' ? 'col-span-2' : current === 'col-span-2' ? 'col-span-full' : 'col-span-1'
+      const updated = { ...prev, [id]: next }
+      try { localStorage.setItem('iris_widget_spans', JSON.stringify(updated)) } catch {}
+      return updated
+    })
+  }, [])
 
   const handleRemoveWidget = useCallback((id) => {
     setActiveWidgetIds(prev => prev.filter(wId => wId !== id))
@@ -257,59 +270,130 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
         <div className="mx-auto space-y-4">
         <WidgetConfig activeWidgetIds={activeWidgetIds} customWidgets={customWidgets} onAddWidget={handleAddWidget} onRemoveWidget={handleRemoveWidget} onCreateCustomWidget={handleCreateCustomWidget} />
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {activeWidgetIds.includes('performance') && <PerformanceWidget batteryLevel={batteryLevel} isCharging={isCharging} osVersion={osVersion} usedMem={usedMem} totalMem={totalMem} cpuTemp={cpuTemp} isDiagnosticRunning={isDiagnosticRunning} onCpuClick={handleCpuClick} onRemove={() => handleRemoveWidget('performance')} />}
-          {activeWidgetIds.includes('weather') && <WeatherWidget weatherData={weatherData} weatherCity={weatherCity} weatherLocalTime={weatherLocalTime} isWeatherLoading={isWeatherLoading} onRemove={() => handleRemoveWidget('weather')} />}
-          {activeWidgetIds.includes('stocks') && <StockWidget onRemove={() => handleRemoveWidget('stocks')} />}
-          {activeWidgetIds.includes('media') && <MediaWidget isPlaying={isPlaying} trackIndex={trackIndex} playerMode={playerMode} selectedSystemPlayer={selectedSystemPlayer} onSetPlayerMode={handleSetPlayerMode} onPlayToggle={handlePlayToggle} onSkip={handleSkip} onSetSystemPlayer={setSelectedSystemPlayer} onLaunchSystemPlayer={handleLaunchSystemPlayer} onRemove={() => handleRemoveWidget('media')} isAppActive={isAppActive} />}
-          {activeWidgetIds.includes('tasks') && <TasksWidget tasks={tasks} newTaskText={newTaskText} newTaskTime={newTaskTime} onSetNewTaskText={setNewTaskText} onSetNewTaskTime={setNewTaskTime} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} onClearAll={handleClearAllTasks} onRemove={() => handleRemoveWidget('tasks')} />}
+          {activeWidgetIds.includes('performance') && (
+            <div className={`relative transition-all duration-300 ${widgetSpans['performance'] || 'col-span-1'}`}>
+              <button onClick={() => toggleWidgetSpan('performance')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <PerformanceWidget batteryLevel={batteryLevel} isCharging={isCharging} osVersion={osVersion} usedMem={usedMem} totalMem={totalMem} cpuTemp={cpuTemp} isDiagnosticRunning={isDiagnosticRunning} onCpuClick={handleCpuClick} onRemove={() => handleRemoveWidget('performance')} />
+            </div>
+          )}
+          {activeWidgetIds.includes('weather') && (
+            <div className={`relative transition-all duration-300 ${widgetSpans['weather'] || 'col-span-1'}`}>
+              <button onClick={() => toggleWidgetSpan('weather')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <WeatherWidget weatherData={weatherData} weatherCity={weatherCity} weatherLocalTime={weatherLocalTime} isWeatherLoading={isWeatherLoading} onRemove={() => handleRemoveWidget('weather')} />
+            </div>
+          )}
+          {activeWidgetIds.includes('stocks') && (
+            <div className={`relative transition-all duration-300 ${widgetSpans['stocks'] || 'col-span-1'}`}>
+              <button onClick={() => toggleWidgetSpan('stocks')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <StockWidget onRemove={() => handleRemoveWidget('stocks')} />
+            </div>
+          )}
+          {activeWidgetIds.includes('media') && (
+            <div className={`relative transition-all duration-300 ${widgetSpans['media'] || 'col-span-2'}`}>
+              <button onClick={() => toggleWidgetSpan('media')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <MediaWidget isPlaying={isPlaying} trackIndex={trackIndex} playerMode={playerMode} selectedSystemPlayer={selectedSystemPlayer} onSetPlayerMode={handleSetPlayerMode} onPlayToggle={handlePlayToggle} onSkip={handleSkip} onSetSystemPlayer={setSelectedSystemPlayer} onLaunchSystemPlayer={handleLaunchSystemPlayer} onRemove={() => handleRemoveWidget('media')} isAppActive={isAppActive} />
+            </div>
+          )}
+          {activeWidgetIds.includes('tasks') && (
+            <div className={`relative transition-all duration-300 ${widgetSpans['tasks'] || 'col-span-1'}`}>
+              <button onClick={() => toggleWidgetSpan('tasks')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <TasksWidget tasks={tasks} newTaskText={newTaskText} newTaskTime={newTaskTime} onSetNewTaskText={setNewTaskText} onSetNewTaskTime={setNewTaskTime} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} onClearAll={handleClearAllTasks} onRemove={() => handleRemoveWidget('tasks')} />
+            </div>
+          )}
           {activeWidgetIds.includes('clock') && (
-            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['clock'] || 'col-span-1'}`}>
               <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
                 <span className="text-[9px] text-white/40 font-mono-data uppercase">Clock</span>
-                <button onClick={() => handleRemoveWidget('clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => toggleWidgetSpan('clock')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
+                  <button onClick={() => handleRemoveWidget('clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                </div>
               </div>
               <ClockWidget size="medium" />
             </div>
           )}
           {activeWidgetIds.includes('analog_clock') && (
-            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['analog_clock'] || 'col-span-1'}`}>
               <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
                 <span className="text-[9px] text-white/40 font-mono-data uppercase">Analog Clock</span>
-                <button onClick={() => handleRemoveWidget('analog_clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => toggleWidgetSpan('analog_clock')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
+                  <button onClick={() => handleRemoveWidget('analog_clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                </div>
               </div>
               <AnalogClockWidget size={100} />
             </div>
           )}
           {activeWidgetIds.includes('calendar') && (
-            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['calendar'] || 'col-span-1'}`}>
               <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
                 <span className="text-[9px] text-white/40 font-mono-data uppercase">Calendar</span>
-                <button onClick={() => handleRemoveWidget('calendar')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => toggleWidgetSpan('calendar')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
+                  <button onClick={() => handleRemoveWidget('calendar')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                </div>
               </div>
               <CalendarWidget />
             </div>
           )}
           {activeWidgetIds.includes('battery') && (
-            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['battery'] || 'col-span-1'}`}>
               <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
                 <span className="text-[9px] text-white/40 font-mono-data uppercase">Battery</span>
-                <button onClick={() => handleRemoveWidget('battery')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => toggleWidgetSpan('battery')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
+                  <button onClick={() => handleRemoveWidget('battery')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                </div>
               </div>
               <BatteryWidget level={batteryLevel} />
             </div>
           )}
           {activeWidgetIds.includes('notes') && (
-            <div className="glass-surface border border-white/10 rounded-xl overflow-hidden">
+            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['notes'] || 'col-span-1'}`}>
               <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
                 <span className="text-[9px] text-white/40 font-mono-data uppercase">Quick Notes</span>
-                <button onClick={() => handleRemoveWidget('notes')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => toggleWidgetSpan('notes')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
+                  <button onClick={() => handleRemoveWidget('notes')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
+                </div>
               </div>
               <NotesWidget notes={notes} onAdd={handleAddNote} />
             </div>
           )}
-          {customWidgets.filter(w => activeWidgetIds.includes(w.id)).map(w => <CustomWidget key={w.id} widget={w} onRemove={() => handleRemoveWidget(w.id)} />)}
-          {activeWidgetIds.includes('ping') && <PingWidget pingResult={pingResult} pingHistory={pingHistory} pingFailed={pingFailed} onTriggerPingTest={handleTriggerPingTest} onRemove={() => handleRemoveWidget('ping')} />}
-          {activeWidgetIds.includes('signal') && <SignalWidget onRemove={() => handleRemoveWidget('signal')} />}
+          {customWidgets.filter(w => activeWidgetIds.includes(w.id)).map(w => (
+            <div key={w.id} className={`relative transition-all duration-300 ${widgetSpans[w.id] || 'col-span-1'}`}>
+              <button onClick={() => toggleWidgetSpan(w.id)} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <CustomWidget widget={w} onRemove={() => handleRemoveWidget(w.id)} />
+            </div>
+          ))}
+          {activeWidgetIds.includes('ping') && (
+            <div className={`relative transition-all duration-300 ${widgetSpans['ping'] || 'col-span-1'}`}>
+              <button onClick={() => toggleWidgetSpan('ping')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <PingWidget pingResult={pingResult} pingHistory={pingHistory} pingFailed={pingFailed} onTriggerPingTest={handleTriggerPingTest} onRemove={() => handleRemoveWidget('ping')} />
+            </div>
+          )}
+          {activeWidgetIds.includes('signal') && (
+            <div className={`relative transition-all duration-300 ${widgetSpans['signal'] || 'col-span-1'}`}>
+              <button onClick={() => toggleWidgetSpan('signal')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
+                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
+              </button>
+              <SignalWidget onRemove={() => handleRemoveWidget('signal')} />
+            </div>
+          )}
          </div>
        </div>
      </div>

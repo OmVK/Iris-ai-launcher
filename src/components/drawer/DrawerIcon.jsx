@@ -18,7 +18,7 @@ function DrawerIcon({ app, isLocked, size, iconTheme, iconShape = 'system' }) {
       {isLocked ? (
         <span className="material-symbols-outlined text-error animate-pulse" style={{ fontSize: '1em' }}>lock</span>
       ) : app.icon && app.icon.startsWith('data:') ? (
-        (window.useGlobalHudIcons) ? (
+        (iconTheme === 'HUD' || iconTheme === 'CYBER' || window.useGlobalHudIcons) ? (
           IRIS_ICON_PACK[app.packageId] ? (
             <HudIcon packageId={app.packageId} size={28} />
           ) : (

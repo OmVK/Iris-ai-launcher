@@ -66,6 +66,9 @@ export default function WallpaperThemeSection({ expandedSections, toggleSection,
 
   const handleWallpaperChange = (id) => {
     setWallpaper(id)
+    if (id !== 'CUSTOM') {
+      if (setHasCustomWallpaper) setHasCustomWallpaper(false)
+    }
     if (dynamicColor && id !== 'CUSTOM') {
       const wp = WallpaperManager.WALLPAPERS.find(w => w.id === id)
       if (wp) {

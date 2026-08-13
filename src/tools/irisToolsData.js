@@ -121,35 +121,35 @@ export const TOOLS = [
   },
   { id: 'threat_dashboard', name: 'Threat Dashboard', icon: 'shield', desc: 'Security posture & threat intel', color: 'rgba(0,242,255,0.15)', borderColor: 'rgba(0,242,255,0.3)', accent: '#00f2ff',
     inputs: [],
-    custom: true,
+    custom: 'threat_dashboard',
     execute: async () => {
       return { custom: 'threat_dashboard' }
     }
   },
   { id: 'permission_auditor', name: 'Permission Auditor', icon: 'admin_panel_settings', desc: 'App privacy risk score & permission scanner', color: 'rgba(56,189,248,0.15)', borderColor: 'rgba(56,189,248,0.3)', accent: '#38bdf8',
     inputs: [],
-    custom: true,
+    custom: 'permission_auditor',
     execute: async () => {
       return { custom: 'permission_auditor' }
     }
   },
   { id: 'wifi_inspector', name: 'Wi-Fi Inspector', icon: 'wifi_find', desc: 'Network security & MITM ARP scanner', color: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.3)', accent: '#22c55e',
     inputs: [],
-    custom: true,
+    custom: 'wifi_inspector',
     execute: async () => {
       return { custom: 'wifi_inspector' }
     }
   },
   { id: 'iris_optics', name: 'IRIS Optics Vision', icon: 'center_focus_strong', desc: 'AI camera & screenshot vision analysis', color: 'rgba(0,242,255,0.15)', borderColor: 'rgba(0,242,255,0.3)', accent: '#00f2ff',
     inputs: [],
-    custom: true,
+    custom: 'iris_optics',
     execute: async () => {
       return { custom: 'iris_optics' }
     }
   },
   { id: 'unlock_iris', name: 'Unlock IRIS', icon: 'lock_open', desc: 'Voice command reference (vault-locked)', color: 'rgba(0,229,255,0.15)', borderColor: 'rgba(0,229,255,0.3)', accent: '#00e5ff',
     inputs: [],
-    custom: true,
+    custom: 'command_reference',
     locked: true,
     execute: async () => {
       return { custom: 'command_reference' }
