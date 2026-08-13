@@ -3072,6 +3072,131 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
+    private String drawableToBase64(Drawable iconDrawable) {
+        if (iconDrawable == null) return null;
+        try {
+            int width = iconDrawable.getIntrinsicWidth() > 0 ? iconDrawable.getIntrinsicWidth() : 96;
+            int height = iconDrawable.getIntrinsicHeight() > 0 ? iconDrawable.getIntrinsicHeight() : 96;
+            if (width > 256 || height > 256) {
+                width = 256;
+                height = 256;
+            }
+            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            iconDrawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+            iconDrawable.draw(canvas);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 85, baos);
+            byte[] byteArray = baos.toByteArray();
+            return "data:image/png;base64," + android.util.Base64.encodeToString(byteArray, android.util.Base64.NO_WRAP);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @PluginMethod
+    public void getInstalledIconPacks(PluginCall call) {
+        new Thread(() -> {
+            JSArray list = new JSArray();
+            try {
+                PackageManager pm = getContext().getPackageManager();
+                String[] themeActions = {
+                    "org.adw.launcher.THEMES",
+                    "com.novalauncher.THEME",
+                    "com.gau.go.launcherex.theme",
+                    "com.dlto.atom.launcher.THEME",
+                    "com.fede.launcher.THEME_ICONPACK"
+                };
+                Set<String> addedPacks = new HashSet<>();
+
+                for (String action : themeActions) {
+                    Intent intent = new Intent(action);
+                    List<ResolveInfo> riList = pm.queryIntentActivities(intent, 0);
+                    for (ResolveInfo ri : riList) {
+                        String pkg = ri.activityInfo.packageName;
+                        if (addedPacks.contains(pkg)) continue;
+                        addedPacks.add(pkg);
+
+                        CharSequence label = ri.loadLabel(pm);
+                        Drawable iconDrawable = ri.loadIcon(pm);
+                        String iconBase64 = drawableToBase64(iconDrawable);
+
+                        JSObject packObj = new JSObject();
+                        packObj.put("packageName", pkg);
+                        packObj.put("label", label != null ? label.toString() : pkg);
+                        packObj.put("icon", iconBase64);
+                        list.put(packObj);
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error fetching installed icon packs", e);
+            }
+            JSObject ret = new JSObject();
+            ret.put("iconPacks", list);
+            call.resolve(ret);
+        }).start();
+    }
+
+    @PluginMethod
+    public void loadIconPackFilter(PluginCall call) {
+        new Thread(() -> {
+            String iconPackPackage = call.getString("packageName");
+            JSObject iconMap = new JSObject();
+            if (iconPackPackage == null || iconPackPackage.isEmpty()) {
+                JSObject ret = new JSObject();
+                ret.put("iconMap", iconMap);
+                call.resolve(ret);
+                return;
+            }
+
+            try {
+                PackageManager pm = getContext().getPackageManager();
+                android.content.res.Resources res = pm.getResourcesForApplication(iconPackPackage);
+                int appfilterId = res.getIdentifier("appfilter", "xml", iconPackPackage);
+
+                if (appfilterId != 0) {
+                    android.content.res.XmlResourceParser xrp = res.getXml(appfilterId);
+                    int eventType = xrp.getEventType();
+                    while (eventType != android.content.res.XmlResourceParser.END_DOCUMENT) {
+                        if (eventType == android.content.res.XmlResourceParser.START_TAG) {
+                            String tagName = xrp.getName();
+                            if ("item".equals(tagName)) {
+                                String component = xrp.getAttributeValue(null, "component");
+                                String drawableName = xrp.getAttributeValue(null, "drawable");
+
+                                if (component != null && drawableName != null && component.startsWith("ComponentInfo{")) {
+                                    int slashIdx = component.indexOf("/");
+                                    if (slashIdx > 14) {
+                                        String targetPackage = component.substring(14, slashIdx);
+                                        int drawableId = res.getIdentifier(drawableName, "drawable", iconPackPackage);
+                                        if (drawableId != 0) {
+                                            try {
+                                                Drawable d = res.getDrawable(drawableId, null);
+                                                if (d != null) {
+                                                    String b64 = drawableToBase64(d);
+                                                    if (b64 != null) {
+                                                        iconMap.put(targetPackage, b64);
+                                                    }
+                                                }
+                                            } catch (Exception ignored) {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        eventType = xrp.next();
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error loading icon pack filter for " + iconPackPackage, e);
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("iconMap", iconMap);
+            call.resolve(ret);
+        }).start();
+    }
+
     // Helper: URL encode string
     private String encodeUrl(String s) {
         try {

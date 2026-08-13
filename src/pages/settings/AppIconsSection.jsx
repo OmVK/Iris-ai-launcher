@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import SettingsSection from './SettingsSection'
+import { getInstalledIconPacks, loadIconPackFilter } from '../../components/LauncherPlugin'
 
 const DEFAULT_APP_ICONS = {}
 
@@ -8,7 +9,53 @@ const ICON_GLYPHS = ['settings', 'chat', 'token', 'password', 'database', 'play_
 export default function AppIconsSection({ expandedSections, toggleSection, installedApps, setInstalledApps }) {
   const [selectedIconAppPkg, setSelectedIconAppPkg] = useState('')
   const [useGlobalHudIcons, setUseGlobalHudIcons] = useState(window.useGlobalHudIcons !== false)
+  const [installedPacks, setInstalledPacks] = useState([])
+  const [activePackPkg, setActivePackPkg] = useState(() => localStorage.getItem('iris_active_icon_pack') || 'DEFAULT')
+  const [isLoadingPack, setIsLoadingPack] = useState(false)
+
   const selectedIconApp = Array.isArray(installedApps) ? installedApps.find(app => app.packageId === selectedIconAppPkg) : null
+
+  useEffect(() => {
+    let isMounted = true
+    getInstalledIconPacks().then(packs => {
+      if (isMounted && Array.isArray(packs)) {
+        setInstalledPacks(packs)
+      }
+    })
+    return () => { isMounted = false }
+  }, [])
+
+  const handleApplyPlayStorePack = async (packPkg) => {
+    setActivePackPkg(packPkg)
+    localStorage.setItem('iris_active_icon_pack', packPkg)
+    if (packPkg === 'DEFAULT' || packPkg === 'HUD') return
+
+    setIsLoadingPack(true)
+    try {
+      const iconMap = await loadIconPackFilter(packPkg)
+      if (iconMap && Object.keys(iconMap).length > 0) {
+        let updatedApps = [...(installedApps || [])]
+        let matchCount = 0
+        updatedApps = updatedApps.map(app => {
+          if (iconMap[app.packageId]) {
+            matchCount++
+            return { ...app, icon: iconMap[app.packageId] }
+          }
+          return app
+        })
+        if (typeof setInstalledApps === 'function') {
+          setInstalledApps(updatedApps)
+        }
+        alert(`Successfully applied ${matchCount} custom icons from ${packPkg}!`)
+      } else {
+        alert("No matching app icons found in this icon pack.")
+      }
+    } catch {
+      alert("Failed to extract icons from icon pack.")
+    } finally {
+      setIsLoadingPack(false)
+    }
+  }
 
   const handleUpdateAppIcon = (packageId, newIcon) => {
     if (typeof setInstalledApps === 'function') setInstalledApps(prev => prev.map(app => app.packageId === packageId ? { ...app, icon: newIcon } : app))
@@ -32,16 +79,64 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
         if (idx !== -1) { const blob = await fileData.async('blob'); const base64 = await new Promise(r => { const reader = new FileReader(); reader.onload = (e) => r(e.target.result); reader.readAsDataURL(blob) }); updatedApps[idx] = { ...updatedApps[idx], icon: base64 }; matchCount++ }
       }
       if (matchCount > 0 && typeof setInstalledApps === 'function') { setInstalledApps(updatedApps); alert(`Successfully applied ${matchCount} icons!`) } else { alert("No matching icons found.") }
-    } catch (err) { alert("Failed to parse ZIP.") }
+    } catch { alert("Failed to parse ZIP.") }
   }
 
   return (
-    <SettingsSection title="APP ICON CUSTOMIZER" icon="settings_applications" sectionKey="appIcons" expandedSections={expandedSections} toggleSection={toggleSection}>
-      <div className="space-y-3">
+    <SettingsSection title="APP ICON & THEME CUSTOMIZER" icon="settings_applications" sectionKey="appIcons" expandedSections={expandedSections} toggleSection={toggleSection}>
+      <div className="space-y-4">
+        {/* Installed Play Store Icon Packs Section */}
+        <div className="space-y-2">
+          <p className="text-[7.5px] text-on-surface-variant/40 uppercase tracking-wider font-mono-data">PLAY STORE ICON PACKS (DETECTED ON DEVICE)</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => handleApplyPlayStorePack('DEFAULT')}
+              className={`p-2.5 rounded-lg border text-left transition-all active:scale-95 flex items-center gap-2.5 ${
+                activePackPkg === 'DEFAULT' ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim shadow-[0_0_8px_rgba(var(--primary-rgb),0.15)]' : 'bg-black/20 border-outline-variant/30 text-on-surface-variant/70 hover:text-white'
+              }`}
+            >
+              <div className="w-8 h-8 rounded-lg bg-primary-fixed-dim/20 flex items-center justify-center text-primary-fixed-dim shrink-0">
+                <span className="material-symbols-outlined text-base">apps</span>
+              </div>
+              <div className="truncate">
+                <p className="font-bold text-[9px] truncate">System Icons</p>
+                <p className="text-[6.5px] text-on-surface-variant/50 uppercase truncate">Default Android Pack</p>
+              </div>
+            </button>
+
+            {installedPacks.map(pack => (
+              <button
+                key={pack.packageName}
+                disabled={isLoadingPack}
+                onClick={() => handleApplyPlayStorePack(pack.packageName)}
+                className={`p-2.5 rounded-lg border text-left transition-all active:scale-95 flex items-center gap-2.5 ${
+                  activePackPkg === pack.packageName ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim shadow-[0_0_8px_rgba(var(--primary-rgb),0.15)]' : 'bg-black/20 border-outline-variant/30 text-on-surface-variant/70 hover:text-white'
+                }`}
+              >
+                {pack.icon ? (
+                  <img src={pack.icon} className="w-8 h-8 object-contain rounded-lg shrink-0" alt="" />
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-primary-fixed-dim/20 flex items-center justify-center text-primary-fixed-dim shrink-0">
+                    <span className="material-symbols-outlined text-base">extension</span>
+                  </div>
+                )}
+                <div className="truncate">
+                  <p className="font-bold text-[9px] truncate">{pack.label}</p>
+                  <p className="text-[6.5px] text-on-surface-variant/50 uppercase truncate">Play Store Pack</p>
+                </div>
+              </button>
+            ))}
+          </div>
+          {installedPacks.length === 0 && (
+            <p className="text-[7.5px] text-on-surface-variant/40 italic">No third-party launcher icon packs detected. Download icon packs (Whicons, Delta, Lines) from Google Play Store to apply them here.</p>
+          )}
+        </div>
+
+        {/* HUD Sci-Fi Pack Toggle */}
         <div className="flex items-center justify-between p-3 rounded-lg bg-primary-fixed-dim/10 border border-primary-fixed-dim/20">
           <div>
-            <h4 className="font-bold text-[10px] text-primary-fixed-dim">Enable Iris HUD Icons Globally</h4>
-            <p className="text-[7.5px] text-on-surface-variant/60">Automatically use dynamic vector graphics for all supported apps</p>
+            <h4 className="font-bold text-[10px] text-primary-fixed-dim">Iris HUD Sci-Fi Pack Mode</h4>
+            <p className="text-[7.5px] text-on-surface-variant/60">Automatically overlay dynamic neon vector graphics for supported apps</p>
           </div>
           <button onClick={() => { const v = !useGlobalHudIcons; setUseGlobalHudIcons(v); window.useGlobalHudIcons = v; localStorage.setItem('use_global_hud_icons', v.toString()) }}
             className={`w-10 h-5 rounded-full relative transition-colors ${useGlobalHudIcons ? 'bg-primary-fixed-dim' : 'bg-white/10'}`}>
@@ -49,8 +144,9 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
           </button>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[9px] text-on-surface-variant">SELECT TARGET SYSTEM APP</label>
+        {/* Per-App Icon Customizer & ZIP Ingestion */}
+        <div className="flex flex-col gap-1.5 pt-2 border-t border-white/5">
+          <label className="text-[9px] text-on-surface-variant font-mono-data uppercase">INDIVIDUAL APP GLYPH INGESTION</label>
           <select value={selectedIconAppPkg} onChange={e => setSelectedIconAppPkg(e.target.value)} className="w-full bg-black/45 border border-outline-variant/30 rounded px-2.5 py-1.5 text-xs text-[#00f2ff] focus:outline-none cursor-pointer font-mono-data">
             <option value="">-- Choose target app --</option>
             {Array.isArray(installedApps) && installedApps.map(app => <option key={app.packageId} value={app.packageId}>{app.label} ({app.packageId})</option>)}
@@ -92,10 +188,10 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
               <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
                 <p className="font-mono-data text-[9px] text-on-surface-variant uppercase tracking-wider">APPLY FULL ICON PACK (.ZIP)</p>
                 <label htmlFor="zip-icon-pack-upload" className="flex items-center justify-center gap-1.5 px-3 py-2 w-full rounded border border-secondary-fixed-dim/30 bg-secondary-fixed-dim/10 text-secondary-fixed-dim hover:bg-secondary-fixed-dim/20 font-bold text-[8.5px] uppercase active:scale-95 transition-transform cursor-pointer text-center">
-                  <span className="material-symbols-outlined text-xs">folder_zip</span>UPLOAD .ZIP ICON PACK
+                  <span className="material-symbols-outlined text-xs">folder_zip</span>INGEST .ZIP ICON PACK
                 </label>
                 <input type="file" id="zip-icon-pack-upload" accept=".zip" className="hidden" onChange={handleIconPackUpload} />
-                <p className="text-[7.5px] text-on-surface-variant/40 leading-relaxed">Icon packs should contain image files named after the app&apos;s package name (e.g. <code>com.whatsapp.png</code>).</p>
+                <p className="text-[7.5px] text-on-surface-variant/40 leading-relaxed">Icon pack zip files should contain image files named after package IDs (e.g. <code>com.whatsapp.png</code>).</p>
               </div>
             </div>
           </div>

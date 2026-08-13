@@ -672,3 +672,23 @@ export async function sendSMS(number, message = '') {
   }
   return false
 }
+
+export async function getInstalledIconPacks() {
+  if (!isNative) return []
+  try {
+    const res = await NativeLauncher.getInstalledIconPacks()
+    return res?.iconPacks || []
+  } catch {
+    return []
+  }
+}
+
+export async function loadIconPackFilter(packageName) {
+  if (!isNative) return {}
+  try {
+    const res = await NativeLauncher.loadIconPackFilter({ packageName })
+    return res?.iconMap || {}
+  } catch {
+    return {}
+  }
+}
