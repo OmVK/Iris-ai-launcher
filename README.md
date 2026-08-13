@@ -28,15 +28,15 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 4.9.2
+- **Version**: 4.9.3
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android
 
-## 🧹 v4.9.2 Architectural Audit & Wallpaper Fix
+## 🛡️ v4.9.3 Security Suite Expansion
 
-IRIS v4.9.2 resolves wallpaper selection bugs and incorporates top-down audit refactorings:
-- **Wallpaper Selection Fix**: Fixed root wallpaper styling in `App.jsx` allowing preset gradients (`GRID`, `NEBULA`, `AURORA`, `FIBER`, `OCEAN`, `SUNSET`, `FOREST`, `VOID`) and custom photos to render properly.
-- **Custom Ingestion Fix**: Connected `WallpaperManager.setCustomWallpaper` & `setHasCustomWallpaper` state handlers in `WallpaperThemeSection.jsx` and `Settings.jsx`.
+IRIS v4.9.3 adds high-utility cybersecurity and network analysis tools to `IrisTools.jsx`:
+- **App Permission Auditor (`AppPermissionAuditor.jsx`)**: Scans installed Android apps, grades privacy risk (Critical, High, Medium, Safe), flags dangerous permissions (Camera, Mic, GPS, SMS, Contacts, Storage), and provides 1-click native App Info inspection.
+- **Wi-Fi & Rogue AP Inspector (`WifiInspector.jsx`)**: Audits Wi-Fi encryption protocols (WPA3/WPA2 vs WEP/Open), ARP cache MITM spoofing defenses, router ping latency, and scans local router management ports.
 - **State Store Consolidation**: Unified `AppLockSection` into `useAppsStore` and removed redundant store code.
 - **Native Bridge Optimization**: Pruned 11 unreferenced native helper exports in `LauncherPlugin.js`.
 - **Bundle Optimization**: Cleaned up unused static binary assets in `public/piper/` for a leaner build footprint.

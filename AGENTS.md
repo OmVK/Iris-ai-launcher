@@ -15,7 +15,7 @@ $env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe
 ```
 
 ## Project Info
-- **Version**: 4.9.2
+- **Version**: 4.9.3
 - **App ID**: com.stitch.iris.launcher
 - **Platform**: Android (Capacitor 8)
 - **Stack**: React 18, Zustand 5, Tailwind 3, Vite 5

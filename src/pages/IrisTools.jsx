@@ -6,6 +6,8 @@ import { useThemeStore } from '../stores/themeStore'
 import ThreatDashboard from '../components/ThreatDashboard'
 import CommandReference from '../components/CommandReference'
 import ChronoPinLock from '../components/ChronoPinLock'
+import AppPermissionAuditor from '../components/tools/AppPermissionAuditor'
+import WifiInspector from '../components/tools/WifiInspector'
 
 export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVault }) {
   const [activeTool, setActiveTool] = useState(null)
@@ -136,6 +138,14 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
 
                 {tool.custom === 'threat_dashboard' && (
                   <ThreatDashboard glassBg={glassBg} />
+                )}
+
+                {tool.custom === 'permission_auditor' && (
+                  <AppPermissionAuditor glassBg={glassBg} />
+                )}
+
+                {tool.custom === 'wifi_inspector' && (
+                  <WifiInspector glassBg={glassBg} />
                 )}
 
                 {!tool.custom && (

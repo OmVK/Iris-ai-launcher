@@ -126,6 +126,20 @@ export const TOOLS = [
       return { custom: 'threat_dashboard' }
     }
   },
+  { id: 'permission_auditor', name: 'Permission Auditor', icon: 'admin_panel_settings', desc: 'App privacy risk score & permission scanner', color: 'rgba(56,189,248,0.15)', borderColor: 'rgba(56,189,248,0.3)', accent: '#38bdf8',
+    inputs: [],
+    custom: true,
+    execute: async () => {
+      return { custom: 'permission_auditor' }
+    }
+  },
+  { id: 'wifi_inspector', name: 'Wi-Fi Inspector', icon: 'wifi_find', desc: 'Network security & MITM ARP scanner', color: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.3)', accent: '#22c55e',
+    inputs: [],
+    custom: true,
+    execute: async () => {
+      return { custom: 'wifi_inspector' }
+    }
+  },
   { id: 'unlock_iris', name: 'Unlock IRIS', icon: 'lock_open', desc: 'Voice command reference (vault-locked)', color: 'rgba(0,229,255,0.15)', borderColor: 'rgba(0,229,255,0.3)', accent: '#00e5ff',
     inputs: [],
     custom: true,
