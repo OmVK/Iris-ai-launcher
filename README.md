@@ -28,15 +28,17 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 4.9.3
+- **Version**: 4.9.4
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android
 
-## 🛡️ v4.9.3 Security Suite Expansion
+## 👁️ v4.9.4 Multimodal Vision & Kokoro Neural TTS Upgrades
 
-IRIS v4.9.3 adds high-utility cybersecurity and network analysis tools to `IrisTools.jsx`:
-- **App Permission Auditor (`AppPermissionAuditor.jsx`)**: Scans installed Android apps, grades privacy risk (Critical, High, Medium, Safe), flags dangerous permissions (Camera, Mic, GPS, SMS, Contacts, Storage), and provides 1-click native App Info inspection.
-- **Wi-Fi & Rogue AP Inspector (`WifiInspector.jsx`)**: Audits Wi-Fi encryption protocols (WPA3/WPA2 vs WEP/Open), ARP cache MITM spoofing defenses, router ping latency, and scans local router management ports.
+IRIS v4.9.4 completes all approved roadmap phases:
+- **"IRIS Optics" Vision Assistant (`VisionAssistant.jsx`)**: Camera feed & screenshot analyzer capable of reading code errors, translating text, and identifying real-world objects using multimodal Gemini Vision.
+- **Kokoro-82M Neural Voice Synthesis (`kokoroWorker.js`)**: 100% offline neural text-to-speech synthesis with selectable voice timbres (`af_heart`, `am_adam`, `bf_emma`, `bm_george`, `af_nicole`, `am_michael`) in `VoiceSettingsSection.jsx`.
+- **App Permission Auditor (`AppPermissionAuditor.jsx`)**: Scans installed Android apps and assigns privacy risk scores.
+- **Wi-Fi & Rogue AP Inspector (`WifiInspector.jsx`)**: Audits Wi-Fi encryption, ARP spoofing MITM defenses, gateway latency, and scans router ports.
 - **State Store Consolidation**: Unified `AppLockSection` into `useAppsStore` and removed redundant store code.
 - **Native Bridge Optimization**: Pruned 11 unreferenced native helper exports in `LauncherPlugin.js`.
 - **Bundle Optimization**: Cleaned up unused static binary assets in `public/piper/` for a leaner build footprint.

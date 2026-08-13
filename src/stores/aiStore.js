@@ -10,6 +10,7 @@ export const useAIStore = create((set, get) => ({
   voiceEnabled: getLS('iris_voice_enabled', 'true') !== 'false',
   voicePitch: (() => { try { const v = parseFloat(getLS('iris_voice_pitch', '1.0')); return isNaN(v) ? 1.0 : v } catch { return 1.0 } })(),
   voiceRate: (() => { try { const v = parseFloat(getLS('iris_voice_rate', '0.96')); return isNaN(v) ? 0.96 : v } catch { return 0.96 } })(),
+  kokoroVoice: getLS('kokoro_voice', 'af_heart'),
   _keysLoaded: false,
 
   loadKeys: async () => {
@@ -42,4 +43,5 @@ export const useAIStore = create((set, get) => ({
   setVoiceEnabled: (v) => { localStorage.setItem('iris_voice_enabled', v); set({ voiceEnabled: v }) },
   setVoicePitch: (v) => { localStorage.setItem('iris_voice_pitch', v); set({ voicePitch: v }) },
   setVoiceRate: (v) => { localStorage.setItem('iris_voice_rate', v); set({ voiceRate: v }) },
+  setKokoroVoice: (v) => { localStorage.setItem('kokoro_voice', v); set({ kokoroVoice: v }) },
 }))

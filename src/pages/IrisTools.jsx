@@ -8,6 +8,7 @@ import CommandReference from '../components/CommandReference'
 import ChronoPinLock from '../components/ChronoPinLock'
 import AppPermissionAuditor from '../components/tools/AppPermissionAuditor'
 import WifiInspector from '../components/tools/WifiInspector'
+import VisionAssistant from '../components/VisionAssistant'
 
 export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVault }) {
   const [activeTool, setActiveTool] = useState(null)
@@ -146,6 +147,10 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
 
                 {tool.custom === 'wifi_inspector' && (
                   <WifiInspector glassBg={glassBg} />
+                )}
+
+                {tool.custom === 'iris_optics' && (
+                  <VisionAssistant glassBg={glassBg} onClose={() => setActiveTool(null)} />
                 )}
 
                 {!tool.custom && (

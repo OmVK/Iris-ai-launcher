@@ -140,6 +140,13 @@ export const TOOLS = [
       return { custom: 'wifi_inspector' }
     }
   },
+  { id: 'iris_optics', name: 'IRIS Optics Vision', icon: 'center_focus_strong', desc: 'AI camera & screenshot vision analysis', color: 'rgba(0,242,255,0.15)', borderColor: 'rgba(0,242,255,0.3)', accent: '#00f2ff',
+    inputs: [],
+    custom: true,
+    execute: async () => {
+      return { custom: 'iris_optics' }
+    }
+  },
   { id: 'unlock_iris', name: 'Unlock IRIS', icon: 'lock_open', desc: 'Voice command reference (vault-locked)', color: 'rgba(0,229,255,0.15)', borderColor: 'rgba(0,229,255,0.3)', accent: '#00e5ff',
     inputs: [],
     custom: true,
