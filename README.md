@@ -28,13 +28,13 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 4.9.0
+- **Version**: 4.9.1
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android
 
-## 🧹 v4.9.0 Architectural Audit & Cleanup
+## 🧹 v4.9.1 Architectural Audit & Cleanup
 
-IRIS v4.9.0 includes a comprehensive top-down architectural audit of all 521 project files:
+IRIS v4.9.1 includes a comprehensive top-down architectural audit of all 521 project files:
 - **State Store Consolidation**: Unified `AppLockSection` into `useAppsStore` and removed redundant store code.
 - **Native Bridge Optimization**: Pruned 11 unreferenced native helper exports in `LauncherPlugin.js`.
 - **Bundle Optimization**: Cleaned up unused static binary assets in `public/piper/` for a leaner build footprint.
