@@ -36,7 +36,7 @@ export default function useVoiceEngine() {
     liveSetupKey, setLiveSetupKey,
   } = useAssistantStore()
 
-  const { setLlmBackend, voicePitch, voiceRate } = useAIStore()
+  const { setLlmBackend, voicePitch, voiceRate, voiceTimbre } = useAIStore()
 
   const lastTtsTextRef = useRef('')
   const isListeningRef = useRef(false)
@@ -162,10 +162,10 @@ export default function useVoiceEngine() {
             source.buffer = audioBuffer
             source.connect(audioContext.destination)
             window._cartesiaAudio = source
-            source.onended = () => { 
+            source.onended = () => {
               window._cartesiaAudio = null
               audioContext.close().catch(() => {})
-              finishSpeaking() 
+              finishSpeaking()
             }
             source.start(0)
             return
@@ -176,11 +176,15 @@ export default function useVoiceEngine() {
       }
     }
 
-    // On Android Native or Web, use SpeechSynthesis & Native Speech
+    let pitchMod = 1.0
+    if (voiceTimbre === 'narrator') pitchMod = 0.85
+    const effectivePitch = Math.max(0.1, Math.min(2.0, voicePitch * pitchMod))
+
+    // On Android Native
     if (isNative) {
       try {
         const m = await import('../components/LauncherPlugin')
-        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(voicePitch, voiceRate)
+        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(effectivePitch, voiceRate)
         await speakTextNative(text)
         finishSpeaking()
       } catch (e) { 
@@ -196,18 +200,25 @@ export default function useVoiceEngine() {
       const utterance = new SpeechSynthesisUtterance(text)
       const voices = window.speechSynthesis.getVoices()
       
-      const selectedVoice =
-        voices.find(v => v.name.includes("Google US English") && v.name.includes("Natural")) ||
-        voices.find(v => v.name.includes("Google") && v.name.includes("Natural")) ||
-        voices.find(v => v.name.includes("Natural") || v.name.includes("Online")) ||
-        voices.find(v => v.name.includes("Aria") || v.name.includes("Samantha")) ||
-        voices.find(v => v.name.includes("Google US English")) ||
-        voices.find(v => v.lang.startsWith("en-US")) ||
-        voices.find(v => v.lang.startsWith("en")) ||
-        voices[0]
+      let selectedVoice = null
+      if (voiceTimbre === 'british_female') {
+        selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria') || v.name.toLowerCase().includes('emma'))) ||
+                        voices.find(v => v.lang.startsWith('en-GB'))
+      } else if (voiceTimbre === 'british_male') {
+        selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver'))) ||
+                        voices.find(v => v.lang.startsWith('en-GB'))
+      } else if (voiceTimbre === 'natural_male' || voiceTimbre === 'narrator') {
+        selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george')))
+      } else {
+        selectedVoice = voices.find(v => v.name.includes("Google US English") && v.name.includes("Natural")) ||
+                        voices.find(v => v.name.includes("Natural") || v.name.includes("Aria") || v.name.includes("Samantha")) ||
+                        voices.find(v => v.lang.startsWith("en-US")) ||
+                        voices.find(v => v.lang.startsWith("en")) ||
+                        voices[0]
+      }
 
       if (selectedVoice) utterance.voice = selectedVoice
-      utterance.pitch = voicePitch
+      utterance.pitch = effectivePitch
       utterance.rate = voiceRate
       utterance.onend = finishSpeaking
       utterance.onerror = finishSpeaking
@@ -216,7 +227,7 @@ export default function useVoiceEngine() {
       console.warn('[IRIS] SpeechSynthesis error:', err)
       finishSpeaking()
     }
-  }, [voicePitch, voiceRate])
+  }, [voicePitch, voiceRate, voiceTimbre])
 
   const requestMicrophonePermission = useCallback(async () => {
     try {
