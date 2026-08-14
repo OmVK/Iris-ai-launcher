@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { launchApp } from '../components/LauncherPlugin'
+import { useAppStore } from '../stores/appStore'
+import { routeAppClick } from '../utils/appClickRouter'
 
 export default function HomeScreenFolder({ folder, installedApps = [], onOpen, onRemove }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -22,8 +24,17 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
   }, [folder, installedApps])
 
   const handleAppClick = useCallback((app) => {
-    launchApp(app.packageId, app.label).catch(e => {
-      console.error('[HomeFolder] Failed to launch:', e)
+    const { lockedApps, isVaultUnlocked, setShowChronoLock, setChronoTarget, setActivePage } = useAppStore.getState()
+    routeAppClick(app, {
+      onNavigate: setActivePage,
+      launchApp,
+      onTriggerChronoLock: (target) => {
+        setChronoTarget(target)
+        setShowChronoLock(true)
+        setIsOpen(false)
+      },
+      lockedApps,
+      isVaultUnlocked
     })
   }, [])
 
@@ -42,23 +53,23 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
     <>
       <div
         onClick={handleFolderClick}
-        className="home-folder-preview glass-surface rounded-xl p-2 border border-white/5 cursor-pointer hover:bg-white/5 transition-all group"
+        className="home-folder-preview glass-surface rounded-2xl p-2.5 border border-white/10 cursor-pointer hover:bg-white/10 transition-all group flex flex-col items-center justify-between aspect-square"
       >
-        <div className="grid grid-cols-2 gap-0.5 mb-1">
+        <div className="grid grid-cols-2 gap-1 w-full flex-1 p-0.5">
           {folderApps.map(app => (
-            <div key={app.packageId} className="aspect-square rounded-md overflow-hidden bg-white/5 flex items-center justify-center">
+            <div key={app.packageId} className="aspect-square rounded-lg overflow-hidden bg-white/5 flex items-center justify-center p-0.5 border border-white/5">
               {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
-                <img src={app.icon} alt="" className="w-full h-full object-contain p-0.5" />
+                <img src={app.icon} alt="" className="w-full h-full object-contain" />
               ) : (
-                <span className="material-symbols-outlined text-primary-fixed-dim/80 text-[13px]">{app.icon || 'apps'}</span>
+                <span className="material-symbols-outlined text-primary-fixed-dim/90 text-sm">{app.icon || 'apps'}</span>
               )}
             </div>
           ))}
           {folderApps.length < 4 && Array.from({ length: 4 - folderApps.length }).map((_, i) => (
-            <div key={`empty-${i}`} className="aspect-square rounded-md bg-white/5" />
+            <div key={`empty-${i}`} className="aspect-square rounded-lg bg-white/[0.02] border border-white/5" />
           ))}
         </div>
-        <span className="text-[8px] text-white/40 font-mono-data truncate block text-center">
+        <span className="text-[9px] font-bold text-white/80 font-mono-data truncate block text-center mt-1 w-full">
           {folderName}
         </span>
       </div>

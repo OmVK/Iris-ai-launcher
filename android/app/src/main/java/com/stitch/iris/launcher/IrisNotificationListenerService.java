@@ -1,7 +1,8 @@
 package com.stitch.iris.launcher;
 
 import android.app.Notification;
-import android.content.Intent;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
@@ -9,10 +10,16 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 public class IrisNotificationListenerService extends NotificationListenerService {
 
     private static final String TAG = "IrisNotificationService";
     public static final String ACTION_NOTIFICATION_UPDATED = "com.stitch.iris.launcher.NOTIFICATION_UPDATED";
+    public static final String PREFS_NAME = "iris_launcher_prefs";
+    public static final String KEY_LOCKED_PACKAGES = "locked_packages_set";
     private static IrisNotificationListenerService instance;
 
     @Override
@@ -30,16 +37,40 @@ public class IrisNotificationListenerService extends NotificationListenerService
         instance = null;
     }
 
+    private Set<String> getLockedPackages() {
+        Set<String> pkgs = LauncherPlugin.getVaultPackages();
+        if (pkgs != null && !pkgs.isEmpty()) {
+            return pkgs;
+        }
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            return prefs.getStringSet(KEY_LOCKED_PACKAGES, Collections.emptySet());
+        } catch (Exception e) {
+            Log.e(TAG, "Error reading locked packages from prefs", e);
+            return Collections.emptySet();
+        }
+    }
+
+    private boolean isPackageLocked(String pkg) {
+        if (pkg == null) return false;
+        Set<String> locked = getLockedPackages();
+        return locked != null && locked.contains(pkg);
+    }
+
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         try {
             String pkg = sbn.getPackageName();
-            if (pkg != null && LauncherPlugin.getVaultPackages().contains(pkg)) {
+            if (pkg != null && isPackageLocked(pkg)) {
                 cancelNotification(sbn.getKey());
+                try {
+                    cancelNotification(sbn.getPackageName(), sbn.getTag(), sbn.getId());
+                } catch (Exception ignored) {}
+                Log.d(TAG, "BLOCKED and cancelled notification for locked app: " + pkg);
                 return;
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error checking vault packages", e);
+            Log.e(TAG, "Error checking vault packages in onNotificationPosted", e);
         }
         broadcastUpdate();
     }
@@ -49,8 +80,12 @@ public class IrisNotificationListenerService extends NotificationListenerService
             StatusBarNotification[] active = getActiveNotifications();
             if (active == null) return;
             for (StatusBarNotification sbn : active) {
-                if (packageId.equals(sbn.getPackageName())) {
+                if (packageId != null && packageId.equals(sbn.getPackageName())) {
                     cancelNotification(sbn.getKey());
+                    try {
+                        cancelNotification(sbn.getPackageName(), sbn.getTag(), sbn.getId());
+                    } catch (Exception ignored) {}
+                    Log.d(TAG, "Cancelled notification for locked app: " + packageId);
                 }
             }
         } catch (Exception e) {
@@ -58,9 +93,9 @@ public class IrisNotificationListenerService extends NotificationListenerService
         }
     }
 
-    private void cancelAllVaultNotificationsNow() {
+    public void cancelAllVaultNotificationsNow() {
         try {
-            java.util.Set<String> vaultPkgs = LauncherPlugin.getVaultPackages();
+            Set<String> vaultPkgs = getLockedPackages();
             if (vaultPkgs == null || vaultPkgs.isEmpty()) return;
             StatusBarNotification[] active = getActiveNotifications();
             if (active == null) return;
@@ -68,7 +103,10 @@ public class IrisNotificationListenerService extends NotificationListenerService
                 String pkg = sbn.getPackageName();
                 if (pkg != null && vaultPkgs.contains(pkg)) {
                     cancelNotification(sbn.getKey());
-                    Log.d(TAG, "Cancelled vault notification from: " + pkg);
+                    try {
+                        cancelNotification(sbn.getPackageName(), sbn.getTag(), sbn.getId());
+                    } catch (Exception ignored) {}
+                    Log.d(TAG, "Cancelled locked app notification from: " + pkg);
                 }
             }
         } catch (Exception e) {
@@ -90,11 +128,12 @@ public class IrisNotificationListenerService extends NotificationListenerService
         try {
             StatusBarNotification[] activeNotifications = getActiveNotifications();
             if (activeNotifications != null) {
+                Set<String> lockedPkgs = getLockedPackages();
                 for (StatusBarNotification sbn : activeNotifications) {
                     if (!sbn.isClearable()) continue;
 
                     String pkg = sbn.getPackageName();
-                    if (pkg != null && LauncherPlugin.getVaultPackages().contains(pkg)) {
+                    if (pkg != null && lockedPkgs != null && lockedPkgs.contains(pkg)) {
                         cancelNotification(sbn.getKey());
                         continue;
                     }

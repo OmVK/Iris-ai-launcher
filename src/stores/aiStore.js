@@ -11,13 +11,16 @@ export const useAIStore = create((set, get) => ({
   voicePitch: (() => { try { const v = parseFloat(getLS('iris_voice_pitch', '1.0')); return isNaN(v) ? 1.0 : v } catch { return 1.0 } })(),
   voiceRate: (() => { try { const v = parseFloat(getLS('iris_voice_rate', '0.96')); return isNaN(v) ? 0.96 : v } catch { return 0.96 } })(),
   voiceTimbre: getLS('iris_voice_timbre', 'natural_female'),
+  voiceEngineProvider: getLS('iris_voice_engine_provider', 'CARTESIA'),
+  cartesiaKey: '',
   _keysLoaded: false,
 
   loadKeys: async () => {
     await SecureStorage.migrateAll()
     const geminiKey = await SecureStorage.getItem('gemini_api_key') || ''
     const groqKey = await SecureStorage.getItem('groq_api_key') || ''
-    set({ geminiKey, groqKey, _keysLoaded: true })
+    const cartesiaKey = await SecureStorage.getItem('cartesia_api_key') || localStorage.getItem('cartesia_api_key') || ''
+    set({ geminiKey, groqKey, cartesiaKey, _keysLoaded: true })
   },
 
   setLlmBackend: (v) => { localStorage.setItem('system_llm_backend', v); set({ llmBackend: v }) },
@@ -39,6 +42,13 @@ export const useAIStore = create((set, get) => ({
       set({ groqKey: prev })
     }
   },
+  setCartesiaKey: (v) => {
+    const trimmed = (v || '').trim()
+    SecureStorage.setItem('cartesia_api_key', trimmed)
+    localStorage.setItem('cartesia_api_key', trimmed)
+    set({ cartesiaKey: trimmed })
+  },
+  setVoiceEngineProvider: (v) => { localStorage.setItem('iris_voice_engine_provider', v); set({ voiceEngineProvider: v }) },
   setGeminiModel: (v) => { localStorage.setItem('gemini_model', v); set({ geminiModel: v }) },
   setVoiceEnabled: (v) => { localStorage.setItem('iris_voice_enabled', v); set({ voiceEnabled: v }) },
   setVoicePitch: (v) => { localStorage.setItem('iris_voice_pitch', v); set({ voicePitch: v }) },

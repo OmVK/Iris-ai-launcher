@@ -1,5 +1,125 @@
 export const TOOLS = [
-  { id: 'pw_gen', name: 'Password Gen', icon: 'password', desc: 'Generate secure passwords', color: 'rgba(45,212,191,0.15)', borderColor: 'rgba(45,212,191,0.3)', accent: '#2dd4bf',
+  // 1. IRIS VAULT CENTER HUB
+  { 
+    id: 'iris_vault', 
+    name: 'Iris Vault Hub', 
+    icon: 'database', 
+    desc: 'Chrono Key, Private Vault, Locked Apps & Secure Files', 
+    color: 'rgba(234,179,8,0.15)', 
+    borderColor: 'rgba(234,179,8,0.3)', 
+    accent: '#eab308',
+    inputs: [],
+    custom: 'iris_vault_hub',
+    execute: async () => ({ custom: 'iris_vault_hub' })
+  },
+
+  // 2. DEVICE INTEGRITY & ROOT SCANNER
+  {
+    id: 'device_security',
+    name: 'Device Security',
+    icon: 'security',
+    desc: 'Lock screen, encryption, root & ADB vulnerability scan',
+    color: 'rgba(56,189,248,0.15)',
+    borderColor: 'rgba(56,189,248,0.3)',
+    accent: '#38bdf8',
+    inputs: [],
+    custom: 'device_security',
+    execute: async () => ({ custom: 'device_security' })
+  },
+
+  // 3. DNS LOOKUP & PING PROBER
+  {
+    id: 'dns_prober',
+    name: 'DNS & Ping Prober',
+    icon: 'travel_explore',
+    desc: 'DoH record resolver & real-time roundtrip ping tester',
+    color: 'rgba(34,197,94,0.15)',
+    borderColor: 'rgba(34,197,94,0.3)',
+    accent: '#22c55e',
+    inputs: [],
+    custom: 'dns_prober',
+    execute: async () => ({ custom: 'dns_prober' })
+  },
+
+  // 4. QR CODE & SECRET TEXT STUDIO
+  {
+    id: 'qr_studio',
+    name: 'QR & Secret Studio',
+    icon: 'qr_code_2',
+    desc: 'Wi-Fi/Text QR generator & AES-256 GCM cipher studio',
+    color: 'rgba(0,242,255,0.15)',
+    borderColor: 'rgba(0,242,255,0.3)',
+    accent: '#00f2ff',
+    inputs: [],
+    custom: 'qr_studio',
+    execute: async () => ({ custom: 'qr_studio' })
+  },
+
+  // 5. THREAT MONITORING DASHBOARD
+  { 
+    id: 'threat_dashboard', 
+    name: 'Threat Dashboard', 
+    icon: 'shield', 
+    desc: 'Intruder photo alerts & real-time threat telemetry', 
+    color: 'rgba(249,115,22,0.15)', 
+    borderColor: 'rgba(249,115,22,0.3)', 
+    accent: '#f97316',
+    inputs: [],
+    custom: 'threat_dashboard',
+    execute: async () => ({ custom: 'threat_dashboard' })
+  },
+
+  // 6. APP PERMISSION AUDITOR
+  { 
+    id: 'permission_auditor', 
+    name: 'Permission Auditor', 
+    icon: 'admin_panel_settings', 
+    desc: 'Sensitive permission scanner & app privacy score', 
+    color: 'rgba(168,85,247,0.15)', 
+    borderColor: 'rgba(168,85,247,0.3)', 
+    accent: '#a855f7',
+    inputs: [],
+    custom: 'permission_auditor',
+    execute: async () => ({ custom: 'permission_auditor' })
+  },
+
+  // 7. WI-FI INSPECTOR
+  { 
+    id: 'wifi_inspector', 
+    name: 'Wi-Fi Inspector', 
+    icon: 'wifi_find', 
+    desc: 'Network gateway, RSSI signal & subnet latency prober', 
+    color: 'rgba(34,197,94,0.15)', 
+    borderColor: 'rgba(34,197,94,0.3)', 
+    accent: '#22c55e',
+    inputs: [],
+    custom: 'wifi_inspector',
+    execute: async () => ({ custom: 'wifi_inspector' })
+  },
+
+  // 8. IRIS OPTICS VISION
+  { 
+    id: 'iris_optics', 
+    name: 'IRIS Optics Vision', 
+    icon: 'center_focus_strong', 
+    desc: 'Multimodal AI camera & screenshot intelligence', 
+    color: 'rgba(0,242,255,0.15)', 
+    borderColor: 'rgba(0,242,255,0.3)', 
+    accent: '#00f2ff',
+    inputs: [],
+    custom: 'iris_optics',
+    execute: async () => ({ custom: 'iris_optics' })
+  },
+
+  // 9. PASSWORD GENERATOR
+  { 
+    id: 'pw_gen', 
+    name: 'Password Gen', 
+    icon: 'password', 
+    desc: 'Cryptographic high-entropy password generator', 
+    color: 'rgba(45,212,191,0.15)', 
+    borderColor: 'rgba(45,212,191,0.3)', 
+    accent: '#2dd4bf',
     inputs: [
       { key: 'length', label: 'LENGTH', placeholder: '24', type: 'number', defaultVal: '24' },
     ],
@@ -32,7 +152,16 @@ export const TOOLS = [
       return { password: pw.join('') }
     }
   },
-  { id: 'hash_gen', name: 'Hash Generator', icon: 'token', desc: 'SHA-256 / SHA-1 any text', color: 'rgba(251,146,60,0.15)', borderColor: 'rgba(251,146,60,0.3)', accent: '#fb923c',
+
+  // 10. HASH GENERATOR
+  { 
+    id: 'hash_gen', 
+    name: 'Hash Generator', 
+    icon: 'token', 
+    desc: 'SHA-256 and SHA-1 cryptographic text digests', 
+    color: 'rgba(251,146,60,0.15)', 
+    borderColor: 'rgba(251,146,60,0.3)', 
+    accent: '#fb923c',
     inputs: [
       { key: 'text', label: 'INPUT TEXT', placeholder: 'Text to hash...', type: 'textarea' },
     ],
@@ -46,7 +175,16 @@ export const TOOLS = [
       return { sha256: buf2hex(sha256), sha1: buf2hex(sha1) }
     }
   },
-  { id: 'crypto', name: 'Crypto Converter', icon: 'swap_horiz', desc: 'Base64, URL encode / decode', color: 'rgba(147,130,220,0.15)', borderColor: 'rgba(147,130,220,0.3)', accent: '#9382dc',
+
+  // 11. CRYPTO & DATA CONVERTER
+  { 
+    id: 'crypto', 
+    name: 'Crypto Converter', 
+    icon: 'swap_horiz', 
+    desc: 'Base64 and URL encoding & decoding', 
+    color: 'rgba(147,130,220,0.15)', 
+    borderColor: 'rgba(147,130,220,0.3)', 
+    accent: '#9382dc',
     inputs: [
       { key: 'text', label: 'INPUT TEXT', placeholder: 'Text to convert...', type: 'textarea' },
     ],
@@ -61,7 +199,16 @@ export const TOOLS = [
       }
     }
   },
-  { id: 'ip_info', name: 'IP Info', icon: 'language', desc: 'Geolocation & ISP details', color: 'rgba(250,204,21,0.15)', borderColor: 'rgba(250,204,21,0.3)', accent: '#facc15',
+
+  // 12. IP GEOLOCATION INFO
+  { 
+    id: 'ip_info', 
+    name: 'IP Geolocation', 
+    icon: 'language', 
+    desc: 'Public IP details, ISP, ASN, and geo coordinates', 
+    color: 'rgba(250,204,21,0.15)', 
+    borderColor: 'rgba(250,204,21,0.3)', 
+    accent: '#facc15',
     inputs: [
       { key: 'ip', label: 'IP ADDRESS (leave blank for yours)', placeholder: 'e.g. 8.8.8.8', type: 'text' },
     ],
@@ -80,7 +227,7 @@ export const TOOLS = [
           org: data.org, latitude: data.loc?.split(',')[0] || '—', longitude: data.loc?.split(',')[1] || '—',
           timezone: data.timezone, postal: data.postal,
         }}
-      } catch (e1) {
+      } catch (_) {
         try {
           const url2 = target ? `https://ip-api.com/json/${target}` : 'https://ip-api.com/json/'
           const res2 = await fetch(url2)
@@ -96,63 +243,19 @@ export const TOOLS = [
       }
     }
   },
-  { id: 'censys', name: 'Censys', icon: 'search', desc: 'Internet-wide host search engine', color: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)', accent: '#6366f1', browserUrl: 'https://search.censys.io' },
-  { id: 'shodan', name: 'Shodan', icon: 'router', desc: 'IoT device search engine', color: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)', accent: '#ef4444', browserUrl: 'https://www.shodan.io' },
-  { id: 'virustotal', name: 'VirusTotal', icon: 'verified_user', desc: 'File & URL malware scanner', color: 'rgba(168,85,247,0.15)', borderColor: 'rgba(168,85,247,0.3)', accent: '#a855f7', browserUrl: 'https://www.virustotal.com' },
-  { id: 'exploitdb', name: 'ExploitDB', icon: 'bug_report', desc: 'Exploit database & PoC archive', color: 'rgba(234,179,8,0.15)', borderColor: 'rgba(234,179,8,0.3)', accent: '#eab308', browserUrl: 'https://www.exploit-db.com' },
-  { id: 'cve', name: 'CVE Search', icon: 'security', desc: 'CVE vulnerability lookup', color: 'rgba(249,115,22,0.15)', borderColor: 'rgba(249,115,22,0.3)', accent: '#f97316', browserUrl: 'https://cve.circl.lu' },
-  { id: 'chrono_key', name: 'Chrono Key', icon: 'password', desc: 'Vault PIN lock & authentication', color: 'rgba(168,85,247,0.15)', borderColor: 'rgba(168,85,247,0.3)', accent: '#a855f7',
-    inputs: [],
-    execute: async () => {
-      return { navigate: 'chrono_lock', target: 'optics' }
-    }
-  },
-  { id: 'iris_vault', name: 'Iris Vault', icon: 'database', desc: 'Manage locked apps & secure files', color: 'rgba(234,179,8,0.15)', borderColor: 'rgba(234,179,8,0.3)', accent: '#eab308',
-    inputs: [],
-    execute: async () => {
-      return { navigate: 'vault' }
-    }
-  },
-  { id: 'private_vault', name: 'Private Vault', icon: 'visibility_off', desc: 'Encrypted private storage', color: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)', accent: '#ef4444',
-    inputs: [],
-    execute: async () => {
-      return { navigate: 'chrono_lock', target: 'private' }
-    }
-  },
-  { id: 'threat_dashboard', name: 'Threat Dashboard', icon: 'shield', desc: 'Security posture & threat intel', color: 'rgba(0,242,255,0.15)', borderColor: 'rgba(0,242,255,0.3)', accent: '#00f2ff',
-    inputs: [],
-    custom: 'threat_dashboard',
-    execute: async () => {
-      return { custom: 'threat_dashboard' }
-    }
-  },
-  { id: 'permission_auditor', name: 'Permission Auditor', icon: 'admin_panel_settings', desc: 'App privacy risk score & permission scanner', color: 'rgba(56,189,248,0.15)', borderColor: 'rgba(56,189,248,0.3)', accent: '#38bdf8',
-    inputs: [],
-    custom: 'permission_auditor',
-    execute: async () => {
-      return { custom: 'permission_auditor' }
-    }
-  },
-  { id: 'wifi_inspector', name: 'Wi-Fi Inspector', icon: 'wifi_find', desc: 'Network security & MITM ARP scanner', color: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.3)', accent: '#22c55e',
-    inputs: [],
-    custom: 'wifi_inspector',
-    execute: async () => {
-      return { custom: 'wifi_inspector' }
-    }
-  },
-  { id: 'iris_optics', name: 'IRIS Optics Vision', icon: 'center_focus_strong', desc: 'AI camera & screenshot vision analysis', color: 'rgba(0,242,255,0.15)', borderColor: 'rgba(0,242,255,0.3)', accent: '#00f2ff',
-    inputs: [],
-    custom: 'iris_optics',
-    execute: async () => {
-      return { custom: 'iris_optics' }
-    }
-  },
-  { id: 'unlock_iris', name: 'Unlock IRIS', icon: 'lock_open', desc: 'Voice command reference (vault-locked)', color: 'rgba(0,229,255,0.15)', borderColor: 'rgba(0,229,255,0.3)', accent: '#00e5ff',
+
+  // 13. COMMAND REFERENCE SHEET
+  { 
+    id: 'unlock_iris', 
+    name: 'Command Reference', 
+    icon: 'lock_open', 
+    desc: 'Voice command and stealth trigger reference manual', 
+    color: 'rgba(0,229,255,0.15)', 
+    borderColor: 'rgba(0,229,255,0.3)', 
+    accent: '#00e5ff',
     inputs: [],
     custom: 'command_reference',
     locked: true,
-    execute: async () => {
-      return { custom: 'command_reference' }
-    }
+    execute: async () => ({ custom: 'command_reference' })
   },
 ]

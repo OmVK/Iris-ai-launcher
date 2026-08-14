@@ -200,9 +200,12 @@ export default function Drawer({
       e.stopPropagation()
       return
     }
-    recordAppLaunch(app.packageId)
-    routeAppClick(app, { onNavigate, launchApp })
-  }, [onNavigate, recordAppLaunch])
+    const isLocked = Array.isArray(lockedApps) && lockedApps.includes(app.packageId)
+    if (!isLocked) {
+      recordAppLaunch(app.packageId)
+    }
+    routeAppClick(app, { onNavigate, launchApp, onTriggerChronoLock, lockedApps, isVaultUnlocked })
+  }, [onNavigate, recordAppLaunch, onTriggerChronoLock, lockedApps, isVaultUnlocked])
 
   const handleToggleHomePlacement = useCallback((app) => {
     setInstalledApps(prev => prev.map(a =>
@@ -342,15 +345,6 @@ export default function Drawer({
         />
       )}
 
-      <AppContextMenu
-        activeContextMenu={activeContextMenu}
-        onToggleHomePlacement={handleToggleHomePlacement}
-        onLockApp={handleLockApp}
-        onTriggerUninstall={handleTriggerUninstall}
-        onOpenAppInfo={handleOpenAppInfo}
-        onClose={() => setActiveContextMenu(null)}
-      />
-
       {drawerLayout === 'MESH' && (
         <DrawerMesh
           filteredApps={filteredApps}
@@ -360,22 +354,31 @@ export default function Drawer({
           onAppClick={handleAppClick} onContextMenu={handleContextMenu}
         />
       )}
-
-        {activeFolder && (
-          <FolderModal
-            folder={activeFolder}
-            onClose={() => setActiveFolder(null)}
-            onUpdateFolder={handleUpdateFolder}
-            onDeleteFolder={() => handleDeleteFolder(activeFolder.id)}
-            installedApps={installedApps}
-            globalIconTheme={globalIconTheme}
-            onTriggerChronoLock={onTriggerChronoLock}
-            onTriggerVault={onTriggerVault}
-            activePage={null}
-            setActivePage={onNavigate}
-          />
-        )}
       </div>
+
+      <AppContextMenu
+        activeContextMenu={activeContextMenu}
+        onToggleHomePlacement={handleToggleHomePlacement}
+        onLockApp={handleLockApp}
+        onTriggerUninstall={handleTriggerUninstall}
+        onOpenAppInfo={handleOpenAppInfo}
+        onClose={() => setActiveContextMenu(null)}
+      />
+
+      {activeFolder && (
+        <FolderModal
+          folder={activeFolder}
+          onClose={() => setActiveFolder(null)}
+          onUpdateFolder={handleUpdateFolder}
+          onDeleteFolder={() => handleDeleteFolder(activeFolder.id)}
+          installedApps={installedApps}
+          globalIconTheme={globalIconTheme}
+          onTriggerChronoLock={onTriggerChronoLock}
+          onTriggerVault={onTriggerVault}
+          activePage={null}
+          setActivePage={onNavigate}
+        />
+      )}
     </div>
   )
 }

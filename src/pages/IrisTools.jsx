@@ -9,6 +9,10 @@ import ChronoPinLock from '../components/ChronoPinLock'
 import AppPermissionAuditor from '../components/tools/AppPermissionAuditor'
 import WifiInspector from '../components/tools/WifiInspector'
 import VisionAssistant from '../components/VisionAssistant'
+import IrisVaultHub from '../components/tools/IrisVaultHub'
+import DeviceSecurityScanner from '../components/tools/DeviceSecurityScanner'
+import DnsProber from '../components/tools/DnsProber'
+import QrSecretStudio from '../components/tools/QrSecretStudio'
 
 export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVault }) {
   const [activeTool, setActiveTool] = useState(null)
@@ -135,6 +139,23 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
                       </div>
                     ))}
                   </div>
+                )}
+
+                {/* Custom Tool Subviews */}
+                {tool.custom === 'iris_vault_hub' && (
+                  <IrisVaultHub glassBg={glassBg} onNavigate={onNavigate} onTriggerChronoLock={onTriggerChronoLock} onTriggerVault={onTriggerVault} />
+                )}
+
+                {tool.custom === 'device_security' && (
+                  <DeviceSecurityScanner glassBg={glassBg} />
+                )}
+
+                {tool.custom === 'dns_prober' && (
+                  <DnsProber glassBg={glassBg} />
+                )}
+
+                {tool.custom === 'qr_studio' && (
+                  <QrSecretStudio glassBg={glassBg} />
                 )}
 
                 {tool.custom === 'threat_dashboard' && (

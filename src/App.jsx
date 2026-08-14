@@ -68,8 +68,13 @@ export default function App() {
 
   const handleUnlockSuccess = () => {
     setIsVaultUnlocked(true); setShowChronoLock(false)
-    if (chronoTarget === 'private') setActivePage('private')
-    else setShowVaultExplorer(true)
+    if (chronoTarget === 'private') {
+      setActivePage('private')
+    } else if (chronoTarget && typeof chronoTarget === 'object' && chronoTarget.packageId) {
+      handleLaunchApp(chronoTarget)
+    } else {
+      setShowVaultExplorer(true)
+    }
     setChronoTarget(null)
   }
 
@@ -138,7 +143,18 @@ export default function App() {
         return <IrisTools onNavigate={setActivePage} onTriggerChronoLock={handleTriggerChronoLock} onTriggerVault={handleTriggerVault} />
 
       case 'private':
-        return <PrivateVault />
+        if (!isVaultUnlocked) {
+          return (
+            <div className="flex-1 flex flex-col h-[100lvh] items-center justify-center bg-black/95 z-50">
+              <ChronoPinLock
+                onUnlockSuccess={() => setIsVaultUnlocked(true)}
+                onClose={() => setActivePage('iris_tools')}
+                source="private"
+              />
+            </div>
+          )
+        }
+        return <PrivateVault onNavigate={setActivePage} />
       case 'zero_screen':
         return <ZeroScreen onNavigate={setActivePage} isAppActive={isAppActive} />
       default:

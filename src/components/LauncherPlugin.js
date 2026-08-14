@@ -283,9 +283,8 @@ export async function dispatchMediaKey(key = 'play_pause') {
 
 export function addAudioFinishedListener(callback) {
   if (isNative) {
-    return NativeLauncher.addListener('onAudioPlaybackFinished', callback)
+    return NativeLauncher.addListener('onAudioFinished', callback)
   }
-  // Return a no-op remover for web
   return { remove: () => {} }
 }
 
@@ -998,6 +997,16 @@ export async function requestNotificationAccess() {
   }
 }
 
+export async function isNotificationAccessGranted() {
+  if (!isNative) return false
+  try {
+    const res = await NativeLauncher.isNotificationAccessGranted()
+    return !!res?.granted
+  } catch {
+    return false
+  }
+}
+
 export async function startOfflineSpeech() {
   if (!isNative) return false
   try {
@@ -1037,4 +1046,60 @@ export async function executeSystemAction(action, param = '', speaker = false) {
     return false
   }
 }
+
+
+
+export async function captureSilentPhoto(facing = 'back') {
+  if (!isNative) return { image: null, facing }
+  try {
+    return await NativeLauncher.captureSilentPhoto({ facing })
+  } catch (e) {
+    console.warn('captureSilentPhoto failed:', e)
+    return { image: null, facing }
+  }
+}
+
+export async function recordSilentVideo(facing = 'back', duration = 30) {
+  if (!isNative) return { path: null, success: false }
+  try {
+    return await NativeLauncher.recordSilentVideo({ facing, duration })
+  } catch (e) {
+    console.warn('recordSilentVideo failed:', e)
+    return { path: null, success: false }
+  }
+}
+
+export async function recordSilentAudio(duration = 30) {
+  if (!isNative) return { path: null, success: false }
+  try {
+    return await NativeLauncher.recordSilentAudio({ duration })
+  } catch (e) {
+    console.warn('recordSilentAudio failed:', e)
+    return { path: null, success: false }
+  }
+}
+
+export async function getDeviceSecurityPosture() {
+  if (!isNative) {
+    return {
+      isScreenLockSecure: true,
+      isStorageEncrypted: true,
+      isDevOptionsEnabled: false,
+      isAdbEnabled: false,
+      isRootDetected: false,
+      androidVersion: '14.0 (Web Simulation)',
+      sdkInt: 34,
+      securityPatch: '2024-08-01',
+      deviceModel: 'IRIS Cybernetic Terminal',
+      brand: 'IRIS'
+    }
+  }
+  try {
+    return await NativeLauncher.getDeviceSecurityPosture()
+  } catch (e) {
+    console.warn('getDeviceSecurityPosture failed:', e)
+    return null
+  }
+}
+
 

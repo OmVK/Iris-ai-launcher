@@ -19,15 +19,46 @@ export function useAppContextMenu({ setInstalledApps, onToggleAppLock }) {
   }, [toastText])
 
   const handleContextMenu = useCallback((e, app) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const touch = e.touches ? e.touches[0] : e
-    const clientX = e.clientX || (touch ? touch.clientX : 100)
-    const clientY = e.clientY || (touch ? touch.clientY : 100)
+    e.preventDefault?.()
+    e.stopPropagation?.()
+
+    let posX = 100
+    let posY = 100
+
+    const targetEl = e.currentTarget || e.target?.closest?.('.drawer-app-item') || e.target?.closest?.('.app-icon-item') || e.target
+
+    if (targetEl && targetEl.getBoundingClientRect) {
+      const rect = targetEl.getBoundingClientRect()
+      const menuWidth = 180
+      const menuHeight = 210
+
+      // Calculate X: align beside the app icon if room, otherwise align to left/center
+      if (rect.right + menuWidth <= window.innerWidth - 10) {
+        posX = rect.right + 6
+      } else if (rect.left - menuWidth >= 10) {
+        posX = rect.left - menuWidth - 6
+      } else {
+        posX = Math.max(10, Math.min(rect.left, window.innerWidth - menuWidth - 10))
+      }
+
+      // Calculate Y: align vertically with the icon, keeping within viewport
+      if (rect.top + menuHeight <= window.innerHeight - 20) {
+        posY = Math.max(10, rect.top)
+      } else {
+        posY = Math.max(10, Math.min(rect.bottom - menuHeight, window.innerHeight - menuHeight - 10))
+      }
+    } else {
+      const touch = e.touches?.[0] || e.changedTouches?.[0] || e
+      const clientX = e.clientX ?? touch?.clientX ?? (window.innerWidth / 2 - 90)
+      const clientY = e.clientY ?? touch?.clientY ?? (window.innerHeight / 2 - 105)
+      posX = Math.max(10, Math.min(clientX, window.innerWidth - 190))
+      posY = Math.max(10, Math.min(clientY, window.innerHeight - 220))
+    }
+
     setActiveContextMenu({
       app,
-      x: Math.min(clientX, window.innerWidth - 200),
-      y: Math.min(clientY, window.innerHeight - 150)
+      x: Math.round(posX),
+      y: Math.round(posY)
     })
     HapticFeedback.medium()
   }, [])

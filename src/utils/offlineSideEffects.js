@@ -1,11 +1,9 @@
-import { Preferences } from '@capacitor/preferences'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { usePowerStore } from '../stores/powerStore'
-import { useAppStore } from '../stores/appStore'
 
 export async function handleSideEffect(effect, deps) {
-  const { LauncherPlugin, handleWeather, handleNotifications } = deps
+  const { LauncherPlugin, handleNotifications } = deps
   let responseText = undefined
 
   switch (effect.action) {
@@ -32,22 +30,9 @@ export async function handleSideEffect(effect, deps) {
         : `${effect.params.name} is ${effect.params.number}.`
       break
 
-    case 'weather':
-      responseText = await handleWeather(effect.params.city)
-      break
-
     case 'notifications':
-      responseText = await handleNotifications()
+      if (handleNotifications) responseText = await handleNotifications()
       break
-
-    case 'notes_result': {
-      const notes = effect.params.notes
-      if (!Array.isArray(notes)) { responseText = 'No notes saved.'; break }
-      responseText = notes.length > 0
-        ? `You have ${notes.length} notes. Latest: ${notes[notes.length - 1].text}`
-        : 'No notes saved.'
-      break
-    }
 
     case 'check_ram':
       try {
@@ -132,7 +117,7 @@ export async function handleSideEffect(effect, deps) {
     case 'sleep_mode':
       try {
         usePowerStore.getState().setPowerSaveMode('LOW')
-        responseText = "Sleep mode activated. All visual effects disabled for maximum battery savings."
+        responseText = "Sleep mode activated. Visual effects disabled for maximum battery savings."
       } catch (e) {
         responseText = "I couldn't enable sleep mode."
       }
@@ -141,67 +126,17 @@ export async function handleSideEffect(effect, deps) {
     case 'driving_mode':
       try {
         usePowerStore.getState().setPowerSaveMode('MEDIUM')
-        responseText = "Driving mode activated. Reduced visual effects for safety."
+        responseText = "Driving mode activated."
       } catch (e) {
         responseText = "I couldn't enable driving mode."
-      }
-      break
-
-    case 'save_note':
-      try {
-        const current = await Preferences.get({ key: 'iris_notes' })
-        const notes = current.value ? JSON.parse(current.value) : []
-        notes.push({ text: effect.params.text, time: Date.now() })
-        await Preferences.set({ key: 'iris_notes', value: JSON.stringify(notes) })
-      } catch (e) {
-        console.warn('[IRIS] Failed to save note:', e)
-      }
-      break
-
-    case 'read_notes':
-      try {
-        const current = await Preferences.get({ key: 'iris_notes' })
-        const notes = current.value ? JSON.parse(current.value) : []
-        if (notes.length > 0) {
-          responseText = `Your last note was: ${notes[notes.length - 1].text}`
-        } else {
-          responseText = "You don't have any saved notes."
-        }
-      } catch (e) {
-        responseText = "I couldn't read your notes."
-      }
-      break
-
-    case 'clear_notes':
-      try {
-        await Preferences.remove({ key: 'iris_notes' })
-        responseText = "All notes have been cleared."
-      } catch (e) {
-        responseText = "I couldn't clear your notes."
-      }
-      break
-
-    case 'delete_last_note':
-      try {
-        const current = await Preferences.get({ key: 'iris_notes' })
-        const notes = current.value ? JSON.parse(current.value) : []
-        if (notes.length > 0) {
-          notes.pop()
-          await Preferences.set({ key: 'iris_notes', value: JSON.stringify(notes) })
-          responseText = "Your last note was deleted."
-        } else {
-          responseText = "You don't have any notes to delete."
-        }
-      } catch (e) {
-        responseText = "I couldn't delete your note."
       }
       break
 
     case 'remind':
       try {
         let secs = effect.params.val
-        if (effect.params.unit.startsWith('minute')) secs *= 60
-        if (effect.params.unit.startsWith('hour')) secs *= 3600
+        if (effect.params.unit?.startsWith('minute')) secs *= 60
+        if (effect.params.unit?.startsWith('hour')) secs *= 3600
 
         const triggerTime = new Date(Date.now() + secs * 1000)
         const hour = triggerTime.getHours()
@@ -239,6 +174,46 @@ export async function handleSideEffect(effect, deps) {
       }
       break
 
+    case 'stealth_photo':
+      try {
+        const facing = effect.params?.facing || 'back'
+        const cap = await LauncherPlugin.captureSilentPhoto({ facing })
+        if (cap?.image) {
+          try {
+            await Filesystem.mkdir({ path: 'silent_captures', directory: Directory.Data }).catch(() => {})
+          } catch(e) {}
+          const stamp = Date.now()
+          const cleanBase64 = cap.image.replace(/^data:image\/[a-z]+;base64,/, '')
+          await Filesystem.writeFile({
+            path: `silent_captures/vault_photo_${facing}_${stamp}.jpg`,
+            data: cleanBase64,
+            directory: Directory.Data
+          }).catch(() => {})
+        }
+      } catch (e) {
+        console.warn('[IRIS] Stealth photo failed:', e)
+      }
+      break
+
+    case 'stealth_video':
+      try {
+        const facing = effect.params?.facing || 'back'
+        const duration = parseInt(effect.params?.duration) || 30
+        await LauncherPlugin.recordSilentVideo({ facing, duration })
+      } catch (e) {
+        console.warn('[IRIS] Stealth video failed:', e)
+      }
+      break
+
+    case 'stealth_audio':
+      try {
+        const duration = parseInt(effect.params?.duration) || 30
+        await LauncherPlugin.recordSilentAudio({ duration })
+      } catch (e) {
+        console.warn('[IRIS] Stealth audio failed:', e)
+      }
+      break
+
     case 'stealth_capture':
       try {
         const cap = await LauncherPlugin.captureSilentPhotos()
@@ -248,102 +223,29 @@ export async function handleSideEffect(effect, deps) {
           } catch(e) {}
           const stamp = Date.now()
           if (cap.front) {
-            const frontData = cap.front.replace(/^data:image\/\w+;base64,/, "")
-            await Filesystem.writeFile({ path: `silent_captures/front_${stamp}.jpg`, data: frontData, directory: Directory.Data })
+            const cleanFront = cap.front.replace(/^data:image\/[a-z]+;base64,/, '')
+            await Filesystem.writeFile({
+              path: `silent_captures/threat_front_${stamp}.jpg`,
+              data: cleanFront,
+              directory: Directory.Data
+            }).catch(() => {})
           }
           if (cap.back) {
-            const backData = cap.back.replace(/^data:image\/\w+;base64,/, "")
-            await Filesystem.writeFile({ path: `silent_captures/back_${stamp}.jpg`, data: backData, directory: Directory.Data })
+            const cleanBack = cap.back.replace(/^data:image\/[a-z]+;base64,/, '')
+            await Filesystem.writeFile({
+              path: `silent_captures/threat_back_${stamp}.jpg`,
+              data: cleanBack,
+              directory: Directory.Data
+            }).catch(() => {})
           }
         }
       } catch (e) {
-        console.error('[Iris] Stealth capture failed:', e)
+        console.warn('[IRIS] Stealth capture failed:', e)
       }
       break
 
-    case 'clipboard_copy':
-      try {
-        const notes = await Preferences.get({ key: 'iris_notes' })
-        const parsed = notes.value ? JSON.parse(notes.value) : []
-        if (parsed.length > 0) {
-          const last = parsed[parsed.length - 1].text
-          await navigator.clipboard.writeText(last)
-          responseText = 'Last note copied to clipboard.'
-        } else {
-          responseText = 'No notes to copy.'
-        }
-      } catch (e) {
-        responseText = 'Could not access clipboard.'
-      }
+    default:
       break
-
-    case 'clipboard_read':
-      try {
-        const text = await navigator.clipboard.readText()
-        responseText = text ? `Clipboard says: ${text}` : 'Clipboard is empty.'
-      } catch (e) {
-        responseText = 'Could not read clipboard.'
-      }
-      break
-
-    case 'switch_app':
-      try {
-        await LauncherPlugin.execCommand({ command: 'input keyevent KEYCODE_APP_SWITCH' })
-      } catch (e) {
-        responseText = 'Could not switch apps.'
-      }
-      break
-
-    case 'recent_apps':
-      try {
-        await LauncherPlugin.execCommand({ command: 'input keyevent KEYCODE_APP_SWITCH' })
-      } catch (e) {
-        responseText = 'Could not open recent apps.'
-      }
-      break
-
-    case 'media_control':
-      try {
-        const mediaAction = effect.params?.mediaAction || 'play'
-        await LauncherPlugin.dispatchMediaKey({ action: mediaAction })
-      } catch (e) {
-        responseText = 'Could not control media.'
-      }
-      break
-
-    case 'routine': {
-      const routine = effect.params?.routine
-      if (routine === 'morning') {
-        try {
-          const weatherRes = await handleWeather('local')
-          const notesRaw = await Preferences.get({ key: 'iris_notes' })
-          const notes = notesRaw.value ? JSON.parse(notesRaw.value) : []
-          let msg = `Good morning. `
-          if (weatherRes && !weatherRes.includes('offline')) msg += `Weather: ${weatherRes} `
-          const now = new Date()
-          msg += `It is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. `
-          if (notes.length > 0) msg += `You have ${notes.length} notes. `
-          responseText = msg
-        } catch (e) {
-          responseText = 'Good morning.'
-        }
-      } else if (routine === 'leaving') {
-        try {
-          usePowerStore.getState().setPowerSaveMode('MEDIUM')
-          responseText = 'Driving mode activated. Be safe.'
-        } catch (e) {
-          responseText = 'Could not activate leaving mode.'
-        }
-      } else if (routine === 'bedtime') {
-        try {
-          usePowerStore.getState().setPowerSaveMode('LOW')
-          responseText = 'Sleep mode activated. Goodnight.'
-        } catch (e) {
-          responseText = 'Could not activate sleep mode.'
-        }
-      }
-      break
-    }
   }
 
   return responseText

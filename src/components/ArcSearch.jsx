@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
 import HudFallbackIcon from './HudFallbackIcon'
 import { useSearchViewModel } from '../utils/SearchViewModel'
@@ -54,15 +54,11 @@ function InteractiveUnitConverter({ initialValue = '', onClose }) {
   
   const units = ['m', 'km', 'cm', 'mm', 'mi', 'yd', 'ft', 'in', 'kg', 'g', 'lb', 'oz', 'c', 'f', 'k']
   
-  // A simple unit conversion using the tryUnitConversion logic or custom logic
   useEffect(() => {
     if (!val || isNaN(val)) {
       setRes('')
       return
     }
-    // Very simplified generic conversion just for UI completeness. 
-    // Usually we would pull tryUnitConversion from SearchViewModel, 
-    // but building it standalone makes the UI snappy.
     const conversionRates = {
       m: 1, km: 1000, cm: 0.01, mm: 0.001, mi: 1609.344, yd: 0.9144, ft: 0.3048, in: 0.0254,
       kg: 1, g: 0.001, lb: 0.453592, oz: 0.0283495
@@ -73,7 +69,6 @@ function InteractiveUnitConverter({ initialValue = '', onClose }) {
       const out = inBase / conversionRates[toUnit]
       setRes(out.toPrecision(6).replace(/\.0+$/, ''))
     } else if (['c', 'f', 'k'].includes(fromUnit) && ['c', 'f', 'k'].includes(toUnit)) {
-      // Temp
       let c = 0
       const v = parseFloat(val)
       if (fromUnit === 'c') c = v
@@ -131,7 +126,316 @@ function InteractiveUnitConverter({ initialValue = '', onClose }) {
   )
 }
 
-export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, activePage, setActivePage, globalIconTheme }) {
+function ArcFavoriteFolder({ installedApps = [], onLaunchApp, onClose }) {
+  const [favoriteAppIds, setFavoriteAppIds] = useState(() => {
+    try {
+      const cached = localStorage.getItem('iris_arc_favorite_apps')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed)) return parsed
+      }
+      return installedApps.slice(0, 5).map(a => a.packageId || a.id).filter(Boolean)
+    } catch {
+      return []
+    }
+  })
+
+  const [folderName, setFolderName] = useState(() => {
+    return localStorage.getItem('iris_arc_folder_name') || 'FAVORITE APPS'
+  })
+
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [tempName, setTempName] = useState(folderName)
+  const [isFolderOpen, setIsFolderOpen] = useState(true)
+  const [isManaging, setIsManaging] = useState(false)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem('iris_arc_favorite_apps', JSON.stringify(favoriteAppIds))
+  }, [favoriteAppIds])
+
+  useEffect(() => {
+    localStorage.setItem('iris_arc_folder_name', folderName)
+  }, [folderName])
+
+  const favoriteApps = useMemo(() => {
+    return favoriteAppIds
+      .map(id => installedApps.find(a => (a.packageId === id || a.id === id)))
+      .filter(Boolean)
+  }, [favoriteAppIds, installedApps])
+
+  const handleToggleFavorite = (packageId) => {
+    setFavoriteAppIds(prev => {
+      if (prev.includes(packageId)) {
+        return prev.filter(id => id !== packageId)
+      } else {
+        return [...prev, packageId]
+      }
+    })
+  }
+
+  const handleRemoveFavorite = (e, packageId) => {
+    e.stopPropagation()
+    setFavoriteAppIds(prev => prev.filter(id => id !== packageId))
+  }
+
+  const filteredInstalledApps = useMemo(() => {
+    if (!pickerSearch.trim()) return installedApps
+    const q = pickerSearch.toLowerCase()
+    return installedApps.filter(a => (a.label || a.name || a.packageId || '').toLowerCase().includes(q))
+  }, [installedApps, pickerSearch])
+
+  const saveFolderName = () => {
+    if (tempName.trim()) {
+      setFolderName(tempName.trim())
+    }
+    setIsEditingName(false)
+  }
+
+  return (
+    <div className="glass-surface rounded-2xl border border-primary-fixed/25 overflow-hidden transition-all shadow-xl bg-black/60 backdrop-blur-md">
+      {/* Folder Header */}
+      <div className="flex items-center justify-between px-3.5 py-2.5 bg-white/[0.03] border-b border-white/5">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="material-symbols-outlined text-primary-fixed text-base flex-shrink-0">folder_special</span>
+          
+          {isEditingName ? (
+            <div className="flex items-center gap-1.5 flex-1 max-w-[200px]">
+              <input
+                type="text"
+                value={tempName}
+                onChange={e => setTempName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveFolderName() }}
+                onBlur={saveFolderName}
+                autoFocus
+                className="bg-black/60 border border-primary-fixed/40 rounded px-2 py-0.5 text-xs text-primary-fixed font-mono-data focus:outline-none w-full"
+              />
+              <button onClick={saveFolderName} className="text-primary-fixed hover:text-white p-0.5">
+                <span className="material-symbols-outlined text-xs">check</span>
+              </button>
+            </div>
+          ) : (
+            <div 
+              onClick={() => { setTempName(folderName); setIsEditingName(true) }}
+              className="flex items-center gap-1.5 cursor-pointer group truncate"
+              title="Tap to rename folder"
+            >
+              <span className="text-xs font-bold font-mono-data text-white/90 uppercase tracking-wider truncate group-hover:text-primary-fixed transition-colors">
+                {folderName}
+              </span>
+              <span className="material-symbols-outlined text-[10px] text-white/30 group-hover:text-primary-fixed/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                edit
+              </span>
+            </div>
+          )}
+
+          <span className="text-[9px] font-mono text-primary-fixed/60 bg-primary-fixed/10 px-1.5 py-0.5 rounded border border-primary-fixed/20">
+            {favoriteApps.length}
+          </span>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsPickerOpen(true)}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-mono text-primary-fixed bg-primary-fixed/10 hover:bg-primary-fixed/20 border border-primary-fixed/30 transition-all active:scale-95"
+            title="Add Apps to Folder"
+          >
+            <span className="material-symbols-outlined text-xs">add</span>
+            <span>ADD</span>
+          </button>
+
+          <button
+            onClick={() => setIsManaging(!isManaging)}
+            className={`p-1 rounded-lg text-xs transition-all ${
+              isManaging
+                ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                : 'text-white/50 hover:text-white hover:bg-white/5'
+            }`}
+            title={isManaging ? 'Done Organizing' : 'Manage / Remove Apps'}
+          >
+            <span className="material-symbols-outlined text-sm">{isManaging ? 'done' : 'tune'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsFolderOpen(!isFolderOpen)}
+            className="p-1 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition-all"
+            title={isFolderOpen ? 'Collapse Folder' : 'Expand Folder'}
+          >
+            <span className="material-symbols-outlined text-sm transition-transform duration-200" style={{ transform: isFolderOpen ? 'rotate(0deg)' : 'rotate(180deg)' }}>
+              expand_more
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Folder Apps Grid */}
+      {isFolderOpen && (
+        <div className="p-3">
+          {favoriteApps.length === 0 ? (
+            <div 
+              onClick={() => setIsPickerOpen(true)}
+              className="border-2 border-dashed border-white/10 hover:border-primary-fixed/40 rounded-xl p-4 flex flex-col items-center justify-center gap-1 cursor-pointer group transition-all"
+            >
+              <span className="material-symbols-outlined text-primary-fixed/50 text-2xl group-hover:scale-110 transition-transform">add_circle</span>
+              <span className="text-[10px] font-mono text-white/50 group-hover:text-primary-fixed tracking-wider uppercase">Tap to add your favorite apps</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5">
+              {favoriteApps.map(app => {
+                const appId = app.packageId || app.id
+                return (
+                  <div
+                    key={appId}
+                    onClick={() => {
+                      if (isManaging) {
+                        handleToggleFavorite(appId)
+                      } else {
+                        onLaunchApp(app)
+                        onClose()
+                      }
+                    }}
+                    className="relative flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.08] active:bg-primary-fixed/20 border border-white/5 hover:border-primary-fixed/30 cursor-pointer transition-all active:scale-95 group select-none"
+                  >
+                    {/* Delete Badge in Manage Mode */}
+                    {isManaging && (
+                      <button
+                        onClick={(e) => handleRemoveFavorite(e, appId)}
+                        className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center shadow-lg border border-white/20 z-10 animate-in zoom-in-50 duration-150"
+                        title="Remove from favorites"
+                      >
+                        <span className="material-symbols-outlined text-[11px] font-bold">close</span>
+                      </button>
+                    )}
+
+                    {/* App Icon */}
+                    <div className="w-10 h-10 flex items-center justify-center">
+                      {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                        window.useGlobalHudIcons && IRIS_ICON_PACK[appId] ? (
+                          <div className="w-8 h-8 flex items-center justify-center icon-circle-minimal-outline">
+                            {IRIS_ICON_PACK[appId]}
+                          </div>
+                        ) : (
+                          <img src={app.icon} alt={app.label} className="w-8 h-8 object-contain rounded-lg drop-shadow-md" />
+                        )
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-primary-fixed/20 border border-primary-fixed/30 flex items-center justify-center">
+                          <span className="material-symbols-outlined text-primary-fixed text-base">{app.icon || 'apps'}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* App Label */}
+                    <span className="text-[9.5px] font-mono-data text-white/80 group-hover:text-primary-fixed truncate max-w-full text-center tracking-tight">
+                      {app.label || app.name || 'App'}
+                    </span>
+                  </div>
+                )
+              })}
+
+              {/* Add Button Tile */}
+              <button
+                onClick={() => setIsPickerOpen(true)}
+                className="flex flex-col items-center justify-center gap-1.5 p-2 rounded-xl border border-dashed border-white/10 hover:border-primary-fixed/40 bg-white/[0.01] hover:bg-white/[0.05] text-white/40 hover:text-primary-fixed transition-all cursor-pointer min-h-[64px]"
+                title="Add more apps"
+              >
+                <span className="material-symbols-outlined text-base">add</span>
+                <span className="text-[8px] font-mono uppercase tracking-wider">ADD</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* App Picker Modal */}
+      {isPickerOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-md animate-in fade-in duration-150" onClick={() => setIsPickerOpen(false)} />
+          <div className="relative glass-surface border border-primary-fixed/40 rounded-2xl p-4 w-full max-w-md max-h-[75vh] flex flex-col gap-3 z-10 bg-black/90 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary-fixed text-base">apps</span>
+                <span className="text-xs font-mono-data font-bold text-white uppercase tracking-wider">SELECT FAVORITE APPS</span>
+              </div>
+              <button onClick={() => setIsPickerOpen(false)} className="text-white/40 hover:text-white p-1">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+
+            {/* Search Filter in Picker */}
+            <div className="flex items-center gap-2 bg-black/50 border border-white/10 rounded-xl px-3 py-1.5">
+              <span className="material-symbols-outlined text-white/40 text-sm">search</span>
+              <input
+                type="text"
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                placeholder="Search installed apps..."
+                className="bg-transparent border-none text-xs text-white placeholder:text-white/30 focus:outline-none w-full font-mono-data"
+              />
+              {pickerSearch && (
+                <button onClick={() => setPickerSearch('')} className="text-white/40 hover:text-white">
+                  <span className="material-symbols-outlined text-xs">close</span>
+                </button>
+              )}
+            </div>
+
+            {/* Apps List */}
+            <div className="flex-1 overflow-y-auto space-y-1 pr-1 max-h-[45vh] scroll-container">
+              {filteredInstalledApps.map(app => {
+                const appId = app.packageId || app.id
+                const isSelected = favoriteAppIds.includes(appId)
+                return (
+                  <div
+                    key={appId}
+                    onClick={() => handleToggleFavorite(appId)}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-primary-fixed/15 border-primary-fixed/40 text-primary-fixed'
+                        : 'bg-white/[0.02] border-white/5 text-white/70 hover:bg-white/[0.06] hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+                        {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                          <img src={app.icon} alt={app.label} className="w-6 h-6 object-contain rounded" />
+                        ) : (
+                          <span className="material-symbols-outlined text-sm">{app.icon || 'apps'}</span>
+                        )}
+                      </div>
+                      <div className="truncate">
+                        <p className="text-xs font-mono-data font-semibold truncate">{app.label || app.name || appId}</p>
+                        <p className="text-[8.5px] font-mono text-white/30 truncate">{appId}</p>
+                      </div>
+                    </div>
+
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all flex-shrink-0 ${
+                      isSelected ? 'bg-primary-fixed border-primary-fixed text-black' : 'border-white/20 bg-black/40'
+                    }`}>
+                      {isSelected && <span className="material-symbols-outlined text-xs font-bold">check</span>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Picker Footer */}
+            <div className="pt-2 border-t border-white/10 flex justify-end">
+              <button
+                onClick={() => setIsPickerOpen(false)}
+                className="px-4 py-2 rounded-xl bg-primary-fixed text-black font-mono-data text-xs font-bold hover:bg-primary-fixed/90 transition-all active:scale-95"
+              >
+                DONE ({favoriteAppIds.length} SELECTED)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, _activePage, setActivePage, _globalIconTheme }) {
   const inputRef = useRef(null)
   const mountTime = useRef(Date.now())
 
@@ -167,10 +471,20 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-fade-in select-none">
+    <div 
+      data-arc-modal="true"
+      onTouchStart={e => e.stopPropagation()}
+      onTouchMove={e => e.stopPropagation()}
+      onTouchEnd={e => e.stopPropagation()}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-fade-in select-none"
+    >
       <div className="absolute inset-0" onClick={safeClose} />
 
-      <div className="w-full max-w-2xl relative z-10 flex flex-col gap-4 animate-slide-up">
+      <div 
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-2xl relative z-10 flex flex-col gap-3.5 animate-slide-up max-h-[90vh] overflow-y-auto scroll-container"
+      >
+        {/* Search Header Bar */}
         <div className="flex flex-col gap-2">
           <div className="glass-surface rounded-2xl p-2 flex items-center shadow-lg border border-primary-fixed/20">
             <span className="material-symbols-outlined text-primary-fixed px-3">search</span>
@@ -207,6 +521,15 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
             </button>
           </div>
         </div>
+
+        {/* Favorite Apps Quick Access Folder (Below Deep Search) - Only shown when search query is empty */}
+        {!query.trim() && (
+          <ArcFavoriteFolder
+            installedApps={installedApps}
+            onLaunchApp={launchApp}
+            onClose={onClose}
+          />
+        )}
 
         {isSearching && (
           <div className="glass-surface border border-primary-fixed/20 rounded-2xl p-4 shadow-lg">

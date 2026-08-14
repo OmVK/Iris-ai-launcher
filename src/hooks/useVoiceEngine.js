@@ -2,11 +2,11 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useAssistantStore } from '../stores/assistantStore'
 import { useAIStore } from '../stores/aiStore'
 import { SecureStorage } from '../utils/secureStorage'
+import { getCartesiaKey, stopCartesiaAudio, speakCartesia } from '../utils/cartesiaTTS'
+import { speakPiper } from '../utils/piperTTS'
 import {
   speakTextNative,
   stopSpeakingNative,
-  speakCartesiaNative,
-  addAudioFinishedListener,
   stopAudio,
   checkAndRequestPermission,
   isNative
@@ -28,15 +28,15 @@ try {
 export default function useVoiceEngine() {
   const {
     isListening, setIsListening,
-    setIsSpeaking,
-    setIsLiveVoice,
+    isSpeaking, setIsSpeaking,
+    isLiveVoice, setIsLiveVoice,
     setChatLog,
     setShowLiveConfigModal,
     liveSetupEngine, setLiveSetupEngine,
     liveSetupKey, setLiveSetupKey,
   } = useAssistantStore()
 
-  const { setLlmBackend, voicePitch, voiceRate, voiceTimbre } = useAIStore()
+  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre, voiceEngineProvider } = useAIStore()
 
   const lastTtsTextRef = useRef('')
   const isListeningRef = useRef(false)
@@ -55,6 +55,10 @@ export default function useVoiceEngine() {
       }
     }
   }, [])
+
+  useEffect(() => { isListeningRef.current = isListening }, [isListening])
+  useEffect(() => { isLiveVoiceRef.current = isLiveVoice }, [isLiveVoice])
+  useEffect(() => { isSpeakingRef.current = isSpeaking }, [isSpeaking])
 
   const startVoiceInput = useCallback(async () => {
     if (!recognition) {
@@ -82,14 +86,25 @@ export default function useVoiceEngine() {
     if (recognition) recognition.stop()
   }, [])
 
+  const finishSpeaking = useCallback(() => {
+    if (finishSpeakingTimerRef.current) clearTimeout(finishSpeakingTimerRef.current)
+    if (!mountedRef.current) return
+    setIsSpeaking(false)
+    if (isLiveVoiceRef.current) {
+      finishSpeakingTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current) return
+        if (isLiveVoiceRef.current && !isSpeakingRef.current && !isListeningRef.current && recognition) {
+          try { recognition.start() } catch {}
+        }
+      }, 300)
+    }
+  }, [setIsSpeaking])
+
   const stopSpeaking = useCallback(() => {
     lastTtsTextRef.current = ''
     window.speechSynthesis?.cancel()
+    stopCartesiaAudio()
     stopSpeakingNative().catch(() => {})
-    if (window._cartesiaAudio) {
-      try { window._cartesiaAudio.stop() } catch {}
-      window._cartesiaAudio = null
-    }
     if (window._isNativeCartesiaAudioPlaying) {
       stopAudio().catch(() => {})
       window._isNativeCartesiaAudioPlaying = false
@@ -100,79 +115,51 @@ export default function useVoiceEngine() {
       backendAbortRef.current.current = null
     }
     if (backendIsGeneratingRef.current) backendIsGeneratingRef.current.current = false
-  }, [])
+  }, [setIsSpeaking])
 
   const speakText = useCallback(async (text) => {
-    if (!text || text.trim() === '') return
-    setIsSpeaking(true)
-    lastTtsTextRef.current = text.trim().toLowerCase()
+    if (!text || !voiceEnabled) return
+    if (text === lastTtsTextRef.current && isSpeakingRef.current) return
+    lastTtsTextRef.current = text
 
-    if (recognition && !isLiveVoiceRef.current) {
-      try { recognition.abort() } catch {}
+    stopSpeaking()
+    setIsSpeaking(true)
+
+    if (recognition && isListeningRef.current) {
+      try { recognition.stop() } catch {}
+      setIsListening(false)
     }
 
-    const finishSpeaking = () => {
-      setIsSpeaking(false)
-      lastTtsTextRef.current = ''
-      if (isLiveVoiceRef.current && recognition && !isListeningRef.current) {
-        if (finishSpeakingTimerRef.current) clearTimeout(finishSpeakingTimerRef.current)
-        finishSpeakingTimerRef.current = setTimeout(() => {
-          if (!mountedRef.current) return
-          try {
-            if (isLiveVoiceRef.current && !isSpeakingRef.current && !isListeningRef.current) {
-              recognition.start()
-            }
-          } catch {}
-        }, 200)
+    const { voiceEngineProvider: currentProvider, cartesiaKey: storeKey } = useAIStore.getState()
+    const activeKey = storeKey || await getCartesiaKey()
+
+    // 1. PROVIDER: CARTESIA
+    if (currentProvider === 'CARTESIA') {
+      if (!activeKey) {
+        alert("Cartesia API Key Missing: Please paste & save a Cartesia API Key in Voice Settings.")
+        finishSpeaking()
+        return
+      }
+      try {
+        const ok = await speakCartesia(text, voiceTimbre, activeKey)
+        if (ok) {
+          finishSpeaking()
+          return
+        }
+      } catch (e) {
+        console.error("[IRIS Cartesia Exception]", e)
+        alert(`Cartesia Connection Exception: ${e.message}`)
+        finishSpeaking()
+        return
       }
     }
 
-    // Try Cartesia TTS
-    const cartesiaKey = await SecureStorage.getItem('cartesia_api_key')
-    if (cartesiaKey && cartesiaKey.trim()) {
-      try {
-        const voiceId = localStorage.getItem('cartesia_voice_id') || "694f9389-aac1-45b6-b726-9d9369183238"
-        if (isNative) {
-          if (window._cartesiaNativeListener) window._cartesiaNativeListener.remove()
-          window._cartesiaNativeListener = await addAudioFinishedListener(() => finishSpeaking())
-          window._isNativeCartesiaAudioPlaying = true
-          await speakCartesiaNative(text, voiceId, cartesiaKey.trim())
-          return
-        } else {
-          const res = await fetch('https://api.cartesia.ai/tts/bytes', {
-            method: 'POST',
-            headers: {
-              'Cartesia-Version': '2024-06-10',
-              'X-API-Key': cartesiaKey.trim(),
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              model_id: "sonic-3.5",
-              transcript: text,
-              voice: { mode: "id", id: voiceId },
-              output_format: { container: "mp3", bit_rate: 128000, sample_rate: 44100 }
-            })
-          })
-          if (res.ok) {
-            const arrayBuffer = await res.arrayBuffer()
-            if (!mountedRef.current) return
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)()
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-            const source = audioContext.createBufferSource()
-            source.buffer = audioBuffer
-            source.connect(audioContext.destination)
-            window._cartesiaAudio = source
-            source.onended = () => {
-              window._cartesiaAudio = null
-              audioContext.close().catch(() => {})
-              finishSpeaking()
-            }
-            source.start(0)
-            return
-          }
-        }
-      } catch (e) {
-        console.error("Cartesia Exception:", e)
+    // 2. PROVIDER: PIPER
+    if (currentProvider === 'PIPER') {
+      const piperSuccess = await speakPiper(text, voiceTimbre)
+      if (piperSuccess) {
+        finishSpeaking()
+        return
       }
     }
 
@@ -180,8 +167,8 @@ export default function useVoiceEngine() {
     if (voiceTimbre === 'narrator') pitchMod = 0.85
     const effectivePitch = Math.max(0.1, Math.min(2.0, voicePitch * pitchMod))
 
-    // On Android Native
-    if (isNative) {
+    // 3. PROVIDER: NATIVE (Android Google TTS)
+    if (currentProvider === 'NATIVE' || (isNative && currentProvider !== 'WEB')) {
       try {
         const m = await import('../components/LauncherPlugin')
         if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(voicePitch, voiceRate, voiceTimbre)

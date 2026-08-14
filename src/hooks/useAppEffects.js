@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, dismissNotification } from '../components/LauncherPlugin'
+import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, dismissNotification, addPackageChangeListener } from '../components/LauncherPlugin'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { useAppStore } from '../stores/appStore'
 
@@ -29,7 +29,25 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
         backHandle?.then(h => h.remove()); stateHandle?.then(h => h.remove())
       }
     }
-  }, [fullscreenActive])
+  }, [fullscreenActive, loadNativeApps, setActivePage, setIsAppActive, setIsVaultUnlocked, setShowChronoLock, setShowLiveConfigModal, setShowVaultExplorer])
+
+  // Package installation/uninstallation live sync
+  useEffect(() => {
+    if (!isNative) return
+    const pkgListener = addPackageChangeListener(() => {
+      loadNativeApps()
+    })
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        loadNativeApps()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      if (pkgListener && typeof pkgListener.remove === 'function') pkgListener.remove()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [loadNativeApps])
 
   useEffect(() => {
     if (!isNative || !isAppActive) return
@@ -81,7 +99,7 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
       setShowVaultExplorer(false)
     }, timeoutMs)
     return () => clearTimeout(timer)
-  }, [isVaultUnlocked])
+  }, [isVaultUnlocked, setIsVaultUnlocked, setShowVaultExplorer])
 
   useEffect(() => {
     const handle = (e) => {

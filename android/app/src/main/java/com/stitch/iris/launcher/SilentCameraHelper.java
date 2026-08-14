@@ -35,11 +35,23 @@ public class SilentCameraHelper {
         void onCaptureDone(String frontBase64, String backBase64);
     }
 
+    public interface SingleCaptureCallback {
+        void onCaptureDone(String base64Image);
+    }
+
     public static void captureBothSilently(Context context, CaptureCallback callback) {
         new Thread(() -> {
             String backImage = captureSingleLens(context, "0"); // Usually back
             String frontImage = captureSingleLens(context, "1"); // Usually front
             callback.onCaptureDone(frontImage, backImage);
+        }).start();
+    }
+
+    public static void captureSingleSilently(Context context, String facing, SingleCaptureCallback callback) {
+        new Thread(() -> {
+            String lensId = ("front".equalsIgnoreCase(facing) || "1".equals(facing)) ? "1" : "0";
+            String image = captureSingleLens(context, lensId);
+            callback.onCaptureDone(image);
         }).start();
     }
 

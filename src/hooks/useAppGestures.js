@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { expandNotificationPanel } from '../components/LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
+import { useAppStore } from '../stores/appStore'
 
 let contextMenuOpen = false
 let tripleTapTimerRef = null
@@ -9,6 +10,15 @@ let longPressTimerRef = null
 
 export function setContextMenuOpen(v) {
   contextMenuOpen = v
+}
+
+function isOverlayActive() {
+  try {
+    const s = useAppStore.getState()
+    return !!(s.showArcSearch || s.showChronoLock || s.showVaultExplorer || s.showVpnBrowser || contextMenuOpen)
+  } catch {
+    return contextMenuOpen
+  }
 }
 
 function getGestureMap() {
@@ -72,7 +82,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     }
   }, [setActivePage, setShowArcSearch, launchApp])
 
-  const detectGesture = useCallback((deltaX, deltaY, startX, startY, duration, touchCount, pinchRatio) => {
+  const detectGesture = useCallback((deltaX, deltaY, _startX, _startY, duration, touchCount, pinchRatio) => {
     if (touchCount === 2) {
       if (pinchRatio > 0 && pinchRatio < 0.75) return 'pinch_in'
       if (Math.abs(deltaY) > 60) return deltaY < 0 ? 'two_finger_swipe_up' : 'two_finger_swipe_down'
@@ -91,14 +101,16 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
     if (absDeltaX > absDeltaY) {
       const dir = deltaX > 0 ? 'right' : 'left'
-      return activePage === 'drawer' ? `drawer_swipe_${dir}` : `swipe_${dir}`
+      return `swipe_${dir}`
     } else {
       const dir = deltaY > 0 ? 'down' : 'up'
-      return activePage === 'drawer' ? `drawer_swipe_${dir}` : `swipe_${dir}`
+      return `swipe_${dir}`
     }
-  }, [activePage])
+  }, [])
 
   const handleTouchStart = useCallback((e) => {
+    if (isOverlayActive()) return
+
     touchCountRef.current = e.touches.length
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
@@ -111,39 +123,42 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       currentPinchDistRef.current = initialPinchDistRef.current
     }
 
-    if (contextMenuOpen) return
-
-    if (!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.app-icon-item') && !e.target.closest('[data-no-arc]')) {
-      tapCountRef++
-      if (tapCountRef === 1) {
-        tripleTapTimerRef = setTimeout(() => { tapCountRef = 0 }, 500)
-        longPressTimerRef = setTimeout(() => {
-          if (tapCountRef === 1) {
-            const gesture = getGestureAction('long_press_empty')
-            if (gesture) executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
-            tapCountRef = 0
+    // Only run tap / long-press timers on the Home screen to avoid interfering with scrolling in sub-pages
+    if (activePage === 'home') {
+      if (!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.app-icon-item') && !e.target.closest('[data-no-arc]')) {
+        tapCountRef++
+        if (tapCountRef === 1) {
+          tripleTapTimerRef = setTimeout(() => { tapCountRef = 0 }, 500)
+          longPressTimerRef = setTimeout(() => {
+            if (tapCountRef === 1) {
+              const gesture = getGestureAction('long_press_empty')
+              if (gesture) executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
+              tapCountRef = 0
+            }
+          }, 600)
+        } else if (tapCountRef === 2) {
+          if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
+          if (tripleTapTimerRef) { clearTimeout(tripleTapTimerRef); tripleTapTimerRef = null }
+          const gesture = getGestureAction('double_tap')
+          if (gesture) {
+            executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
           }
-        }, 600)
-      } else if (tapCountRef === 2) {
-        if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
-        if (tripleTapTimerRef) { clearTimeout(tripleTapTimerRef); tripleTapTimerRef = null }
-        const gesture = getGestureAction('double_tap')
-        if (gesture) {
-          executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
+          tapCountRef = 0
+        } else if (tapCountRef >= 3) {
+          clearTimeout(tripleTapTimerRef)
+          tripleTapTimerRef = null
+          tapCountRef = 0
+          HapticFeedback.double()
+          setShowArcSearch(true)
+          return
         }
-        tapCountRef = 0
-      } else if (tapCountRef >= 3) {
-        clearTimeout(tripleTapTimerRef)
-        tripleTapTimerRef = null
-        tapCountRef = 0
-        HapticFeedback.double()
-        setShowArcSearch(true)
-        return
       }
     }
-  }, [setShowArcSearch, executeAction])
+  }, [activePage, setShowArcSearch, executeAction])
 
   const handleTouchMove = useCallback((e) => {
+    if (isOverlayActive()) return
+
     touchEndX.current = e.touches[0].clientX
     touchEndY.current = e.touches[0].clientY
 
@@ -168,13 +183,34 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   const handleTouchEnd = useCallback(() => {
     if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
 
+    if (isOverlayActive()) {
+      touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
+      return
+    }
+
     if (touchStartX.current === null || touchEndX.current === null) return
     const deltaX = touchEndX.current - touchStartX.current
     const deltaY = touchEndY.current - touchStartY.current
+    const startX = touchStartX.current
     const duration = Date.now() - (touchStartTime.current || 0)
+    const absDeltaY = Math.abs(deltaY)
+    const absDeltaX = Math.abs(deltaX)
 
+    // iOS-Style Edge Swipe Right on Sub-Pages -> Smoothly Navigate Back to Home
+    if (activePage !== 'home') {
+      const edgeThreshold = Math.min(100, (typeof window !== 'undefined' ? window.innerWidth : 400) * 0.3)
+      if (deltaX > 70 && absDeltaY < 65 && startX < edgeThreshold) {
+        HapticFeedback.light()
+        setActivePage('home')
+      }
+      touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
+      initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
+      return
+    }
+
+    // Home Screen Gestures
     const pinchRatio = initialPinchDistRef.current > 0 ? currentPinchDistRef.current / initialPinchDistRef.current : 0
-    const gestureName = detectGesture(deltaX, deltaY, touchStartX.current, touchStartY.current, duration, touchCountRef.current, pinchRatio)
+    const gestureName = detectGesture(deltaX, deltaY, startX, touchStartY.current, duration, touchCountRef.current, pinchRatio)
     
     if (gestureName) {
       const gesture = getGestureAction(gestureName)
@@ -186,12 +222,8 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       }
     }
 
-    const absDeltaY = Math.abs(deltaY)
-    const absDeltaX = Math.abs(deltaX)
-    if (deltaX > 80 && absDeltaY < 50 && touchStartX.current < window.innerWidth / 2) {
-      if (activePage !== 'home') setActivePage('home')
-    } else if (activePage === 'home') {
-      if (deltaY > 80 && absDeltaX < 50) expandNotificationPanel()
+    if (deltaY > 80 && absDeltaX < 50) {
+      expandNotificationPanel()
     }
 
     touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null

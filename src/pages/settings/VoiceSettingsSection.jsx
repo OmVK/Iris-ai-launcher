@@ -4,30 +4,69 @@ import { SettingSlider, SettingToggle } from './SettingControls'
 import { useAIStore } from '../../stores/aiStore'
 import HapticFeedback from '../../utils/HapticFeedback'
 import useVoiceEngine from '../../hooks/useVoiceEngine'
-import { SecureStorage } from '../../utils/secureStorage'
+import { testCartesiaKey } from '../../utils/cartesiaTTS'
 
 export default function VoiceSettingsSection({ expandedSections, toggleSection, voicePitch, setVoicePitch, voiceRate, setVoiceRate }) {
   const [haptics, setHaptics] = useState(() => HapticFeedback.isEnabled())
-  const [cartesiaKey, setCartesiaKey] = useState('')
-  const { voiceTimbre, setVoiceTimbre } = useAIStore()
+  const { 
+    voiceTimbre, 
+    setVoiceTimbre, 
+    cartesiaKey, 
+    setCartesiaKey, 
+    voiceEngineProvider, 
+    setVoiceEngineProvider, 
+    loadKeys 
+  } = useAIStore()
+  
+  const [keyInput, setKeyInput] = useState('')
+  const [testStatus, setTestStatus] = useState(null) // null | { loading: boolean, success: boolean, msg: string }
+  const [isSaved, setIsSaved] = useState(false)
   const { speakText } = useVoiceEngine()
 
   useEffect(() => {
-    SecureStorage.getItem('cartesia_api_key').then(k => {
-      if (k) setCartesiaKey(k)
-    }).catch(() => {})
-  }, [])
+    loadKeys()
+  }, [loadKeys])
+
+  useEffect(() => {
+    setKeyInput(cartesiaKey || '')
+  }, [cartesiaKey])
 
   const handleHapticsChange = (val) => {
     HapticFeedback.setEnabled(val)
     setHaptics(val)
   }
 
-  const handleCartesiaChange = async (e) => {
-    const val = e.target.value
-    setCartesiaKey(val)
-    await SecureStorage.setItem('cartesia_api_key', val.trim())
+  const handleSaveKey = () => {
+    setCartesiaKey(keyInput.trim())
+    setIsSaved(true)
+    HapticFeedback.trigger()
+    setTimeout(() => setIsSaved(false), 2500)
   }
+
+  const handleTestConnection = async () => {
+    const keyToTest = keyInput.trim() || cartesiaKey.trim()
+    if (!keyToTest) {
+      setTestStatus({ loading: false, success: false, msg: 'Please paste a Cartesia API Key first' })
+      return
+    }
+    setTestStatus({ loading: true, success: false, msg: 'Testing connection to Cartesia API...' })
+    const res = await testCartesiaKey(keyToTest)
+    if (res.success) {
+      setTestStatus({ loading: false, success: true, msg: '🟢 API Key Validated! Cartesia Sonic 3.5 Ready.' })
+      // Auto save if test passes
+      setCartesiaKey(keyToTest)
+      speakText('Cartesia Ultra-Realistic Human Voice engine is online and connected!')
+    } else {
+      setTestStatus({ loading: false, success: false, msg: `🔴 Verification Failed: ${res.error}` })
+    }
+  }
+
+  const ENGINE_PROVIDERS = [
+    { id: 'CARTESIA', label: 'Cartesia Neural API', desc: '100% Studio Human Voice', icon: 'graphic_eq' },
+    { id: 'PIPER', label: 'Piper Neural TTS', desc: 'On-Device Local Model', icon: 'record_voice_over' },
+    { id: 'NATIVE', label: 'Android Google TTS', desc: 'On-Device Engine', icon: 'android' },
+    { id: 'WEB', label: 'Browser Web Speech', desc: 'System Web Standard', icon: 'language' }
+  ]
 
   const VOICE_OPTIONS = [
     { id: 'natural_female', label: 'Natural Female (US)', desc: 'Warm & Fluent' },
@@ -49,8 +88,99 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
 
   return (
     <SettingsSection title="VOICE ENGINE & HAPTIC SETTINGS" icon="record_voice_over" sectionKey="voiceSettings" expandedSections={expandedSections} toggleSection={toggleSection}>
+      
+      {/* Active Engine Provider Selector */}
+      <div className="space-y-1.5 mb-3">
+        <p className="text-[8px] text-cyan-400 font-bold uppercase font-mono-data tracking-wider">ACTIVE SPEECH ENGINE PROVIDER</p>
+        <div className="grid grid-cols-2 gap-1.5 font-mono">
+          {ENGINE_PROVIDERS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => {
+                setVoiceEngineProvider(p.id)
+                HapticFeedback.trigger()
+              }}
+              className={`p-2 rounded border text-left transition-all active:scale-95 flex flex-col justify-between ${
+                voiceEngineProvider === p.id 
+                  ? 'bg-cyan-950/60 border-cyan-400 text-cyan-300 font-bold shadow' 
+                  : 'bg-black/30 border-white/10 text-on-surface-variant/60 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="material-symbols-outlined text-xs text-cyan-400">{p.icon}</span>
+                {voiceEngineProvider === p.id && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>}
+              </div>
+              <span className="font-mono text-[8px] mt-1 font-bold truncate">{p.label}</span>
+              <span className="text-[6px] text-on-surface-variant/40 uppercase truncate">{p.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Cartesia API Key Section */}
+      <div className="p-3 rounded-lg bg-black/40 border border-cyan-500/20 space-y-2 mb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-xs text-cyan-400">key</span>
+            <span className="text-[9px] font-bold text-cyan-200 font-mono">CARTESIA SONIC 3.5 API KEY</span>
+          </div>
+          <span className={`text-[7px] font-mono px-2 py-0.5 rounded border ${
+            cartesiaKey ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+          }`}>
+            {cartesiaKey ? 'KEY CONFIGURED' : 'NO API KEY'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <input
+            type="password"
+            placeholder="Paste Cartesia API key..."
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            className="flex-1 bg-black/60 border border-outline-variant/30 rounded px-2.5 py-1.5 text-[10px] text-cyan-300 placeholder:text-on-surface-variant/30 focus:border-cyan-400 outline-none font-mono"
+          />
+          <button
+            onClick={handleSaveKey}
+            className={`px-3 py-1.5 rounded text-[8px] font-bold font-mono transition-all active:scale-95 shrink-0 border ${
+              isSaved
+                ? 'bg-emerald-500/30 border-emerald-400 text-emerald-300'
+                : 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/30'
+            }`}
+          >
+            {isSaved ? 'SAVED!' : 'SAVE KEY'}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <p className="text-[7px] text-on-surface-variant/50 leading-relaxed font-mono">
+            Powers ultra-realistic studio human speech using Sonic 3.5.
+          </p>
+          <button
+            onClick={handleTestConnection}
+            disabled={testStatus?.loading}
+            className="px-2.5 py-1 rounded bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 font-mono text-[8px] font-bold hover:bg-indigo-500/30 active:scale-95 disabled:opacity-50 shrink-0 flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-[10px]">sensors</span>
+            {testStatus?.loading ? 'TESTING...' : 'TEST KEY'}
+          </button>
+        </div>
+
+        {testStatus && (
+          <div className={`p-1.5 rounded text-[8px] font-mono leading-tight border ${
+            testStatus.loading 
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' 
+              : testStatus.success 
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+          }`}>
+            {testStatus.msg}
+          </div>
+        )}
+      </div>
+
       <SettingToggle label="Haptic Vibration Feedback" sublabel="VIBRATE_ON_TOUCH_GESTURES" icon="vibration" value={haptics} onChange={handleHapticsChange} />
       
+      {/* Voice Profiles Grid */}
       <div className="space-y-1.5 mt-2">
         <p className="text-[8px] text-on-surface-variant/40 uppercase font-mono-data">VOICE ENGINE TIMBRE & PROFILE</p>
         <div className="grid grid-cols-2 gap-1.5">
@@ -70,21 +200,6 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="space-y-1.5 mt-3 pt-2 border-t border-white/5">
-        <div className="flex items-center justify-between">
-          <p className="text-[8px] text-primary-fixed-dim uppercase font-mono-data">CARTESIA SONIC 3.5 NEURAL VOICE API (HUMAN TTS)</p>
-          <span className="text-[7px] text-cyan-400/80 font-mono-data">{cartesiaKey ? 'ACTIVE (HUMAN)' : 'OFF (SYSTEM)'}</span>
-        </div>
-        <input
-          type="password"
-          placeholder="Paste Cartesia API key for 100% human speech..."
-          value={cartesiaKey}
-          onChange={handleCartesiaChange}
-          className="w-full bg-black/40 border border-outline-variant/30 rounded p-2 text-[10px] text-cyan-300 placeholder:text-on-surface-variant/30 focus:border-cyan-400 outline-none font-mono"
-        />
-        <p className="text-[7px] text-on-surface-variant/40">Enter a free/paid Cartesia API Key for photorealistic human neural voice synthesis.</p>
       </div>
 
       <SettingSlider label="VOICE PITCH" value={voicePitch} onChange={setVoicePitch} min="0.1" max="2.0" step="0.1" unit="x" />

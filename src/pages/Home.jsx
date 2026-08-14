@@ -147,8 +147,8 @@ export default function Home({
       return
     }
 
-    routeAppClick(app, { onTriggerChronoLock, onTriggerVault, onNavigate, launchApp })
-  }, [activeContextMenu, onTriggerChronoLock, onTriggerVault, onNavigate])
+    routeAppClick(app, { onTriggerChronoLock, onTriggerVault, onNavigate, launchApp, lockedApps, isVaultUnlocked })
+  }, [activeContextMenu, onTriggerChronoLock, onTriggerVault, onNavigate, lockedApps, isVaultUnlocked])
 
   const handleRemoveFromHome = (app) => {
     setInstalledApps(prev => prev.map(a => a.packageId === app.packageId ? { ...a, isHome: false } : a))

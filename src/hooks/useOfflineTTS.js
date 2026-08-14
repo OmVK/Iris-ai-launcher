@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import { useAIStore } from '../stores/aiStore'
+import { getCartesiaKey, speakCartesia } from '../utils/cartesiaTTS'
+import { speakPiper } from '../utils/piperTTS'
 import { speakTextNative as pluginSpeakNative, setVoiceSettingsNative, isNative } from '../components/LauncherPlugin'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
@@ -70,70 +72,98 @@ export default function useOfflineTTS({ speechInterruptRef }) {
 
   const speakTextNative = (text, onAudioStart) => {
     return new Promise((resolve) => {
-      if (speechInterruptRef.current) return resolve()
-      if (localStorage.getItem('assistant_tts_enabled') === 'false') {
-        const readTime = Math.max(1500, text.length * 50)
-        if (onAudioStart) onAudioStart()
-        setTimeout(resolve, readTime)
-        return
-      }
-      clearIdleTimer()
-      const jobId = Date.now().toString() + Math.random()
+      (async () => {
+        if (speechInterruptRef.current) return resolve()
+        if (localStorage.getItem('assistant_tts_enabled') === 'false') {
+          const readTime = Math.max(1500, text.length * 50)
+          if (onAudioStart) onAudioStart()
+          setTimeout(resolve, readTime)
+          return
+        }
+        clearIdleTimer()
+        const jobId = Date.now().toString() + Math.random()
 
-      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
-      safetyTimerRef.current = setTimeout(() => { ttsResolvers.current.delete(jobId); resolve() }, 30000)
-      
-      const wrappedResolve = () => {
         if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
-        ttsResolvers.current.delete(jobId)
-        resolve()
-      }
-      ttsResolvers.current.set(jobId, { resolve: wrappedResolve })
+        safetyTimerRef.current = setTimeout(() => { ttsResolvers.current.delete(jobId); resolve() }, 30000)
+        
+        const wrappedResolve = () => {
+          if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
+          ttsResolvers.current.delete(jobId)
+          resolve()
+        }
+        ttsResolvers.current.set(jobId, { resolve: wrappedResolve })
 
-      const { voiceTimbre, voicePitch, voiceRate } = useAIStore.getState()
-      let pitchMod = 1.0
-      if (voiceTimbre === 'narrator') pitchMod = 0.85
-      const effectivePitch = Math.max(0.1, Math.min(2.0, voicePitch * pitchMod))
+        const { voiceTimbre, voicePitch, voiceRate, voiceEngineProvider, cartesiaKey: storeKey } = useAIStore.getState()
+        let pitchMod = 1.0
+        if (voiceTimbre === 'narrator') pitchMod = 0.85
+        const effectivePitch = Math.max(0.1, Math.min(2.0, voicePitch * pitchMod))
 
-      if (onAudioStart) onAudioStart()
-      
-      if (isNative) {
-        try {
-          setVoiceSettingsNative(voicePitch, voiceRate, voiceTimbre)
-          pluginSpeakNative(text).then(wrappedResolve).catch(wrappedResolve)
-        } catch (_) { wrappedResolve() }
-      } else if ('speechSynthesis' in window) {
-        try {
-          window.speechSynthesis.cancel()
-          const u = new SpeechSynthesisUtterance(text)
-          const voices = window.speechSynthesis.getVoices()
-          let selectedVoice = null
-          if (voiceTimbre === 'british_female') {
-            selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria') || v.name.toLowerCase().includes('emma'))) ||
-                            voices.find(v => v.lang.startsWith('en-GB'))
-          } else if (voiceTimbre === 'british_male') {
-            selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver'))) ||
-                            voices.find(v => v.lang.startsWith('en-GB'))
-          } else if (voiceTimbre === 'natural_male' || voiceTimbre === 'narrator') {
-            selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george')))
-          } else {
-            selectedVoice = voices.find(v => v.name.includes("Google US English") && v.name.includes("Natural")) ||
-                            voices.find(v => v.name.includes("Natural") || v.name.includes("Aria") || v.name.includes("Samantha")) ||
-                            voices.find(v => v.lang.startsWith("en-US")) ||
-                            voices.find(v => v.lang.startsWith("en")) ||
-                            voices[0]
+        if (onAudioStart) onAudioStart()
+        
+        // 1. PROVIDER: CARTESIA
+        if (voiceEngineProvider === 'CARTESIA') {
+          const activeKey = storeKey || await getCartesiaKey()
+          if (activeKey) {
+            try {
+              const ok = await speakCartesia(text, voiceTimbre, activeKey)
+              if (ok) {
+                wrappedResolve()
+                return
+              }
+            } catch (e) {
+              console.error("[Home Assistant Cartesia Error]", e)
+            }
           }
-          if (selectedVoice) u.voice = selectedVoice
-          u.pitch = effectivePitch
-          u.rate = voiceRate
-          u.onend = () => wrappedResolve()
-          u.onerror = () => wrappedResolve()
-          window.speechSynthesis.speak(u)
-          setTimeout(wrappedResolve, Math.max(1500, text.length * 80))
-        } catch (_) { wrappedResolve() }
-      } else {
-        setTimeout(wrappedResolve, 1000)
-      }
+        }
+
+        // 2. PROVIDER: PIPER
+        if (voiceEngineProvider === 'PIPER') {
+          const piperSuccess = await speakPiper(text, voiceTimbre)
+          if (piperSuccess) {
+            wrappedResolve()
+            return
+          }
+        }
+
+        // 3. PROVIDER: NATIVE (Android Google TTS)
+        if (voiceEngineProvider === 'NATIVE' || (isNative && voiceEngineProvider !== 'WEB')) {
+          try {
+            setVoiceSettingsNative(voicePitch, voiceRate, voiceTimbre)
+            pluginSpeakNative(text).then(wrappedResolve).catch(wrappedResolve)
+          } catch (_) { wrappedResolve() }
+        } else if ('speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.cancel()
+            const u = new SpeechSynthesisUtterance(text)
+            const voices = window.speechSynthesis.getVoices()
+            let selectedVoice = null
+            if (voiceTimbre === 'british_female') {
+              selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria') || v.name.toLowerCase().includes('emma'))) ||
+                              voices.find(v => v.lang.startsWith('en-GB'))
+            } else if (voiceTimbre === 'british_male') {
+              selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver'))) ||
+                              voices.find(v => v.lang.startsWith('en-GB'))
+            } else if (voiceTimbre === 'natural_male' || voiceTimbre === 'narrator') {
+              selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george')))
+            } else {
+              selectedVoice = voices.find(v => v.name.includes("Google US English") && v.name.includes("Natural")) ||
+                              voices.find(v => v.name.includes("Natural") || v.name.includes("Aria") || v.name.includes("Samantha")) ||
+                              voices.find(v => v.lang.startsWith("en-US")) ||
+                              voices.find(v => v.lang.startsWith("en")) ||
+                              voices[0]
+            }
+            if (selectedVoice) u.voice = selectedVoice
+            u.pitch = effectivePitch
+            u.rate = voiceRate
+            u.onend = () => wrappedResolve()
+            u.onerror = () => wrappedResolve()
+            window.speechSynthesis.speak(u)
+            setTimeout(wrappedResolve, Math.max(1500, text.length * 80))
+          } catch (_) { wrappedResolve() }
+        } else {
+          setTimeout(wrappedResolve, 1000)
+        }
+      })()
     })
   }
 

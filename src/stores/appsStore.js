@@ -97,22 +97,26 @@ export const useAppsStore = create((set, get) => ({
     const filtered = nativeApps.filter(app => !IRIS_PACKAGE_IDS.has(app.packageId))
     const existingMap = new Map((s.installedApps || []).map(a => [a.packageId, a]))
 
-    const merged = filtered.map(app => {
+    // Map over CURRENTLY INSTALLED native apps, preserving custom user properties
+    const updated = filtered.map(app => {
       const existing = existingMap.get(app.packageId)
-      if (existing && existing.icon && existing.icon !== app.icon) {
-        return { ...app, icon: existing.icon }
+      if (existing) {
+        return {
+          ...app,
+          isHome: existing.isHome ?? false,
+          customIcon: existing.customIcon,
+          customLabel: existing.customLabel,
+          icon: existing.icon || app.icon
+        }
       }
       return app
     })
 
-    const newApps = [...(s.installedApps || []), ...merged]
-    const unique = newApps.reduce((acc, current) => {
-      const x = acc.find(item => item.packageId === current.packageId)
-      return x ? acc : acc.concat([current])
-    }, [])
+    const nonNativeApps = (s.installedApps || []).filter(a => a.path && !a.packageId)
+    const finalApps = [...nonNativeApps, ...updated]
 
-    localStorage.setItem('installed_apps', JSON.stringify(unique))
-    return { installedApps: unique }
+    localStorage.setItem('installed_apps', JSON.stringify(finalApps))
+    return { installedApps: finalApps }
   }),
 
   resetToDefaults: () => {

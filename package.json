@@ -1,7 +1,7 @@
 {
   "name": "stitch_iris_ai_launcher",
   "private": true,
-  "version": "4.9.9",
+  "version": "5.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,6 +22,7 @@
     "@capacitor/local-notifications": "^8.2.0",
     "@capacitor/preferences": "^8.0.1",
     "@capgo/capacitor-native-biometric": "^8.4.5",
+    "@mintplex-labs/piper-tts-web": "^1.0.5",
     "convert-units": "^2.3.4",
     "jszip": "^3.10.1",
     "react": "^18.3.1",
