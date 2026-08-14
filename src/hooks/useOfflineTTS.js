@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import PiperWorker from '../workers/piperWorker?worker'
 import PowerSaveManager from '../utils/PowerSaveManager'
+import { useAIStore } from '../stores/aiStore'
+import { speakTextNative as pluginSpeakNative, setVoiceSettingsNative, isNative } from '../components/LauncherPlugin'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
@@ -202,7 +204,12 @@ export default function useOfflineTTS({ speechInterruptRef }) {
         }
       })
 
-      if (!PowerSaveManager.shouldDisable('piper')) {
+      const { voiceTimbre, voicePitch, voiceRate } = useAIStore.getState()
+      let pitchMod = 1.0
+      if (voiceTimbre === 'narrator') pitchMod = 0.85
+      const effectivePitch = Math.max(0.1, Math.min(2.0, voicePitch * pitchMod))
+
+      if (voiceTimbre === 'piper_offline' && !PowerSaveManager.shouldDisable('piper')) {
         initWorker()
         if (piperWorkerRef.current) {
           chunks.forEach(chunk => piperWorkerRef.current.postMessage({ type: 'SPEAK', text: chunk.trim(), id: jobId }))
@@ -214,10 +221,36 @@ export default function useOfflineTTS({ speechInterruptRef }) {
       } else {
         ttsResolvers.current.delete(jobId)
         if (onAudioStart) onAudioStart()
-        if ('speechSynthesis' in window) {
+        
+        if (isNative) {
+          try {
+            setVoiceSettingsNative(effectivePitch, voiceRate)
+            pluginSpeakNative(text).then(resolve).catch(resolve)
+          } catch (_) { resolve() }
+        } else if ('speechSynthesis' in window) {
           try {
             window.speechSynthesis.cancel()
             const u = new SpeechSynthesisUtterance(text)
+            const voices = window.speechSynthesis.getVoices()
+            let selectedVoice = null
+            if (voiceTimbre === 'british_female') {
+              selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria') || v.name.toLowerCase().includes('emma'))) ||
+                              voices.find(v => v.lang.startsWith('en-GB'))
+            } else if (voiceTimbre === 'british_male') {
+              selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver'))) ||
+                              voices.find(v => v.lang.startsWith('en-GB'))
+            } else if (voiceTimbre === 'natural_male' || voiceTimbre === 'narrator') {
+              selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george')))
+            } else {
+              selectedVoice = voices.find(v => v.name.includes("Google US English") && v.name.includes("Natural")) ||
+                              voices.find(v => v.name.includes("Natural") || v.name.includes("Aria") || v.name.includes("Samantha")) ||
+                              voices.find(v => v.lang.startsWith("en-US")) ||
+                              voices.find(v => v.lang.startsWith("en")) ||
+                              voices[0]
+            }
+            if (selectedVoice) u.voice = selectedVoice
+            u.pitch = effectivePitch
+            u.rate = voiceRate
             u.onend = () => resolve()
             u.onerror = () => resolve()
             window.speechSynthesis.speak(u)
