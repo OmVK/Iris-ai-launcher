@@ -48,17 +48,11 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
       >
         <div className="grid grid-cols-2 gap-0.5 mb-1">
           {folderApps.map(app => (
-            <div key={app.packageId} className="aspect-square rounded-md overflow-hidden bg-white/5">
-              {app.icon ? (
-                app.icon.startsWith('data:') || app.icon.startsWith('blob:') ? (
-                  <img src={app.icon} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <HudFallbackIcon iconString={app.icon} size={24} />
-                )
+            <div key={app.packageId} className="aspect-square rounded-md overflow-hidden bg-white/5 flex items-center justify-center">
+              {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                <img src={app.icon} alt="" className="w-full h-full object-contain p-0.5" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="material-symbols-outlined text-white/20 text-xs">apps</span>
-                </div>
+                <span className="material-symbols-outlined text-primary-fixed-dim/80 text-[13px]">{app.icon || 'apps'}</span>
               )}
             </div>
           ))}
@@ -133,17 +127,11 @@ function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing
               onClick={() => onAppClick(app)}
               className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/5 transition-all"
             >
-              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5">
-                {app.icon ? (
-                  app.icon.startsWith('data:') || app.icon.startsWith('blob:') ? (
-                    <img src={app.icon} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <HudFallbackIcon iconString={app.icon} size={40} />
-                  )
+              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center p-1">
+                {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                  <img src={app.icon} alt="" className="w-full h-full object-contain drop-shadow-md" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-white/20">apps</span>
-                  </div>
+                  <span className="material-symbols-outlined text-primary-fixed-dim text-lg">{app.icon || 'apps'}</span>
                 )}
               </div>
               <span className="text-[8px] text-white/40 font-mono-data truncate max-w-[60px] text-center">

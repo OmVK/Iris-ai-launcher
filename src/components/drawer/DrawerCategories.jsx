@@ -53,10 +53,10 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
                 const thumbStyle = getIconContainerStyle(iconShape, catIconPx)
                 return (
                   <div key={pApp.packageId} style={thumbStyle} className="bg-white/5 flex items-center justify-center p-2 shadow-inner border border-white/5 group-hover:border-white/10 transition-colors">
-                    {pApp.icon && typeof pApp.icon === 'string' && pApp.icon.startsWith('data:') ? (
+                    {pApp.icon && typeof pApp.icon === 'string' && (pApp.icon.startsWith('data:') || pApp.icon.startsWith('http') || pApp.icon.startsWith('/')) ? (
                       <img src={pApp.icon} loading="lazy" className="w-full h-full object-contain drop-shadow-md" alt="" />
                     ) : (
-                      <span className="material-symbols-outlined text-primary-fixed-dim/80" style={{ fontSize: `${catIconPx}px` }}>{pApp.icon}</span>
+                      <span className="material-symbols-outlined text-primary-fixed-dim/80" style={{ fontSize: `${catIconPx}px` }}>{pApp.icon || 'apps'}</span>
                     )}
                   </div>
                 )

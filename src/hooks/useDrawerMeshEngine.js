@@ -68,17 +68,24 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
     let mounted = true
     filteredApps.forEach(app => {
       const pkg = app.packageId
-      if (iconImageCache.current['hud_' + pkg] || iconImageCache.current['nat_' + pkg]) return
-      if (HUD_SVG_PATHS[pkg]) {
+      const iconKey = 'nat_' + pkg
+      if (app.icon && (typeof app.icon === 'string') && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/'))) {
+        if (!iconImageCache.current[iconKey] || iconImageCache.current[iconKey]._src !== app.icon) {
+          const img = new Image()
+          img.onload = () => {
+            if (mounted) {
+              img._src = app.icon
+              iconImageCache.current[iconKey] = img
+              dirtyRef.current = true
+            }
+          }
+          img.src = app.icon
+        }
+      } else if (HUD_SVG_PATHS[pkg] && !iconImageCache.current['hud_' + pkg]) {
         const svg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="' + HUD_SVG_PATHS[pkg] + '" fill="%2300f2ff"/></svg>'
         const img = new Image()
         img.onload = () => { if (mounted) { iconImageCache.current['hud_' + pkg] = img; dirtyRef.current = true } }
         img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
-      }
-      if (app.icon && app.icon.startsWith('data:')) {
-        const img = new Image()
-        img.onload = () => { if (mounted) { iconImageCache.current['nat_' + pkg] = img; dirtyRef.current = true } }
-        img.src = app.icon
       }
     })
     return () => { mounted = false }
@@ -271,12 +278,12 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
 
           const hudImg = iconImageCache.current['hud_' + node.app.packageId]
           const natImg = iconImageCache.current['nat_' + node.app.packageId]
-          if (hudImg) {
+          if (natImg) {
+            const imgS = drawSize * 0.55
+            ctx.drawImage(natImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
+          } else if (hudImg) {
             const imgS = drawSize * 0.55
             ctx.drawImage(hudImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
-          } else if (natImg) {
-            const imgS = drawSize * 0.5
-            ctx.drawImage(natImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
           } else {
             ctx.fillStyle = getColStr(col, 0.9)
             ctx.fillText((node.app.label || '?')[0].toUpperCase(), node.x, node.y)

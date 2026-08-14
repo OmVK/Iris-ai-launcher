@@ -126,18 +126,10 @@ export default function FolderModal({
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                     selectedApps.has(app.packageId) ? '' : 'grayscale'
                   }`}>
-                    {app.icon && app.icon.startsWith('data:') ? (
-                      (window.useGlobalHudIcons) ? (
-                        IRIS_ICON_PACK[app.packageId] ? (
-                          <HudIcon packageId={app.packageId} size={24} />
-                        ) : (
-                          <HudFallbackIcon src={app.icon} size={24} />
-                        )
-                      ) : (
-                        <img src={app.icon} className="w-6 h-6 object-contain rounded" alt="" />
-                      )
+                    {app.icon && (typeof app.icon === 'string') && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                      <img src={app.icon} className="w-6 h-6 object-contain rounded" alt="" />
                     ) : (
-                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{app.icon}</span>
+                      <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: '18px' }}>{app.icon || 'rocket_launch'}</span>
                     )}
                   </div>
                   <span className="text-sm font-medium text-white">{app.label}</span>
@@ -160,18 +152,10 @@ export default function FolderModal({
                 className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-90 transition-transform group"
               >
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 group-hover:bg-white/10 transition-colors icon-theme-${globalIconTheme.toLowerCase()}`}>
-                  {app.icon && app.icon.startsWith('data:') ? (
-                    (window.useGlobalHudIcons) ? (
-                      IRIS_ICON_PACK[app.packageId] ? (
-                        <HudIcon packageId={app.packageId} size={32} />
-                      ) : (
-                        <HudFallbackIcon src={app.icon} size={32} />
-                      )
-                    ) : (
-                      <img src={app.icon} className="w-8 h-8 object-contain rounded-md" alt="" />
-                    )
+                  {app.icon && (typeof app.icon === 'string') && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                    <img src={app.icon} className="w-8 h-8 object-contain rounded-md drop-shadow-md" alt="" />
                   ) : (
-                    <span className="material-symbols-outlined text-white/80" style={{ fontSize: '24px' }}>{app.icon}</span>
+                    <span className="material-symbols-outlined text-white/80" style={{ fontSize: '24px' }}>{app.icon || 'rocket_launch'}</span>
                   )}
                 </div>
                 <span className="text-[9px] text-white/70 font-medium truncate w-full text-center tracking-wide">{app.label}</span>
