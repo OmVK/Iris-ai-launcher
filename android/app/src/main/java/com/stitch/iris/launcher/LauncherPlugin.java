@@ -5,6 +5,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
@@ -3176,28 +3177,39 @@ public class LauncherPlugin extends Plugin {
                         if (eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
                             String tagName = parser.getName();
                             if ("item".equals(tagName)) {
-                                String component = parser.getAttributeValue(null, "component");
-                                String drawableName = parser.getAttributeValue(null, "drawable");
+                                String component = null;
+                                String drawableName = null;
+
+                                for (int i = 0; i < parser.getAttributeCount(); i++) {
+                                    String attr = parser.getAttributeName(i);
+                                    if ("component".equalsIgnoreCase(attr)) {
+                                        component = parser.getAttributeValue(i);
+                                    } else if ("drawable".equalsIgnoreCase(attr)) {
+                                        drawableName = parser.getAttributeValue(i);
+                                    }
+                                }
 
                                 if (component != null && drawableName != null) {
-                                    String targetPackage = null;
-                                    if (component.startsWith("ComponentInfo{")) {
-                                        int slashIdx = component.indexOf("/");
-                                        if (slashIdx > 14) {
-                                            targetPackage = component.substring(14, slashIdx);
-                                        }
-                                    } else if (component.contains("/")) {
-                                        targetPackage = component.split("/")[0].trim();
+                                    String targetPackage = component;
+                                    if (targetPackage.startsWith("ComponentInfo{")) {
+                                        targetPackage = targetPackage.substring("ComponentInfo{".length());
                                     }
+                                    if (targetPackage.endsWith("}")) {
+                                        targetPackage = targetPackage.substring(0, targetPackage.length() - 1);
+                                    }
+                                    if (targetPackage.contains("/")) {
+                                        targetPackage = targetPackage.split("/")[0].trim();
+                                    }
+                                    targetPackage = targetPackage.trim();
 
-                                    if (targetPackage != null && !targetPackage.isEmpty()) {
+                                    if (!targetPackage.isEmpty()) {
                                         int drawableId = res.getIdentifier(drawableName, "drawable", iconPackPackage);
                                         if (drawableId != 0) {
                                             try {
                                                 Drawable d = res.getDrawable(drawableId, null);
                                                 if (d != null) {
                                                     String b64 = drawableToBase64(d);
-                                                    if (b64 != null) {
+                                                    if (b64 != null && !b64.isEmpty()) {
                                                         iconMap.put(targetPackage, b64);
                                                     }
                                                 }
@@ -3218,6 +3230,31 @@ public class LauncherPlugin extends Plugin {
             ret.put("iconMap", iconMap);
             call.resolve(ret);
         }).start();
+    }
+
+    private String drawableToBase64(Drawable drawable) {
+        if (drawable == null) return "";
+        try {
+            Bitmap bitmap;
+            if (drawable instanceof BitmapDrawable) {
+                bitmap = ((BitmapDrawable) drawable).getBitmap();
+            } else {
+                int width = drawable.getIntrinsicWidth() > 0 ? drawable.getIntrinsicWidth() : 96;
+                int height = drawable.getIntrinsicHeight() > 0 ? drawable.getIntrinsicHeight() : 96;
+                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+                drawable.draw(canvas);
+            }
+            if (bitmap == null) return "";
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
+            byte[] byteArray = byteArrayOutputStream.toByteArray();
+            return "data:image/png;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP);
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting drawable to base64", e);
+            return "";
+        }
     }
 
     // Helper: URL encode string

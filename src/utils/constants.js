@@ -1,3 +1,3 @@
 export const BUILTIN_APPS = []
 
-export const APP_VERSION = '4.9.8'
+export const APP_VERSION = '4.9.9'

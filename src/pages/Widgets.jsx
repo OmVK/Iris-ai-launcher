@@ -32,6 +32,9 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
   const [widgetSpans, setWidgetSpans] = useState(() => {
     try { const cached = localStorage.getItem('iris_widget_spans'); return cached ? JSON.parse(cached) : {} } catch { return {} }
   })
+  const [minimizedWidgets, setMinimizedWidgets] = useState(() => {
+    try { const cached = localStorage.getItem('iris_minimized_widgets'); return cached ? JSON.parse(cached) : {} } catch { return {} }
+  })
 
   useEffect(() => { localStorage.setItem('iris_active_widgets', JSON.stringify(activeWidgetIds)) }, [activeWidgetIds])
   useEffect(() => { localStorage.setItem('iris_custom_widgets', JSON.stringify(customWidgets)) }, [customWidgets])
@@ -42,6 +45,14 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
       const next = current === 'col-span-1' ? 'col-span-2' : current === 'col-span-2' ? 'col-span-full' : 'col-span-1'
       const updated = { ...prev, [id]: next }
       try { localStorage.setItem('iris_widget_spans', JSON.stringify(updated)) } catch {}
+      return updated
+    })
+  }, [])
+
+  const toggleWidgetMinimize = useCallback((id) => {
+    setMinimizedWidgets(prev => {
+      const updated = { ...prev, [id]: !prev[id] }
+      try { localStorage.setItem('iris_minimized_widgets', JSON.stringify(updated)) } catch {}
       return updated
     })
   }, [])
@@ -269,134 +280,173 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
         <audio ref={(el) => { if (el) { el.src = TRACKS[trackIndex].url; el.loop = true } }} />
         <div className="mx-auto space-y-4">
         <WidgetConfig activeWidgetIds={activeWidgetIds} customWidgets={customWidgets} onAddWidget={handleAddWidget} onRemoveWidget={handleRemoveWidget} onCreateCustomWidget={handleCreateCustomWidget} />
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        
+        {/* Dense Auto-Reflowing Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 grid-flow-dense auto-rows-min">
           {activeWidgetIds.includes('performance') && (
-            <div className={`relative transition-all duration-300 ${widgetSpans['performance'] || 'col-span-1'}`}>
-              <button onClick={() => toggleWidgetSpan('performance')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper id="performance" label="System Telemetry" icon="memory" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('performance')}>
               <PerformanceWidget batteryLevel={batteryLevel} isCharging={isCharging} osVersion={osVersion} usedMem={usedMem} totalMem={totalMem} cpuTemp={cpuTemp} isDiagnosticRunning={isDiagnosticRunning} onCpuClick={handleCpuClick} onRemove={() => handleRemoveWidget('performance')} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('weather') && (
-            <div className={`relative transition-all duration-300 ${widgetSpans['weather'] || 'col-span-1'}`}>
-              <button onClick={() => toggleWidgetSpan('weather')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper id="weather" label="Weather Station" icon="cloud" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('weather')}>
               <WeatherWidget weatherData={weatherData} weatherCity={weatherCity} weatherLocalTime={weatherLocalTime} isWeatherLoading={isWeatherLoading} onRemove={() => handleRemoveWidget('weather')} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('stocks') && (
-            <div className={`relative transition-all duration-300 ${widgetSpans['stocks'] || 'col-span-1'}`}>
-              <button onClick={() => toggleWidgetSpan('stocks')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper id="stocks" label="Market Matrix" icon="show_chart" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('stocks')}>
               <StockWidget onRemove={() => handleRemoveWidget('stocks')} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('media') && (
-            <div className={`relative transition-all duration-300 ${widgetSpans['media'] || 'col-span-2'}`}>
-              <button onClick={() => toggleWidgetSpan('media')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper id="media" label="Cyber Synth Media" icon="graphic_eq" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('media')} defaultSpan="col-span-2">
               <MediaWidget isPlaying={isPlaying} trackIndex={trackIndex} playerMode={playerMode} selectedSystemPlayer={selectedSystemPlayer} onSetPlayerMode={handleSetPlayerMode} onPlayToggle={handlePlayToggle} onSkip={handleSkip} onSetSystemPlayer={setSelectedSystemPlayer} onLaunchSystemPlayer={handleLaunchSystemPlayer} onRemove={() => handleRemoveWidget('media')} isAppActive={isAppActive} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('tasks') && (
-            <div className={`relative transition-all duration-300 ${widgetSpans['tasks'] || 'col-span-1'}`}>
-              <button onClick={() => toggleWidgetSpan('tasks')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper id="tasks" label="Task Protocol" icon="checklist" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('tasks')}>
               <TasksWidget tasks={tasks} newTaskText={newTaskText} newTaskTime={newTaskTime} onSetNewTaskText={setNewTaskText} onSetNewTaskTime={setNewTaskTime} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} onClearAll={handleClearAllTasks} onRemove={() => handleRemoveWidget('tasks')} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('clock') && (
-            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['clock'] || 'col-span-1'}`}>
-              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
-                <span className="text-[9px] text-white/40 font-mono-data uppercase">Clock</span>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => toggleWidgetSpan('clock')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
-                  <button onClick={() => handleRemoveWidget('clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
-                </div>
+            <WidgetCardWrapper id="clock" label="Digital Clock" icon="schedule" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('clock')}>
+              <div className="glass-surface border border-white/10 rounded-xl overflow-hidden relative">
+                <ClockWidget size="medium" />
               </div>
-              <ClockWidget size="medium" />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('analog_clock') && (
-            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['analog_clock'] || 'col-span-1'}`}>
-              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
-                <span className="text-[9px] text-white/40 font-mono-data uppercase">Analog Clock</span>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => toggleWidgetSpan('analog_clock')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
-                  <button onClick={() => handleRemoveWidget('analog_clock')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
-                </div>
+            <WidgetCardWrapper id="analog_clock" label="Analog Dial" icon="watch" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('analog_clock')}>
+              <div className="glass-surface border border-white/10 rounded-xl overflow-hidden relative">
+                <AnalogClockWidget size={100} />
               </div>
-              <AnalogClockWidget size={100} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('calendar') && (
-            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['calendar'] || 'col-span-1'}`}>
-              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
-                <span className="text-[9px] text-white/40 font-mono-data uppercase">Calendar</span>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => toggleWidgetSpan('calendar')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
-                  <button onClick={() => handleRemoveWidget('calendar')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
-                </div>
+            <WidgetCardWrapper id="calendar" label="Calendar Node" icon="calendar_month" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('calendar')}>
+              <div className="glass-surface border border-white/10 rounded-xl overflow-hidden relative">
+                <CalendarWidget />
               </div>
-              <CalendarWidget />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('battery') && (
-            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['battery'] || 'col-span-1'}`}>
-              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
-                <span className="text-[9px] text-white/40 font-mono-data uppercase">Battery</span>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => toggleWidgetSpan('battery')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
-                  <button onClick={() => handleRemoveWidget('battery')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
-                </div>
+            <WidgetCardWrapper id="battery" label="Power Core" icon="battery_charging_full" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('battery')}>
+              <div className="glass-surface border border-white/10 rounded-xl overflow-hidden relative">
+                <BatteryWidget level={batteryLevel} />
               </div>
-              <BatteryWidget level={batteryLevel} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('notes') && (
-            <div className={`glass-surface border border-white/10 rounded-xl overflow-hidden relative transition-all duration-300 ${widgetSpans['notes'] || 'col-span-1'}`}>
-              <div className="flex justify-between items-center px-3 py-1.5 border-b border-white/5">
-                <span className="text-[9px] text-white/40 font-mono-data uppercase">Quick Notes</span>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => toggleWidgetSpan('notes')} title="Resize Widget Span" className="text-white/30 hover:text-cyan-400"><span className="material-symbols-outlined text-[11px]">aspect_ratio</span></button>
-                  <button onClick={() => handleRemoveWidget('notes')} className="text-white/20 hover:text-white/60"><span className="material-symbols-outlined text-xs">close</span></button>
-                </div>
+            <WidgetCardWrapper id="notes" label="Quick Encrypted Notes" icon="edit_note" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('notes')}>
+              <div className="glass-surface border border-white/10 rounded-xl overflow-hidden relative">
+                <NotesWidget notes={notes} onAdd={handleAddNote} />
               </div>
-              <NotesWidget notes={notes} onAdd={handleAddNote} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {customWidgets.filter(w => activeWidgetIds.includes(w.id)).map(w => (
-            <div key={w.id} className={`relative transition-all duration-300 ${widgetSpans[w.id] || 'col-span-1'}`}>
-              <button onClick={() => toggleWidgetSpan(w.id)} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper key={w.id} id={w.id} label={w.title || 'Custom Widget'} icon="code" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget(w.id)}>
               <CustomWidget widget={w} onRemove={() => handleRemoveWidget(w.id)} />
-            </div>
+            </WidgetCardWrapper>
           ))}
+
           {activeWidgetIds.includes('ping') && (
-            <div className={`relative transition-all duration-300 ${widgetSpans['ping'] || 'col-span-1'}`}>
-              <button onClick={() => toggleWidgetSpan('ping')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper id="ping" label="Network Latency Ping" icon="network_ping" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('ping')}>
               <PingWidget pingResult={pingResult} pingHistory={pingHistory} pingFailed={pingFailed} onTriggerPingTest={handleTriggerPingTest} onRemove={() => handleRemoveWidget('ping')} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
           {activeWidgetIds.includes('signal') && (
-            <div className={`relative transition-all duration-300 ${widgetSpans['signal'] || 'col-span-1'}`}>
-              <button onClick={() => toggleWidgetSpan('signal')} title="Resize Widget Span" className="absolute top-2.5 right-7 z-20 text-white/30 hover:text-cyan-400 p-0.5 rounded">
-                <span className="material-symbols-outlined text-[11px]">aspect_ratio</span>
-              </button>
+            <WidgetCardWrapper id="signal" label="Telemetry Bars" icon="signal_cellular_alt" widgetSpans={widgetSpans} toggleWidgetSpan={toggleWidgetSpan} minimizedWidgets={minimizedWidgets} toggleWidgetMinimize={toggleWidgetMinimize} onRemove={() => handleRemoveWidget('signal')}>
               <SignalWidget onRemove={() => handleRemoveWidget('signal')} />
-            </div>
+            </WidgetCardWrapper>
           )}
+
+          {/* Add Widget to Empty Space Card */}
+          <div 
+            onClick={() => {
+              const el = document.getElementById('add-widget-btn')
+              if (el) el.click()
+            }}
+            className="col-span-1 border-2 border-dashed border-white/10 hover:border-cyan-500/40 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:bg-cyan-500/5 group text-white/30 hover:text-cyan-400 min-h-[120px] bg-black/20"
+          >
+            <span className="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform text-cyan-400/80">add_circle</span>
+            <span className="text-[10px] font-mono-data uppercase tracking-wider text-white/60">Add Widget To Slot</span>
+          </div>
          </div>
        </div>
      </div>
      </div>
    )
- }
+}
+
+function WidgetCardWrapper({ id, label, icon, widgetSpans, toggleWidgetSpan, minimizedWidgets, toggleWidgetMinimize, onRemove, defaultSpan = 'col-span-1', children }) {
+  const isMinimized = !!minimizedWidgets[id]
+  const currentSpan = widgetSpans[id] || defaultSpan
+
+  return (
+    <div className={`relative transition-all duration-300 ${currentSpan}`}>
+      {isMinimized ? (
+        <div className="glass-surface border border-white/15 rounded-xl px-4 py-3 flex items-center justify-between shadow-lg hover:border-cyan-500/40 transition-all bg-black/60 backdrop-blur-md">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-cyan-400 text-base">{icon || 'widgets'}</span>
+            <span className="text-xs font-mono-data text-white/90 uppercase tracking-wider font-semibold">{label}</span>
+            <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.5 rounded font-mono">MIN</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => toggleWidgetSpan(id)} 
+              title="Resize Width Span" 
+              className="text-white/40 hover:text-cyan-400 p-1 rounded transition-colors bg-white/5 hover:bg-white/10"
+            >
+              <span className="material-symbols-outlined text-sm">aspect_ratio</span>
+            </button>
+            <button 
+              onClick={() => toggleWidgetMinimize(id)} 
+              title="Expand Widget" 
+              className="text-white/40 hover:text-cyan-400 p-1 rounded transition-colors bg-white/5 hover:bg-white/10"
+            >
+              <span className="material-symbols-outlined text-sm">unfold_more</span>
+            </button>
+            <button 
+              onClick={onRemove} 
+              title="Remove Widget" 
+              className="text-white/30 hover:text-red-400 p-1 rounded transition-colors bg-white/5 hover:bg-white/10"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="relative group">
+          <div className="absolute top-2.5 right-7 z-20 flex items-center gap-1.5">
+            <button 
+              onClick={() => toggleWidgetMinimize(id)} 
+              title="Minimize Widget" 
+              className="text-white/30 hover:text-cyan-400 p-1 rounded transition-colors bg-black/60 backdrop-blur-sm border border-white/10 shadow"
+            >
+              <span className="material-symbols-outlined text-[12px]">unfold_less</span>
+            </button>
+            <button 
+              onClick={() => toggleWidgetSpan(id)} 
+              title="Resize Width Span" 
+              className="text-white/30 hover:text-cyan-400 p-1 rounded transition-colors bg-black/60 backdrop-blur-sm border border-white/10 shadow"
+            >
+              <span className="material-symbols-outlined text-[12px]">aspect_ratio</span>
+            </button>
+          </div>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
