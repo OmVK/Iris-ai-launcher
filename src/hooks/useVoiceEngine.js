@@ -1,9 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useAssistantStore } from '../stores/assistantStore'
 import { useAIStore } from '../stores/aiStore'
-import { useAppStore } from '../stores/appStore'
 import { SecureStorage } from '../utils/secureStorage'
-import KokoroWorker from '../workers/kokoroWorker?worker'
 import {
   speakTextNative,
   stopSpeakingNative,
@@ -13,44 +11,6 @@ import {
   checkAndRequestPermission,
   isNative
 } from '../components/LauncherPlugin'
-
-function pcmToWavBlob(pcmData, sampleRate = 24000) {
-  const numChannels = 1
-  const bitsPerSample = 16
-  const bytesPerSample = bitsPerSample / 8
-  const blockAlign = numChannels * bytesPerSample
-  const byteRate = sampleRate * blockAlign
-  const dataSize = pcmData.length * bytesPerSample
-  const buffer = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(buffer)
-
-  const writeString = (v, offset, str) => {
-    for (let i = 0; i < str.length; i++) v.setUint8(offset + i, str.charCodeAt(i))
-  }
-
-  writeString(view, 0, 'RIFF')
-  view.setUint32(4, 36 + dataSize, true)
-  writeString(view, 8, 'WAVE')
-  writeString(view, 12, 'fmt ')
-  view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true)
-  view.setUint16(22, numChannels, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, byteRate, true)
-  view.setUint16(32, blockAlign, true)
-  view.setUint16(34, bitsPerSample, true)
-  writeString(view, 36, 'data')
-  view.setUint32(40, dataSize, true)
-
-  let offset = 44
-  for (let i = 0; i < pcmData.length; i++) {
-    const s = Math.max(-1, Math.min(1, pcmData[i]))
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true)
-    offset += 2
-  }
-
-  return new Blob([buffer], { type: 'audio/wav' })
-}
 
 let recognition = null
 try {
@@ -78,8 +38,6 @@ export default function useVoiceEngine() {
 
   const { setLlmBackend, voicePitch, voiceRate, kokoroVoice } = useAIStore()
 
-  const kokoroWorkerRef = useRef(null)
-  const activeAudioRef = useRef(null)
   const lastTtsTextRef = useRef('')
   const isListeningRef = useRef(false)
   const isLiveVoiceRef = useRef(false)
@@ -252,93 +210,55 @@ export default function useVoiceEngine() {
 
     const effectivePitch = Math.max(0.1, Math.min(2.0, voicePitch * pitchMod))
 
-    // Dynamic Kokoro-82M Neural Voice Synthesis via Web Worker
-    try {
-      if (!kokoroWorkerRef.current) {
-        kokoroWorkerRef.current = new KokoroWorker()
+    // On Android Native or Web, use SpeechSynthesis & Native Speech with matched Kokoro timbre pitch/rate
+    if (isNative) {
+      try {
+        const m = await import('../components/LauncherPlugin')
+        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(effectivePitch, voiceRate)
+        await speakTextNative(text)
+        finishSpeaking()
+      } catch (e) { 
+        console.warn('[IRIS] Native TTS speak failed, falling back:', e)
       }
-      const worker = kokoroWorkerRef.current
-      const jobId = Date.now().toString()
-      
-      const onWorkerMessage = (e) => {
-        const { type, pcmData, sampleRate } = e.data
-        if (type === 'AUDIO_READY' || type === 'audio') {
-          worker.removeEventListener('message', onWorkerMessage)
-          if (pcmData) {
-            const blob = pcmToWavBlob(new Float32Array(pcmData), sampleRate || 24000)
-            const url = URL.createObjectURL(blob)
-            if (activeAudioRef.current) {
-              try { activeAudioRef.current.pause() } catch {}
-              activeAudioRef.current = null
-            }
-            const audio = new Audio(url)
-            activeAudioRef.current = audio
-            audio.onended = () => {
-              URL.revokeObjectURL(url)
-              activeAudioRef.current = null
-              finishSpeaking()
-            }
-            audio.onerror = () => {
-              URL.revokeObjectURL(url)
-              activeAudioRef.current = null
-              finishSpeaking()
-            }
-            audio.play().catch(() => finishSpeaking())
-          } else {
-            finishSpeaking()
-          }
-        } else if (type === 'error' || type === 'ERROR') {
-          worker.removeEventListener('message', onWorkerMessage)
-          finishSpeaking()
-        }
-      }
-
-      worker.addEventListener('message', onWorkerMessage)
-      worker.postMessage({
-        type: 'speak',
-        text: text.trim(),
-        id: jobId,
-        voice: kokoroVoice,
-        pitch: effectivePitch,
-        rate: voiceRate
-      })
-      return
-    } catch (e) {
-      console.warn('[IRIS] Kokoro synthesis error:', e)
     }
 
     if (!window.speechSynthesis) { finishSpeaking(); return }
 
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    const voices = window.speechSynthesis.getVoices()
-    
-    // Intelligent voice matching based on locale (en-GB vs en-US) and gender (male vs female)
-    let selectedVoice = null
-    if (targetLang === 'en-GB') {
-      selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (isMale ? v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver') : v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria'))) ||
-                      voices.find(v => v.lang.startsWith('en-GB'))
-    }
-    if (!selectedVoice) {
-      if (isMale) {
-        selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('adam')))
-      } else {
-        selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('aria') || v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('natural')))
+    try {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      const voices = window.speechSynthesis.getVoices()
+      
+      // Intelligent voice matching based on locale (en-GB vs en-US) and gender (male vs female)
+      let selectedVoice = null
+      if (targetLang === 'en-GB') {
+        selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (isMale ? v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver') : v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria'))) ||
+                        voices.find(v => v.lang.startsWith('en-GB'))
       }
-    }
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.name.includes("Google US English")) ||
-                      voices.find(v => v.lang.startsWith("en-US")) ||
-                      voices.find(v => v.lang.startsWith("en")) ||
-                      voices[0]
-    }
+      if (!selectedVoice) {
+        if (isMale) {
+          selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('adam')))
+        } else {
+          selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('aria') || v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('natural')))
+        }
+      }
+      if (!selectedVoice) {
+        selectedVoice = voices.find(v => v.name.includes("Google US English")) ||
+                        voices.find(v => v.lang.startsWith("en-US")) ||
+                        voices.find(v => v.lang.startsWith("en")) ||
+                        voices[0]
+      }
 
-    if (selectedVoice) utterance.voice = selectedVoice
-    utterance.pitch = effectivePitch
-    utterance.rate = voiceRate
-    utterance.onend = finishSpeaking
-    utterance.onerror = finishSpeaking
-    window.speechSynthesis.speak(utterance)
+      if (selectedVoice) utterance.voice = selectedVoice
+      utterance.pitch = effectivePitch
+      utterance.rate = voiceRate
+      utterance.onend = finishSpeaking
+      utterance.onerror = finishSpeaking
+      window.speechSynthesis.speak(utterance)
+    } catch (err) {
+      console.warn('[IRIS] SpeechSynthesis error:', err)
+      finishSpeaking()
+    }
   }, [voicePitch, voiceRate, kokoroVoice])
 
   const requestMicrophonePermission = useCallback(async () => {

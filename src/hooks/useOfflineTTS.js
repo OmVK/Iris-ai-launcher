@@ -1,50 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { registerPlugin } from '@capacitor/core'
-import KokoroWorker from '../workers/kokoroWorker?worker'
+import PiperWorker from '../workers/piperWorker?worker'
 import PowerSaveManager from '../utils/PowerSaveManager'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
-function pcmToWavBlob(pcmData, sampleRate = 24000) {
-  const numChannels = 1
-  const bitsPerSample = 16
-  const bytesPerSample = bitsPerSample / 8
-  const blockAlign = numChannels * bytesPerSample
-  const byteRate = sampleRate * blockAlign
-  const dataSize = pcmData.length * bytesPerSample
-  const buffer = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(buffer)
-
-  const writeString = (v, offset, str) => {
-    for (let i = 0; i < str.length; i++) v.setUint8(offset + i, str.charCodeAt(i))
-  }
-
-  writeString(view, 0, 'RIFF')
-  view.setUint32(4, 36 + dataSize, true)
-  writeString(view, 8, 'WAVE')
-  writeString(view, 12, 'fmt ')
-  view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true)
-  view.setUint16(22, numChannels, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, byteRate, true)
-  view.setUint16(32, blockAlign, true)
-  view.setUint16(34, bitsPerSample, true)
-  writeString(view, 36, 'data')
-  view.setUint32(40, dataSize, true)
-
-  let offset = 44
-  for (let i = 0; i < pcmData.length; i++) {
-    const s = Math.max(-1, Math.min(1, pcmData[i]))
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true)
-    offset += 2
-  }
-
-  return new Blob([buffer], { type: 'audio/wav' })
-}
-
 export default function useOfflineTTS({ speechInterruptRef }) {
-  const kokoroWorkerRef = useRef(null)
+  const piperWorkerRef = useRef(null)
   const activeAudioRef = useRef(null)
   const audioContextRef = useRef(null)
   const analyserRef = useRef(null)
@@ -87,8 +49,8 @@ export default function useOfflineTTS({ speechInterruptRef }) {
   // Cleanup audio resources on unmount
   useEffect(() => {
     return () => {
-      kokoroWorkerRef.current?.terminate()
-      kokoroWorkerRef.current = null
+      piperWorkerRef.current?.terminate()
+      piperWorkerRef.current = null
       if (activeAudioRef.current) activeAudioRef.current.pause()
       if (audioContextRef.current) {
         audioContextRef.current.close().catch(() => {})
@@ -110,32 +72,27 @@ export default function useOfflineTTS({ speechInterruptRef }) {
   }
 
   const initWorker = () => {
-    if (kokoroWorkerRef.current) return
-    try {
-      kokoroWorkerRef.current = new KokoroWorker()
-      kokoroWorkerRef.current.onmessage = (e) => {
-        const { type, id, blob, pcmData, sampleRate, error, text } = e.data
-        if (type === 'AUDIO_READY' || type === 'audio') {
-          if (speechInterruptRef.current) { handleChunkEnd(id); return }
-          let audioBlob = blob
-          if (!audioBlob && pcmData) {
-            audioBlob = pcmToWavBlob(new Float32Array(pcmData), sampleRate || 24000)
-          }
-          if (audioBlob) {
-            audioQueueRef.current.push({ blob: audioBlob, id, text })
-            if (!isPlayingRef.current) playNextAudio()
-          } else {
-            handleChunkEnd(id)
-          }
-        } else if (type === 'ERROR' || type === 'error') {
-          console.warn('Kokoro TTS error fallback:', error)
+    if (piperWorkerRef.current) return
+    piperWorkerRef.current = new PiperWorker()
+    piperWorkerRef.current.onmessage = (e) => {
+      const { type, id, blob, error, text } = e.data
+      if (type === 'AUDIO_READY') {
+        if (speechInterruptRef.current) { handleChunkEnd(id); return }
+        audioQueueRef.current.push({ blob, id, text })
+        if (!isPlayingRef.current) playNextAudio()
+      } else if (type === 'ERROR' || type === 'INIT_ERROR') {
+        console.warn('Piper TTS worker fallback to native TTS:', error)
+        if (text) {
+          Promise.race([
+            LauncherPlugin.speakText({ text }),
+            new Promise(r => setTimeout(r, 3000))
+          ]).then(() => handleChunkEnd(id)).catch(() => handleChunkEnd(id))
+        } else {
           handleChunkEnd(id)
         }
       }
-      kokoroWorkerRef.current.postMessage({ type: 'init' })
-    } catch (e) {
-      console.warn('KokoroWorker initialization error:', e)
     }
+    piperWorkerRef.current.postMessage({ type: 'INIT' })
   }
 
   const handleChunkEnd = (id) => {
@@ -153,9 +110,9 @@ export default function useOfflineTTS({ speechInterruptRef }) {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false
       idleTimerRef.current = setTimeout(() => {
-        if (kokoroWorkerRef.current) {
-          kokoroWorkerRef.current.terminate()
-          kokoroWorkerRef.current = null
+        if (piperWorkerRef.current) {
+          piperWorkerRef.current.terminate()
+          piperWorkerRef.current = null
         }
       }, 30000)
       return
@@ -245,21 +202,10 @@ export default function useOfflineTTS({ speechInterruptRef }) {
         }
       })
 
-      const kokoroVoice = localStorage.getItem('kokoro_voice') || 'af_heart'
-      const voicePitch = parseFloat(localStorage.getItem('iris_voice_pitch') || '1.0')
-      const voiceRate = parseFloat(localStorage.getItem('iris_voice_rate') || '0.96')
-
       if (!PowerSaveManager.shouldDisable('piper')) {
         initWorker()
-        if (kokoroWorkerRef.current) {
-          chunks.forEach(chunk => kokoroWorkerRef.current.postMessage({ 
-            type: 'speak', 
-            text: chunk.trim(), 
-            id: jobId, 
-            voice: kokoroVoice,
-            pitch: voicePitch,
-            rate: voiceRate
-          }))
+        if (piperWorkerRef.current) {
+          chunks.forEach(chunk => piperWorkerRef.current.postMessage({ type: 'SPEAK', text: chunk.trim(), id: jobId }))
         } else {
           ttsResolvers.current.delete(jobId)
           if (onAudioStart) onAudioStart()
@@ -292,9 +238,9 @@ export default function useOfflineTTS({ speechInterruptRef }) {
     ttsResolvers.current.forEach(state => state.resolve())
     ttsResolvers.current.clear()
     idleTimerRef.current = setTimeout(() => {
-      if (kokoroWorkerRef.current) {
-        kokoroWorkerRef.current.terminate()
-        kokoroWorkerRef.current = null
+      if (piperWorkerRef.current) {
+        piperWorkerRef.current.terminate()
+        piperWorkerRef.current = null
       }
     }, 30000)
   }
