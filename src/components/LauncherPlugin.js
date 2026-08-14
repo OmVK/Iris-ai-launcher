@@ -220,6 +220,15 @@ export async function setAlarm(hour, minutes, message = "IRIS AI Assistant") {
 }
 
 export async function speakTextNative(text) {
+  if (isNative) {
+    try {
+      await NativeLauncher.speakText({ text })
+      return true
+    } catch (e) {
+      console.error("Native TTS speak failed:", e)
+      return false
+    }
+  }
   return new Promise((resolve) => {
     try {
       if ('speechSynthesis' in window) {

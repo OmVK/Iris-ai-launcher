@@ -61,40 +61,40 @@ public class LauncherPlugin extends Plugin {
                 if (status == android.speech.tts.TextToSpeech.SUCCESS) {
                     isTtsReady = true;
                     try {
-                        // Search for a high-quality Google Network voice (sounds similar to ElevenLabs)
-                        for (android.speech.tts.Voice v : tts.getVoices()) {
-                            if (v.getName().toLowerCase().contains("network") && v.getName().toLowerCase().contains("en")) {
-                                tts.setVoice(v);
-                                break;
-                            }
-                        }
-                    } catch (Exception e) {}
-                    tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-                        @Override
-                        public void onStart(String utteranceId) {}
+                        tts.setLanguage(java.util.Locale.US);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to set TTS locale", e);
+                    }
+                    try {
+                        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                            @Override
+                            public void onStart(String utteranceId) {}
 
-                        @Override
-                        public void onDone(String utteranceId) {
-                            if ("iris_speech".equals(utteranceId)) {
-                                if (currentSpeechCall != null) {
-                                    currentSpeechCall.resolve();
-                                    currentSpeechCall = null;
+                            @Override
+                            public void onDone(String utteranceId) {
+                                if ("iris_speech".equals(utteranceId)) {
+                                    if (currentSpeechCall != null) {
+                                        currentSpeechCall.resolve();
+                                        currentSpeechCall = null;
+                                    }
+                                    notifyListeners("onSpeechFinished", new JSObject());
                                 }
-                                notifyListeners("onSpeechFinished", new JSObject());
                             }
-                        }
 
-                        @Override
-                        public void onError(String utteranceId) {
-                            if ("iris_speech".equals(utteranceId)) {
-                                if (currentSpeechCall != null) {
-                                    currentSpeechCall.resolve();
-                                    currentSpeechCall = null;
+                            @Override
+                            public void onError(String utteranceId) {
+                                if ("iris_speech".equals(utteranceId)) {
+                                    if (currentSpeechCall != null) {
+                                        currentSpeechCall.resolve();
+                                        currentSpeechCall = null;
+                                    }
+                                    notifyListeners("onSpeechFinished", new JSObject());
                                 }
-                                notifyListeners("onSpeechFinished", new JSObject());
                             }
-                        }
-                    });
+                        });
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to set TTS listener", e);
+                    }
                 }
             }
         });
@@ -1245,14 +1245,19 @@ public class LauncherPlugin extends Plugin {
     @PluginMethod
     public void speakText(PluginCall call) {
         String text = call.getString("text");
-        if (text == null) {
-            call.reject("Missing text parameter");
-            return;
-        }
-        if (text.trim().isEmpty()) {
+        if (text == null || text.trim().isEmpty()) {
             call.resolve();
             return;
         }
+
+        if (!isTtsReady && tts != null) {
+            int retries = 0;
+            while (!isTtsReady && retries < 15) {
+                try { Thread.sleep(100); } catch (Exception ignored) {}
+                retries++;
+            }
+        }
+
         if (isTtsReady && tts != null) {
             if (currentSpeechCall != null) {
                 currentSpeechCall.resolve();
@@ -1261,41 +1266,40 @@ public class LauncherPlugin extends Plugin {
             call.setKeepAlive(true);
             android.os.Bundle params = new android.os.Bundle();
             params.putString(android.speech.tts.TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "iris_speech");
+            params.putInt(android.speech.tts.TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC);
             int result = tts.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, params, "iris_speech");
             if (result == android.speech.tts.TextToSpeech.ERROR) {
-                call.reject("TTS failed to enqueue");
                 currentSpeechCall = null;
+                call.resolve();
             }
         } else {
-            call.reject("TTS not initialized");
+            call.resolve();
         }
     }
 
     @PluginMethod
     public void stopSpeakingNative(PluginCall call) {
-        if (isTtsReady && tts != null) {
-            tts.stop();
-            if (currentSpeechCall != null) {
-                currentSpeechCall.resolve();
-                currentSpeechCall = null;
-            }
-            call.resolve();
-        } else {
-            call.reject("TTS not initialized");
+        if (tts != null) {
+            try { tts.stop(); } catch (Exception ignored) {}
         }
+        if (currentSpeechCall != null) {
+            currentSpeechCall.resolve();
+            currentSpeechCall = null;
+        }
+        call.resolve();
     }
 
     @PluginMethod
     public void setVoiceSettings(PluginCall call) {
-        if (isTtsReady && tts != null) {
+        if (tts != null) {
             float pitch = call.getFloat("pitch", 1.0f);
             float rate = call.getFloat("rate", 1.0f);
-            tts.setPitch(pitch);
-            tts.setSpeechRate(rate);
-            call.resolve();
-        } else {
-            call.reject("TTS not ready");
+            try {
+                tts.setPitch(pitch);
+                tts.setSpeechRate(rate);
+            } catch (Exception ignored) {}
         }
+        call.resolve();
     }
 
     @PluginMethod
