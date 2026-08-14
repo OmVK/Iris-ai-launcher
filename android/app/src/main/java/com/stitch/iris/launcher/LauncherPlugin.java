@@ -3232,31 +3232,6 @@ public class LauncherPlugin extends Plugin {
         }).start();
     }
 
-    private String drawableToBase64(Drawable drawable) {
-        if (drawable == null) return "";
-        try {
-            Bitmap bitmap;
-            if (drawable instanceof BitmapDrawable) {
-                bitmap = ((BitmapDrawable) drawable).getBitmap();
-            } else {
-                int width = drawable.getIntrinsicWidth() > 0 ? drawable.getIntrinsicWidth() : 96;
-                int height = drawable.getIntrinsicHeight() > 0 ? drawable.getIntrinsicHeight() : 96;
-                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-                Canvas canvas = new Canvas(bitmap);
-                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-                drawable.draw(canvas);
-            }
-            if (bitmap == null) return "";
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
-            byte[] byteArray = byteArrayOutputStream.toByteArray();
-            return "data:image/png;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP);
-        } catch (Exception e) {
-            Log.e(TAG, "Error converting drawable to base64", e);
-            return "";
-        }
-    }
-
     // Helper: URL encode string
     private String encodeUrl(String s) {
         try {

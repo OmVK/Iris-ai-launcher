@@ -370,18 +370,6 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
               <SignalWidget onRemove={() => handleRemoveWidget('signal')} />
             </WidgetCardWrapper>
           )}
-
-          {/* Add Widget to Empty Space Card */}
-          <div 
-            onClick={() => {
-              const el = document.getElementById('add-widget-btn')
-              if (el) el.click()
-            }}
-            className="col-span-1 border-2 border-dashed border-white/10 hover:border-cyan-500/40 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:bg-cyan-500/5 group text-white/30 hover:text-cyan-400 min-h-[120px] bg-black/20"
-          >
-            <span className="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform text-cyan-400/80">add_circle</span>
-            <span className="text-[10px] font-mono-data uppercase tracking-wider text-white/60">Add Widget To Slot</span>
-          </div>
          </div>
        </div>
      </div>
@@ -392,59 +380,93 @@ export default function Widgets({ isAppActive = true, activePage = 'widgets', po
 function WidgetCardWrapper({ id, label, icon, widgetSpans, toggleWidgetSpan, minimizedWidgets, toggleWidgetMinimize, onRemove, defaultSpan = 'col-span-1', children }) {
   const isMinimized = !!minimizedWidgets[id]
   const currentSpan = widgetSpans[id] || defaultSpan
+  const [showMenu, setShowMenu] = useState(false)
+  const longPressTimer = useRef(null)
+
+  const handlePressStart = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => {
+      setShowMenu(true)
+    }, 400)
+  }
+
+  const handlePressEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
 
   return (
-    <div className={`relative transition-all duration-300 ${currentSpan}`}>
+    <div 
+      className={`relative transition-all duration-300 ${currentSpan}`}
+      onTouchStart={handlePressStart}
+      onTouchEnd={handlePressEnd}
+      onTouchMove={handlePressEnd}
+      onMouseDown={handlePressStart}
+      onMouseUp={handlePressEnd}
+      onMouseLeave={handlePressEnd}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setShowMenu(true)
+      }}
+    >
       {isMinimized ? (
-        <div className="glass-surface border border-white/15 rounded-xl px-4 py-3 flex items-center justify-between shadow-lg hover:border-cyan-500/40 transition-all bg-black/60 backdrop-blur-md">
+        <div className="glass-surface border border-white/15 rounded-xl px-4 py-3 flex items-center justify-between shadow-lg hover:border-cyan-500/40 transition-all bg-black/60 backdrop-blur-md cursor-pointer select-none">
           <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-cyan-400 text-base">{icon || 'widgets'}</span>
             <span className="text-xs font-mono-data text-white/90 uppercase tracking-wider font-semibold">{label}</span>
             <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.5 rounded font-mono">MIN</span>
           </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => toggleWidgetSpan(id)} 
-              title="Resize Width Span" 
-              className="text-white/40 hover:text-cyan-400 p-1 rounded transition-colors bg-white/5 hover:bg-white/10"
-            >
-              <span className="material-symbols-outlined text-sm">aspect_ratio</span>
-            </button>
-            <button 
-              onClick={() => toggleWidgetMinimize(id)} 
-              title="Expand Widget" 
-              className="text-white/40 hover:text-cyan-400 p-1 rounded transition-colors bg-white/5 hover:bg-white/10"
-            >
-              <span className="material-symbols-outlined text-sm">unfold_more</span>
-            </button>
-            <button 
-              onClick={onRemove} 
-              title="Remove Widget" 
-              className="text-white/30 hover:text-red-400 p-1 rounded transition-colors bg-white/5 hover:bg-white/10"
-            >
-              <span className="material-symbols-outlined text-sm">close</span>
-            </button>
-          </div>
+          <span className="text-[9px] text-white/30 font-mono tracking-widest uppercase">HOLD OPTIONS</span>
         </div>
       ) : (
-        <div className="relative group">
-          <div className="absolute top-2.5 right-7 z-20 flex items-center gap-1.5">
-            <button 
-              onClick={() => toggleWidgetMinimize(id)} 
-              title="Minimize Widget" 
-              className="text-white/30 hover:text-cyan-400 p-1 rounded transition-colors bg-black/60 backdrop-blur-sm border border-white/10 shadow"
-            >
-              <span className="material-symbols-outlined text-[12px]">unfold_less</span>
-            </button>
-            <button 
-              onClick={() => toggleWidgetSpan(id)} 
-              title="Resize Width Span" 
-              className="text-white/30 hover:text-cyan-400 p-1 rounded transition-colors bg-black/60 backdrop-blur-sm border border-white/10 shadow"
-            >
-              <span className="material-symbols-outlined text-[12px]">aspect_ratio</span>
-            </button>
-          </div>
+        <div className="relative">
           {children}
+        </div>
+      )}
+
+      {/* Long-Press Context Menu Modal */}
+      {showMenu && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md animate-in fade-in duration-150" onClick={() => setShowMenu(false)} />
+          <div className="relative glass-surface border border-cyan-500/40 rounded-2xl p-4 w-72 animate-in fade-in zoom-in-95 duration-150 shadow-2xl space-y-3 z-10 bg-black/90">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-cyan-400 text-base">{icon || 'widgets'}</span>
+                <span className="text-xs font-mono-data font-bold text-white uppercase tracking-wider">{label}</span>
+              </div>
+              <button onClick={() => setShowMenu(false)} className="text-white/40 hover:text-white p-1">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <button 
+                onClick={() => { toggleWidgetMinimize(id); setShowMenu(false) }}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-white/90 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors border border-transparent hover:border-cyan-500/30"
+              >
+                <span className="material-symbols-outlined text-base">{isMinimized ? 'unfold_more' : 'unfold_less'}</span>
+                <span>{isMinimized ? 'Expand Widget Height' : 'Minimize Widget Height'}</span>
+              </button>
+
+              <button 
+                onClick={() => { toggleWidgetSpan(id); setShowMenu(false) }}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-white/90 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors border border-transparent hover:border-cyan-500/30"
+              >
+                <span className="material-symbols-outlined text-base">aspect_ratio</span>
+                <span>Resize Width ({currentSpan === 'col-span-1' ? 'Standard 1-Col' : currentSpan === 'col-span-2' ? 'Wide 2-Cols' : 'Full Width'})</span>
+              </button>
+
+              <button 
+                onClick={() => { onRemove(); setShowMenu(false) }}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors border border-transparent hover:border-red-500/30"
+              >
+                <span className="material-symbols-outlined text-base">delete_forever</span>
+                <span>Remove Widget</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
