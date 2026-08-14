@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import SettingsSection from './SettingsSection'
 import { useAppsStore } from '../../stores/appsStore'
-import { openPermissionSettings } from '../../components/LauncherPlugin'
 import { useAppStore } from '../../stores/appStore'
 
 export default function AppLockSection({ expandedSections, toggleSection }) {

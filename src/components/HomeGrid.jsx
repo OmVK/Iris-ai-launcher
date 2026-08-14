@@ -55,21 +55,13 @@ export default function HomeGrid({
               className="flex items-center justify-center rounded-xl border transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme.toLowerCase()} border-primary-fixed-dim/20 glass-icon-container app-icon-hover-effect"
             >
               {app.icon && typeof app.icon === 'string' && app.icon.startsWith('data:') ? (
-                (globalIconTheme === 'HUD' || globalIconTheme === 'CYBER' || window.useGlobalHudIcons) ? (
-                  IRIS_ICON_PACK[app.packageId] ? (
-                    <HudIcon packageId={app.packageId} size={iconPixel * 0.65} />
-                  ) : (
-                    <HudFallbackIcon src={app.icon} size={iconPixel * 0.65} />
-                  )
-                ) : (
-                  <img
-                    src={app.icon}
-                    loading="lazy"
-                    style={{ width: `${iconPixel * 0.55}px`, height: `${iconPixel * 0.55}px` }}
-                    className="object-contain rounded-md"
-                    alt=""
-                  />
-                )
+                <img
+                  src={app.icon}
+                  loading="lazy"
+                  style={{ width: `${iconPixel * 0.55}px`, height: `${iconPixel * 0.55}px` }}
+                  className="object-contain rounded-md drop-shadow-md"
+                  alt=""
+                />
               ) : (
                 <span
                   style={{ fontSize: `${iconPixel * 0.45}px` }}

@@ -18,17 +18,9 @@ function DrawerIcon({ app, isLocked, size, iconTheme, iconShape = 'system' }) {
       {isLocked ? (
         <span className="material-symbols-outlined text-error animate-pulse" style={{ fontSize: '1em' }}>lock</span>
       ) : app.icon && app.icon.startsWith('data:') ? (
-        (iconTheme === 'HUD' || iconTheme === 'CYBER' || window.useGlobalHudIcons) ? (
-          IRIS_ICON_PACK[app.packageId] ? (
-            <HudIcon packageId={app.packageId} size={28} />
-          ) : (
-            <HudFallbackIcon src={app.icon} size={28} />
-          )
-        ) : (
-          <img src={app.icon} decoding="async" className="w-[60%] h-[60%] object-contain rounded-lg drop-shadow-md" alt="" />
-        )
+        <img src={app.icon} decoding="async" className="w-[60%] h-[60%] object-contain rounded-lg drop-shadow-md" alt="" />
       ) : (
-        <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: '1em' }}>{app.icon}</span>
+        <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: '1em' }}>{app.icon || 'rocket_launch'}</span>
       )}
     </div>
   )

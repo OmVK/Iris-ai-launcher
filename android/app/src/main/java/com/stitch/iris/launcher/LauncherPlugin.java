@@ -3150,24 +3150,47 @@ public class LauncherPlugin extends Plugin {
             }
 
             try {
-                PackageManager pm = getContext().getPackageManager();
-                android.content.res.Resources res = pm.getResourcesForApplication(iconPackPackage);
-                int appfilterId = res.getIdentifier("appfilter", "xml", iconPackPackage);
+                android.content.Context iconPackContext = getContext().createPackageContext(iconPackPackage, android.content.Context.CONTEXT_IGNORE_SECURITY);
+                android.content.res.Resources res = iconPackContext.getResources();
 
-                if (appfilterId != 0) {
-                    android.content.res.XmlResourceParser xrp = res.getXml(appfilterId);
-                    int eventType = xrp.getEventType();
-                    while (eventType != android.content.res.XmlResourceParser.END_DOCUMENT) {
-                        if (eventType == android.content.res.XmlResourceParser.START_TAG) {
-                            String tagName = xrp.getName();
+                org.xmlpull.v1.XmlPullParser parser = null;
+
+                // Try 1: Open raw asset file assets/appfilter.xml
+                try {
+                    java.io.InputStream is = iconPackContext.getAssets().open("appfilter.xml");
+                    org.xmlpull.v1.XmlPullParserFactory factory = org.xmlpull.v1.XmlPullParserFactory.newInstance();
+                    factory.setNamespaceAware(true);
+                    parser = factory.newPullParser();
+                    parser.setInput(is, "UTF-8");
+                } catch (Exception e1) {
+                    // Try 2: Compiled res/xml/appfilter.xml
+                    int appfilterId = res.getIdentifier("appfilter", "xml", iconPackPackage);
+                    if (appfilterId != 0) {
+                        parser = res.getXml(appfilterId);
+                    }
+                }
+
+                if (parser != null) {
+                    int eventType = parser.getEventType();
+                    while (eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                        if (eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                            String tagName = parser.getName();
                             if ("item".equals(tagName)) {
-                                String component = xrp.getAttributeValue(null, "component");
-                                String drawableName = xrp.getAttributeValue(null, "drawable");
+                                String component = parser.getAttributeValue(null, "component");
+                                String drawableName = parser.getAttributeValue(null, "drawable");
 
-                                if (component != null && drawableName != null && component.startsWith("ComponentInfo{")) {
-                                    int slashIdx = component.indexOf("/");
-                                    if (slashIdx > 14) {
-                                        String targetPackage = component.substring(14, slashIdx);
+                                if (component != null && drawableName != null) {
+                                    String targetPackage = null;
+                                    if (component.startsWith("ComponentInfo{")) {
+                                        int slashIdx = component.indexOf("/");
+                                        if (slashIdx > 14) {
+                                            targetPackage = component.substring(14, slashIdx);
+                                        }
+                                    } else if (component.contains("/")) {
+                                        targetPackage = component.split("/")[0].trim();
+                                    }
+
+                                    if (targetPackage != null && !targetPackage.isEmpty()) {
                                         int drawableId = res.getIdentifier(drawableName, "drawable", iconPackPackage);
                                         if (drawableId != 0) {
                                             try {
@@ -3184,7 +3207,7 @@ public class LauncherPlugin extends Plugin {
                                 }
                             }
                         }
-                        eventType = xrp.next();
+                        eventType = parser.next();
                     }
                 }
             } catch (Exception e) {

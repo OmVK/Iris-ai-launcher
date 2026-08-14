@@ -1,5 +1,4 @@
 import { registerPlugin, Capacitor } from '@capacitor/core'
-import { BUILTIN_APPS } from '../utils/constants'
 
 // Register the custom native LauncherPlugin
 const NativeLauncher = registerPlugin('LauncherPlugin')

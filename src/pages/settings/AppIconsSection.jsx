@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import SettingsSection from './SettingsSection'
 import { getInstalledIconPacks, loadIconPackFilter } from '../../components/LauncherPlugin'
+import { useAppsStore } from '../../stores/appsStore'
 
 const DEFAULT_APP_ICONS = {}
 
@@ -8,7 +9,6 @@ const ICON_GLYPHS = ['settings', 'chat', 'token', 'password', 'database', 'play_
 
 export default function AppIconsSection({ expandedSections, toggleSection, installedApps, setInstalledApps }) {
   const [selectedIconAppPkg, setSelectedIconAppPkg] = useState('')
-  const [useGlobalHudIcons, setUseGlobalHudIcons] = useState(window.useGlobalHudIcons !== false)
   const [installedPacks, setInstalledPacks] = useState([])
   const [activePackPkg, setActivePackPkg] = useState(() => localStorage.getItem('iris_active_icon_pack') || 'DEFAULT')
   const [isLoadingPack, setIsLoadingPack] = useState(false)
@@ -28,25 +28,32 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
   const handleApplyPlayStorePack = async (packPkg) => {
     setActivePackPkg(packPkg)
     localStorage.setItem('iris_active_icon_pack', packPkg)
-    if (packPkg === 'DEFAULT' || packPkg === 'HUD') return
+
+    if (packPkg === 'DEFAULT') {
+      const { loadNativeApps } = useAppsStore.getState()
+      await loadNativeApps()
+      alert("Reset to default system app icons.")
+      return
+    }
 
     setIsLoadingPack(true)
     try {
       const iconMap = await loadIconPackFilter(packPkg)
+      const currentApps = useAppsStore.getState().installedApps || []
       if (iconMap && Object.keys(iconMap).length > 0) {
-        let updatedApps = [...(installedApps || [])]
         let matchCount = 0
-        updatedApps = updatedApps.map(app => {
+        const updatedApps = currentApps.map(app => {
           if (iconMap[app.packageId]) {
             matchCount++
             return { ...app, icon: iconMap[app.packageId] }
           }
           return app
         })
+        useAppsStore.getState().setInstalledApps(updatedApps)
         if (typeof setInstalledApps === 'function') {
           setInstalledApps(updatedApps)
         }
-        alert(`Successfully applied ${matchCount} custom icons from ${packPkg}!`)
+        alert(`Successfully applied ${matchCount} custom icons from Play Store icon pack!`)
       } else {
         alert("No matching app icons found in this icon pack.")
       }
@@ -58,7 +65,10 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
   }
 
   const handleUpdateAppIcon = (packageId, newIcon) => {
-    if (typeof setInstalledApps === 'function') setInstalledApps(prev => prev.map(app => app.packageId === packageId ? { ...app, icon: newIcon } : app))
+    const currentApps = useAppsStore.getState().installedApps || []
+    const updated = currentApps.map(app => app.packageId === packageId ? { ...app, icon: newIcon } : app)
+    useAppsStore.getState().setInstalledApps(updated)
+    if (typeof setInstalledApps === 'function') setInstalledApps(updated)
   }
 
   const handleCustomIconUpload = (e) => {
@@ -78,12 +88,16 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
         const idx = updatedApps.findIndex(app => app.packageId.toLowerCase() === baseName.toLowerCase() || app.label.toLowerCase() === baseName.toLowerCase())
         if (idx !== -1) { const blob = await fileData.async('blob'); const base64 = await new Promise(r => { const reader = new FileReader(); reader.onload = (e) => r(e.target.result); reader.readAsDataURL(blob) }); updatedApps[idx] = { ...updatedApps[idx], icon: base64 }; matchCount++ }
       }
-      if (matchCount > 0 && typeof setInstalledApps === 'function') { setInstalledApps(updatedApps); alert(`Successfully applied ${matchCount} icons!`) } else { alert("No matching icons found.") }
+      if (matchCount > 0) {
+        useAppsStore.getState().setInstalledApps(updatedApps)
+        if (typeof setInstalledApps === 'function') setInstalledApps(updatedApps)
+        alert(`Successfully applied ${matchCount} icons!`)
+      } else { alert("No matching icons found.") }
     } catch { alert("Failed to parse ZIP.") }
   }
 
   return (
-    <SettingsSection title="APP ICON & THEME CUSTOMIZER" icon="settings_applications" sectionKey="appIcons" expandedSections={expandedSections} toggleSection={toggleSection}>
+    <SettingsSection title="APP ICON CUSTOMIZER & ICON PACKS" icon="settings_applications" sectionKey="appIcons" expandedSections={expandedSections} toggleSection={toggleSection}>
       <div className="space-y-4">
         {/* Installed Play Store Icon Packs Section */}
         <div className="space-y-2">
@@ -128,20 +142,8 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
             ))}
           </div>
           {installedPacks.length === 0 && (
-            <p className="text-[7.5px] text-on-surface-variant/40 italic">No third-party launcher icon packs detected. Download icon packs (Whicons, Delta, Lines) from Google Play Store to apply them here.</p>
+            <p className="text-[7.5px] text-on-surface-variant/40 italic">No third-party launcher icon packs detected on device. Download icon packs (Whicons, Delta, Lines, CandyCons) from Google Play Store to apply them here.</p>
           )}
-        </div>
-
-        {/* HUD Sci-Fi Pack Toggle */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-primary-fixed-dim/10 border border-primary-fixed-dim/20">
-          <div>
-            <h4 className="font-bold text-[10px] text-primary-fixed-dim">Iris HUD Sci-Fi Pack Mode</h4>
-            <p className="text-[7.5px] text-on-surface-variant/60">Automatically overlay dynamic neon vector graphics for supported apps</p>
-          </div>
-          <button onClick={() => { const v = !useGlobalHudIcons; setUseGlobalHudIcons(v); window.useGlobalHudIcons = v; localStorage.setItem('use_global_hud_icons', v.toString()) }}
-            className={`w-10 h-5 rounded-full relative transition-colors ${useGlobalHudIcons ? 'bg-primary-fixed-dim' : 'bg-white/10'}`}>
-            <div className={`absolute top-0.5 bottom-0.5 w-4 rounded-full bg-black transition-transform ${useGlobalHudIcons ? 'translate-x-5' : 'translate-x-0.5'}`} />
-          </button>
         </div>
 
         {/* Per-App Icon Customizer & ZIP Ingestion */}
@@ -186,7 +188,7 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
               </div>
 
               <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
-                <p className="font-mono-data text-[9px] text-on-surface-variant uppercase tracking-wider">APPLY FULL ICON PACK (.ZIP)</p>
+                <p className="font-mono-data text-[9px] text-on-surface-variant uppercase tracking-wider">INGEST FULL ICON PACK (.ZIP)</p>
                 <label htmlFor="zip-icon-pack-upload" className="flex items-center justify-center gap-1.5 px-3 py-2 w-full rounded border border-secondary-fixed-dim/30 bg-secondary-fixed-dim/10 text-secondary-fixed-dim hover:bg-secondary-fixed-dim/20 font-bold text-[8.5px] uppercase active:scale-95 transition-transform cursor-pointer text-center">
                   <span className="material-symbols-outlined text-xs">folder_zip</span>INGEST .ZIP ICON PACK
                 </label>
