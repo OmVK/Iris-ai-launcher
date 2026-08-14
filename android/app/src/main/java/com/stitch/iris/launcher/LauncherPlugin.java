@@ -3151,6 +3151,13 @@ public class LauncherPlugin extends Plugin {
             }
 
             try {
+                PackageManager pm = getContext().getPackageManager();
+                List<android.content.pm.PackageInfo> installedList = pm.getInstalledPackages(0);
+                Set<String> installedSet = new HashSet<>();
+                for (android.content.pm.PackageInfo pi : installedList) {
+                    installedSet.add(pi.packageName);
+                }
+
                 android.content.Context iconPackContext = getContext().createPackageContext(iconPackPackage, android.content.Context.CONTEXT_IGNORE_SECURITY);
                 android.content.res.Resources res = iconPackContext.getResources();
 
@@ -3202,7 +3209,7 @@ public class LauncherPlugin extends Plugin {
                                     }
                                     targetPackage = targetPackage.trim();
 
-                                    if (!targetPackage.isEmpty()) {
+                                    if (!targetPackage.isEmpty() && installedSet.contains(targetPackage)) {
                                         int drawableId = res.getIdentifier(drawableName, "drawable", iconPackPackage);
                                         if (drawableId != 0) {
                                             try {

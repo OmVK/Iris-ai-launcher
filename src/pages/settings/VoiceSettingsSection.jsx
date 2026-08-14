@@ -3,10 +3,12 @@ import SettingsSection from './SettingsSection'
 import { SettingSlider, SettingToggle } from './SettingControls'
 import { useAIStore } from '../../stores/aiStore'
 import HapticFeedback from '../../utils/HapticFeedback'
+import useVoiceEngine from '../../hooks/useVoiceEngine'
 
 export default function VoiceSettingsSection({ expandedSections, toggleSection, voicePitch, setVoicePitch, voiceRate, setVoiceRate }) {
   const [haptics, setHaptics] = useState(() => HapticFeedback.isEnabled())
   const { kokoroVoice, setKokoroVoice } = useAIStore()
+  const { speakText } = useVoiceEngine()
 
   const handleHapticsChange = (val) => {
     HapticFeedback.setEnabled(val)
@@ -22,11 +24,14 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
     { id: 'am_michael', label: 'Michael (Narrator)', desc: 'Clear Voice' }
   ]
 
+  const handleSelectVoice = (vId, label) => {
+    setKokoroVoice(vId)
+    speakText(`Kokoro ${label} voice online.`)
+  }
+
   const handlePreview = () => {
-    const utt = new SpeechSynthesisUtterance('Kokoro-82M neural voice engine initialized. All systems nominal.')
-    utt.pitch = voicePitch
-    utt.rate = voiceRate
-    speechSynthesis.speak(utt)
+    const activeLabel = KOKORO_VOICES.find(v => v.id === kokoroVoice)?.label || 'Heart'
+    speakText(`Kokoro 82M neural voice engine set to ${activeLabel}. All systems nominal.`)
   }
 
   return (
@@ -39,12 +44,15 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
           {KOKORO_VOICES.map(v => (
             <button
               key={v.id}
-              onClick={() => setKokoroVoice(v.id)}
+              onClick={() => handleSelectVoice(v.id, v.label)}
               className={`p-2 rounded border text-left transition-all active:scale-95 flex flex-col justify-between ${
-                kokoroVoice === v.id ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim' : 'bg-black/20 border-outline-variant/20 text-on-surface-variant/70 hover:text-white'
+                kokoroVoice === v.id ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim font-bold shadow' : 'bg-black/20 border-outline-variant/20 text-on-surface-variant/70 hover:text-white'
               }`}
             >
-              <span className="font-mono-data text-[9px] font-bold truncate">{v.label}</span>
+              <div className="flex items-center justify-between w-full">
+                <span className="font-mono-data text-[9px] truncate">{v.label}</span>
+                {kokoroVoice === v.id && <span className="material-symbols-outlined text-xs text-cyan-400">volume_up</span>}
+              </div>
               <span className="text-[7px] text-on-surface-variant/40 uppercase truncate">{v.desc}</span>
             </button>
           ))}
