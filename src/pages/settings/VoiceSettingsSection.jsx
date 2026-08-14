@@ -20,7 +20,6 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
     { id: 'natural_male', label: 'Natural Male (US)', desc: 'Crisp & Deep' },
     { id: 'british_female', label: 'Emma (British F)', desc: 'Articulate UK' },
     { id: 'british_male', label: 'George (British M)', desc: 'Commanding UK' },
-    { id: 'piper_offline', label: 'Piper ONNX (Offline)', desc: 'Local Neural WASM' },
     { id: 'narrator', label: 'Narrator (Deep)', desc: 'Resonant Tone' }
   ]
 

@@ -34,12 +34,12 @@ export default function PowerSaveSection({ expandedSections, toggleSection, powe
             ['3D Orb', 'orb'], ['Wallpaper', 'wallpaper'], ['Particles', 'particles'], ['Blur/Effects', 'blur'],
             ['Polling', null, () => `${PowerSaveManager.getPollingMultiplier()}x`],
             ['Icon Size', null, () => `${PowerSaveManager.getIconSizeMultiplier()}x`],
-            ['Transitions', 'transitions'], ['Piper TTS', 'piper']
+            ['Transitions', 'transitions']
           ].map(([label, feature, getter]) => (
             <div key={label} className="flex justify-between">
               <span className="text-on-surface-variant/40">{label}:</span>
               <span className={getter ? '' : (PowerSaveManager.shouldDisable(feature) ? 'text-error' : 'text-green-400')}>
-                {getter ? getter() : (PowerSaveManager.shouldDisable(feature) ? (feature === 'piper' ? 'DEFERRED' : 'OFF') : 'ON')}
+                {getter ? getter() : (PowerSaveManager.shouldDisable(feature) ? 'OFF' : 'ON')}
               </span>
             </div>
           ))}

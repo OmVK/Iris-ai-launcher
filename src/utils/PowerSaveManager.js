@@ -31,7 +31,6 @@ const FEATURE_PRESETS = {
     maxOrbParticles: 200,
     maxCanvasDpr: 1.5,
     iconDecodeSize: 64,
-    deferredPiperInit: false,
     maxRenderItems: Infinity
   },
   MEDIUM: {
@@ -180,9 +179,6 @@ class PowerSaveManager {
   }
 
   shouldDisable(feature) {
-    if (feature === 'piper') {
-      return this.getFeature('deferredPiperInit') === true;
-    }
     const map = {
       orb: 'use3DOrb',
       wallpaper: 'useWallpaper',
