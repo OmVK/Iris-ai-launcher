@@ -1,18 +1,32 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import SettingsSection from './SettingsSection'
 import { SettingSlider, SettingToggle } from './SettingControls'
 import { useAIStore } from '../../stores/aiStore'
 import HapticFeedback from '../../utils/HapticFeedback'
 import useVoiceEngine from '../../hooks/useVoiceEngine'
+import { SecureStorage } from '../../utils/secureStorage'
 
 export default function VoiceSettingsSection({ expandedSections, toggleSection, voicePitch, setVoicePitch, voiceRate, setVoiceRate }) {
   const [haptics, setHaptics] = useState(() => HapticFeedback.isEnabled())
+  const [cartesiaKey, setCartesiaKey] = useState('')
   const { voiceTimbre, setVoiceTimbre } = useAIStore()
   const { speakText } = useVoiceEngine()
+
+  useEffect(() => {
+    SecureStorage.getItem('cartesia_api_key').then(k => {
+      if (k) setCartesiaKey(k)
+    }).catch(() => {})
+  }, [])
 
   const handleHapticsChange = (val) => {
     HapticFeedback.setEnabled(val)
     setHaptics(val)
+  }
+
+  const handleCartesiaChange = async (e) => {
+    const val = e.target.value
+    setCartesiaKey(val)
+    await SecureStorage.setItem('cartesia_api_key', val.trim())
   }
 
   const VOICE_OPTIONS = [
@@ -56,6 +70,21 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="space-y-1.5 mt-3 pt-2 border-t border-white/5">
+        <div className="flex items-center justify-between">
+          <p className="text-[8px] text-primary-fixed-dim uppercase font-mono-data">CARTESIA SONIC 3.5 NEURAL VOICE API (HUMAN TTS)</p>
+          <span className="text-[7px] text-cyan-400/80 font-mono-data">{cartesiaKey ? 'ACTIVE (HUMAN)' : 'OFF (SYSTEM)'}</span>
+        </div>
+        <input
+          type="password"
+          placeholder="Paste Cartesia API key for 100% human speech..."
+          value={cartesiaKey}
+          onChange={handleCartesiaChange}
+          className="w-full bg-black/40 border border-outline-variant/30 rounded p-2 text-[10px] text-cyan-300 placeholder:text-on-surface-variant/30 focus:border-cyan-400 outline-none font-mono"
+        />
+        <p className="text-[7px] text-on-surface-variant/40">Enter a free/paid Cartesia API Key for photorealistic human neural voice synthesis.</p>
       </div>
 
       <SettingSlider label="VOICE PITCH" value={voicePitch} onChange={setVoicePitch} min="0.1" max="2.0" step="0.1" unit="x" />

@@ -55,7 +55,7 @@ public class LauncherPlugin extends Plugin {
     public void load() {
         super.load();
         instance = this;
-        tts = new android.speech.tts.TextToSpeech(getContext(), new android.speech.tts.TextToSpeech.OnInitListener() {
+        android.speech.tts.TextToSpeech.OnInitListener initListener = new android.speech.tts.TextToSpeech.OnInitListener() {
             @Override
             public void onInit(int status) {
                 if (status == android.speech.tts.TextToSpeech.SUCCESS) {
@@ -97,7 +97,13 @@ public class LauncherPlugin extends Plugin {
                     }
                 }
             }
-        });
+        };
+
+        try {
+            tts = new android.speech.tts.TextToSpeech(getContext(), initListener, "com.google.android.tts");
+        } catch (Exception e) {
+            tts = new android.speech.tts.TextToSpeech(getContext(), initListener);
+        }
     }
 
     @Override
