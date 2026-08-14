@@ -691,3 +691,337 @@ export async function loadIconPackFilter(packageName) {
     return {}
   }
 }
+
+// ─── Native Security & Cybersecurity Tools ───────────────
+export async function listProcesses(sort = 'cpu') {
+  if (!isNative) return { processes: [], count: 0 }
+  try {
+    return await NativeLauncher.listProcesses({ sort })
+  } catch (e) {
+    console.error('Failed to list processes:', e)
+    return { processes: [], count: 0, error: e.message }
+  }
+}
+
+export async function portScan(host, startPort = 1, endPort = 1024, timeout = 1500) {
+  if (!isNative) return { host, openPorts: [], totalScanned: 0 }
+  try {
+    return await NativeLauncher.portScan({ host, startPort, endPort, timeout })
+  } catch (e) {
+    console.error('Failed to run port scan:', e)
+    return { host, openPorts: [], error: e.message }
+  }
+}
+
+export async function dnsLookup(host) {
+  if (!isNative) return { host, records: [] }
+  try {
+    return await NativeLauncher.dnsLookup({ host })
+  } catch (e) {
+    console.error('Failed to perform DNS lookup:', e)
+    return { host, records: [], error: e.message }
+  }
+}
+
+export async function whoisLookup(domain) {
+  if (!isNative) return { domain, raw: '' }
+  try {
+    return await NativeLauncher.whoisLookup({ domain })
+  } catch (e) {
+    console.error('Failed to run WHOIS lookup:', e)
+    return { domain, raw: '', error: e.message }
+  }
+}
+
+export async function traceroute(host, maxHops = 15, timeout = 3000) {
+  if (!isNative) return { host, hops: [] }
+  try {
+    return await NativeLauncher.traceroute({ host, maxHops, timeout })
+  } catch (e) {
+    console.error('Failed to execute traceroute:', e)
+    return { host, hops: [], error: e.message }
+  }
+}
+
+export async function sqlmapCheck(url) {
+  if (!isNative) return { url, vulnerable: false, vulnerabilities: [] }
+  try {
+    return await NativeLauncher.sqlmapCheck({ url })
+  } catch (e) {
+    console.error('Failed to run SQL vulnerability check:', e)
+    return { url, vulnerable: false, error: e.message }
+  }
+}
+
+// ─── Audio & Model Downloading ───────────────────────────
+export async function playAudioBase64(data) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.playAudioBase64({ data })
+    return true
+  } catch (e) {
+    console.error('Failed to play base64 audio:', e)
+    return false
+  }
+}
+
+export async function playAudioFile(path) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.playAudioFile({ path })
+    return true
+  } catch (e) {
+    console.error('Failed to play audio file:', e)
+    return false
+  }
+}
+
+export async function downloadModel(url, filename) {
+  if (!isNative) return false
+  try {
+    return await NativeLauncher.downloadModel({ url, filename })
+  } catch (e) {
+    console.error('Failed to download model:', e)
+    return { success: false, error: e.message }
+  }
+}
+
+// ─── Native Hardware & System Controls ───────────────────
+export async function getInstalledAppsCount() {
+  if (!isNative) return 0
+  try {
+    const res = await NativeLauncher.getInstalledAppsCount()
+    return res?.count || 0
+  } catch {
+    return 0
+  }
+}
+
+export async function setFlashlight(enable = true) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.setFlashlight({ enable })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function openSystemSettings(type = 'main') {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.openSystemSettings({ type })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function setSoundMode(mode = 'normal') {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.setSoundMode({ mode })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function dialNumber(number) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.dialNumber({ number })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function setTimer(seconds, label = 'Timer') {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.setTimer({ seconds, label })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function openAppInfo(packageId) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.openAppInfo({ packageId })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function optimizeMemory() {
+  if (!isNative) return { freedMb: 0 }
+  try {
+    return await NativeLauncher.optimizeMemory()
+  } catch {
+    return { freedMb: 0 }
+  }
+}
+
+export async function setDoNotDisturb(enable = true) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.setDoNotDisturb({ enable })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function openCamera() {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.openCamera()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function captureSilentPhotos(count = 1) {
+  if (!isNative) return { photos: [] }
+  try {
+    return await NativeLauncher.captureSilentPhotos({ count })
+  } catch {
+    return { photos: [] }
+  }
+}
+
+export async function startScreenShare() {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.startScreenShare()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function stopScreenShare() {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.stopScreenShare()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function updateOverlayText(text) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.updateOverlayText({ text })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function toggleDND(enable = true) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.toggleDND({ enable })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function setBrightness(level = 50) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.setBrightness({ level })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function getBatteryLevel() {
+  if (!isNative) return 100
+  try {
+    const res = await NativeLauncher.getBatteryLevel()
+    return res?.level ?? 100
+  } catch {
+    return 100
+  }
+}
+
+export async function setAudioVolume(direction = 'up') {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.setAudioVolume({ direction })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function sendMessage(app = 'whatsapp', text = '') {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.sendMessage({ app, text })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function requestNotificationAccess() {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.requestNotificationAccess()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function startOfflineSpeech() {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.startOfflineSpeech()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function stopOfflineSpeech() {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.stopOfflineSpeech()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function resolveWithPartial(text) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.resolveWithPartial({ text })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function executeSystemAction(action, param = '', speaker = false) {
+  if (!isNative) return false
+  try {
+    await NativeLauncher.executeSystemAction({ action, param, speaker })
+    return true
+  } catch {
+    return false
+  }
+}
+

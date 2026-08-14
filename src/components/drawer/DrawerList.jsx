@@ -1,15 +1,11 @@
 import React from 'react'
-import { IRIS_ICON_PACK } from '../../utils/IrisIconPack'
-import HudIcon from '../HudIcon'
-import HudFallbackIcon from '../HudFallbackIcon'
-import { getIconContainerStyle } from '../../utils/IconShapeMask'
+import DrawerIcon from './DrawerIcon'
 
 function DrawerList({ filteredApps, drawerIconSize, drawerTextSize, globalIconTheme, onContextMenu, onAppClick, iconShape = 'system' }) {
   return (
     <div className="max-w-xl mx-auto mt-6 flex flex-col gap-2 bg-black/10 rounded-xl border border-outline-variant/15 p-2 font-mono-data">
       {filteredApps.map((app) => {
         const iconSize = 40 * (drawerIconSize / 100)
-        const shapeStyle = getIconContainerStyle(iconShape, iconSize)
         return (
           <div
             key={app.packageId}
@@ -18,24 +14,7 @@ function DrawerList({ filteredApps, drawerIconSize, drawerTextSize, globalIconTh
             className="drawer-app-item app-icon-item flex items-center justify-between p-3 rounded-lg border transition-colors cursor-pointer border-transparent hover:border-primary-fixed-dim/20 hover:bg-primary-fixed-dim/5"
           >
             <div className="flex items-center gap-3">
-              <div
-                style={shapeStyle}
-                className={`glass-icon-container flex items-center justify-center relative transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme?.toLowerCase() || 'default'}`}
-              >
-                {app.icon && app.icon.startsWith('data:') ? (
-                  (window.useGlobalHudIcons) ? (
-                    IRIS_ICON_PACK[app.packageId] ? (
-                      <HudIcon packageId={app.packageId} size={28 * (drawerIconSize / 100)} iconShape={iconShape} />
-                    ) : (
-                      <HudFallbackIcon src={app.icon} size={28 * (drawerIconSize / 100)} />
-                    )
-                  ) : (
-                    <img src={app.icon} decoding="async" style={{ width: `${24 * (drawerIconSize / 100)}px`, height: `${24 * (drawerIconSize / 100)}px` }} className="object-contain rounded-md" alt="" />
-                  )
-                ) : (
-                  <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: `${18 * (drawerIconSize / 100)}px` }}>{app.icon}</span>
-                )}
-              </div>
+              <DrawerIcon app={app} size={iconSize} iconTheme={globalIconTheme} iconShape={iconShape} />
               <div className="flex flex-col">
                 <span
                   className="font-bold text-white"

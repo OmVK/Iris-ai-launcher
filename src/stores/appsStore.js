@@ -95,11 +95,22 @@ export const useAppsStore = create((set, get) => ({
   mergeNativeApps: (nativeApps) => set((s) => {
     if (!nativeApps || nativeApps.length === 0) return s
     const filtered = nativeApps.filter(app => !IRIS_PACKAGE_IDS.has(app.packageId))
-    const newApps = [...DEFAULT_APPS, ...filtered]
+    const existingMap = new Map((s.installedApps || []).map(a => [a.packageId, a]))
+
+    const merged = filtered.map(app => {
+      const existing = existingMap.get(app.packageId)
+      if (existing && existing.icon && existing.icon !== app.icon) {
+        return { ...app, icon: existing.icon }
+      }
+      return app
+    })
+
+    const newApps = [...(s.installedApps || []), ...merged]
     const unique = newApps.reduce((acc, current) => {
       const x = acc.find(item => item.packageId === current.packageId)
       return x ? acc : acc.concat([current])
     }, [])
+
     localStorage.setItem('installed_apps', JSON.stringify(unique))
     return { installedApps: unique }
   }),

@@ -1,12 +1,10 @@
 import React from 'react'
-import { IRIS_ICON_PACK } from '../../utils/IrisIconPack'
-import HudIcon from '../HudIcon'
-import HudFallbackIcon from '../HudFallbackIcon'
 import { getIconContainerStyle } from '../../utils/IconShapeMask'
 
 function DrawerIcon({ app, isLocked, size, iconTheme, iconShape = 'system' }) {
   const iconMaxPx = Math.round(size)
   const shapeStyle = getIconContainerStyle(iconShape, iconMaxPx)
+  const symbolSizePx = Math.round(iconMaxPx * 0.55)
 
   return (
     <div
@@ -16,14 +14,15 @@ function DrawerIcon({ app, isLocked, size, iconTheme, iconShape = 'system' }) {
       }`}
     >
       {isLocked ? (
-        <span className="material-symbols-outlined text-error animate-pulse" style={{ fontSize: '1em' }}>lock</span>
-      ) : app.icon && app.icon.startsWith('data:') ? (
-        <img src={app.icon} decoding="async" className="w-[60%] h-[60%] object-contain rounded-lg drop-shadow-md" alt="" />
+        <span className="material-symbols-outlined text-error animate-pulse" style={{ fontSize: `${symbolSizePx}px` }}>lock</span>
+      ) : app?.icon && (typeof app.icon === 'string') && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+        <img src={app.icon} decoding="async" className="w-[65%] h-[65%] object-contain rounded-lg drop-shadow-md" alt="" />
       ) : (
-        <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: '1em' }}>{app.icon || 'rocket_launch'}</span>
+        <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: `${symbolSizePx}px` }}>{app?.icon || 'rocket_launch'}</span>
       )}
     </div>
   )
 }
 
 export default React.memo(DrawerIcon)
+

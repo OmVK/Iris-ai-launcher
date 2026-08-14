@@ -30,8 +30,12 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
     localStorage.setItem('iris_active_icon_pack', packPkg)
 
     if (packPkg === 'DEFAULT') {
-      const { loadNativeApps } = useAppsStore.getState()
-      await loadNativeApps()
+      const { getInstalledApps } = await import('../../components/LauncherPlugin')
+      const nativeApps = await getInstalledApps()
+      if (nativeApps && nativeApps.length > 0) {
+        useAppsStore.getState().setInstalledApps(nativeApps)
+        if (typeof setInstalledApps === 'function') setInstalledApps(nativeApps)
+      }
       alert("Reset to default system app icons.")
       return
     }
