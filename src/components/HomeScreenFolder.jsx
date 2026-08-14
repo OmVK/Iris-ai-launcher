@@ -1,9 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { launchApp } from '../components/LauncherPlugin'
-import HudIcon from './HudIcon'
-import HudFallbackIcon from './HudFallbackIcon'
 
-export default function HomeScreenFolder({ folder, installedApps = [], onOpen, onRemove, globalIconTheme = 'DEFAULT' }) {
+export default function HomeScreenFolder({ folder, installedApps = [], onOpen, onRemove }) {
   const [isOpen, setIsOpen] = useState(false)
   const [folderName, setFolderName] = useState(folder?.name || 'Folder')
   const [isEditing, setIsEditing] = useState(false)
@@ -77,14 +75,13 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
           onAppClick={handleAppClick}
           onClose={() => setIsOpen(false)}
           onRemove={onRemove}
-          globalIconTheme={globalIconTheme}
         />
       )}
     </>
   )
 }
 
-function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing, setIsEditing, onNameSubmit, onAppClick, onClose, onRemove, globalIconTheme }) {
+function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing, setIsEditing, onNameSubmit, onAppClick, onClose, onRemove }) {
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />

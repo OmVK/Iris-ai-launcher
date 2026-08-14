@@ -155,7 +155,6 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
 
       if (isDragging) dirtyRef.current = true
 
-      let hasMovingNodes = false
       const simSpeed = isDragging ? 0.5 : isIdle ? 0.04 : 0.15
       const nLen = nodes.length
       const dragIdx = isDragging ? dragRef.current.nodeIdx : -1
@@ -196,7 +195,6 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
         node.vy = (node.vy + fy * simSpeed) * 0.82
         node.x += node.vx
         node.y += node.vy
-        if (Math.abs(node.vx) > 0.02 || Math.abs(node.vy) > 0.02) hasMovingNodes = true
       }
       dirtyRef.current = true
 

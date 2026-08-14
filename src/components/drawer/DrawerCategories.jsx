@@ -1,29 +1,6 @@
 import React, { useMemo } from 'react'
 import { getIconContainerStyle } from '../../utils/IconShapeMask'
 
-const CATEGORY_PATTERNS = {
-  COMMUNICATION: ['whatsapp', 'telegram', 'discord', 'signal', 'messaging', 'message', 'mail', 'slack', 'teams', 'zoom', 'skype', 'snapchat', 'instagram', 'facebook', 'twitter', 'reddit'],
-  MEDIA: ['spotify', 'youtube', 'music', 'netflix', 'video', 'tiktok', 'camera', 'gallery', 'photo', 'media', 'player', 'podcast', 'radio'],
-  GAMES: ['game', 'play', 'games', 'gaming', 'esports'],
-  SYSTEM: ['settings', 'android', 'google', 'system', 'phone', 'dialer', 'contacts', 'calendar', 'clock', 'calculator', 'files', 'file', 'manager'],
-  PRODUCTIVITY: ['docs', 'sheets', 'slides', 'drive', 'office', 'notion', 'todo', 'task', 'note', 'evernote', 'trello', 'asana'],
-  FINANCE: ['bank', 'pay', 'wallet', 'finance', 'stock', 'crypto', 'coin', 'trade'],
-  HEALTH: ['health', 'fitness', 'workout', 'run', 'meditat', 'sleep', 'step'],
-  TRAVEL: ['maps', 'map', 'navigation', 'uber', 'lyft', 'travel', 'flight', 'hotel'],
-  SHOPPING: ['shop', 'store', 'amazon', 'ebay', 'market', 'buy'],
-}
-
-function detectCategory(app) {
-  const pkg = (app.packageId || '').toLowerCase()
-  const label = (app.label || '').toLowerCase()
-  const combined = `${pkg} ${label}`
-
-  for (const [cat, patterns] of Object.entries(CATEGORY_PATTERNS)) {
-    if (patterns.some(p => combined.includes(p))) return cat
-  }
-  return app.cat || 'OTHER'
-}
-
 function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, drawerTextSize, onAppClick, onContextMenu, onCreateFolder, iconShape = 'system' }) {
   const appLookup = useMemo(() => {
     const map = new Map()
