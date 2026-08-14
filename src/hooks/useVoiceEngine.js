@@ -36,7 +36,7 @@ export default function useVoiceEngine() {
     liveSetupKey, setLiveSetupKey,
   } = useAssistantStore()
 
-  const { setLlmBackend, voicePitch, voiceRate, kokoroVoice } = useAIStore()
+  const { setLlmBackend, voicePitch, voiceRate } = useAIStore()
 
   const lastTtsTextRef = useRef('')
   const isListeningRef = useRef(false)
@@ -176,50 +176,17 @@ export default function useVoiceEngine() {
       }
     }
 
-    // Calculate dynamic pitch modulation based on selected Kokoro Voice Timbre
-    let pitchMod = 1.0
-    let targetLang = 'en-US'
-    let isMale = false
-
-    switch (kokoroVoice) {
-      case 'am_adam':
-        pitchMod = 0.82
-        isMale = true
-        break
-      case 'bf_emma':
-        pitchMod = 1.08
-        targetLang = 'en-GB'
-        break
-      case 'bm_george':
-        pitchMod = 0.80
-        targetLang = 'en-GB'
-        isMale = true
-        break
-      case 'af_nicole':
-        pitchMod = 1.15
-        break
-      case 'am_michael':
-        pitchMod = 0.88
-        isMale = true
-        break
-      case 'af_heart':
-      default:
-        pitchMod = 1.0
-        break
-    }
-
-    const effectivePitch = Math.max(0.1, Math.min(2.0, voicePitch * pitchMod))
-
-    // On Android Native or Web, use SpeechSynthesis & Native Speech with matched Kokoro timbre pitch/rate
+    // On Android Native or Web, use SpeechSynthesis & Native Speech
     if (isNative) {
       try {
         const m = await import('../components/LauncherPlugin')
-        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(effectivePitch, voiceRate)
+        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(voicePitch, voiceRate)
         await speakTextNative(text)
         finishSpeaking()
       } catch (e) { 
         console.warn('[IRIS] Native TTS speak failed, falling back:', e)
       }
+      return
     }
 
     if (!window.speechSynthesis) { finishSpeaking(); return }
@@ -229,28 +196,18 @@ export default function useVoiceEngine() {
       const utterance = new SpeechSynthesisUtterance(text)
       const voices = window.speechSynthesis.getVoices()
       
-      // Intelligent voice matching based on locale (en-GB vs en-US) and gender (male vs female)
-      let selectedVoice = null
-      if (targetLang === 'en-GB') {
-        selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (isMale ? v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver') : v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria'))) ||
-                        voices.find(v => v.lang.startsWith('en-GB'))
-      }
-      if (!selectedVoice) {
-        if (isMale) {
-          selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('adam')))
-        } else {
-          selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('aria') || v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('natural')))
-        }
-      }
-      if (!selectedVoice) {
-        selectedVoice = voices.find(v => v.name.includes("Google US English")) ||
-                        voices.find(v => v.lang.startsWith("en-US")) ||
-                        voices.find(v => v.lang.startsWith("en")) ||
-                        voices[0]
-      }
+      const selectedVoice =
+        voices.find(v => v.name.includes("Google US English") && v.name.includes("Natural")) ||
+        voices.find(v => v.name.includes("Google") && v.name.includes("Natural")) ||
+        voices.find(v => v.name.includes("Natural") || v.name.includes("Online")) ||
+        voices.find(v => v.name.includes("Aria") || v.name.includes("Samantha")) ||
+        voices.find(v => v.name.includes("Google US English")) ||
+        voices.find(v => v.lang.startsWith("en-US")) ||
+        voices.find(v => v.lang.startsWith("en")) ||
+        voices[0]
 
       if (selectedVoice) utterance.voice = selectedVoice
-      utterance.pitch = effectivePitch
+      utterance.pitch = voicePitch
       utterance.rate = voiceRate
       utterance.onend = finishSpeaking
       utterance.onerror = finishSpeaking
@@ -259,7 +216,7 @@ export default function useVoiceEngine() {
       console.warn('[IRIS] SpeechSynthesis error:', err)
       finishSpeaking()
     }
-  }, [voicePitch, voiceRate, kokoroVoice])
+  }, [voicePitch, voiceRate])
 
   const requestMicrophonePermission = useCallback(async () => {
     try {
