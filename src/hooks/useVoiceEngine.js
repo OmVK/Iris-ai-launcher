@@ -184,7 +184,7 @@ export default function useVoiceEngine() {
     if (isNative) {
       try {
         const m = await import('../components/LauncherPlugin')
-        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(effectivePitch, voiceRate)
+        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(voicePitch, voiceRate, voiceTimbre)
         await speakTextNative(text)
         finishSpeaking()
       } catch (e) { 

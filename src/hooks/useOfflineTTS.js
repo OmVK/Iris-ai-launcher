@@ -99,7 +99,7 @@ export default function useOfflineTTS({ speechInterruptRef }) {
       
       if (isNative) {
         try {
-          setVoiceSettingsNative(effectivePitch, voiceRate)
+          setVoiceSettingsNative(voicePitch, voiceRate, voiceTimbre)
           pluginSpeakNative(text).then(wrappedResolve).catch(wrappedResolve)
         } catch (_) { wrappedResolve() }
       } else if ('speechSynthesis' in window) {

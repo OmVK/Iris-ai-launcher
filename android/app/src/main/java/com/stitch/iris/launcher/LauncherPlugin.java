@@ -1294,10 +1294,68 @@ public class LauncherPlugin extends Plugin {
         if (tts != null) {
             float pitch = call.getFloat("pitch", 1.0f);
             float rate = call.getFloat("rate", 1.0f);
+            String voiceTimbre = call.getString("voiceTimbre", "natural_female");
+
+            float pitchMod = 1.0f;
+            if ("narrator".equalsIgnoreCase(voiceTimbre)) {
+                pitchMod = 0.70f;
+            } else if ("natural_male".equalsIgnoreCase(voiceTimbre)) {
+                pitchMod = 0.82f;
+            } else if ("british_male".equalsIgnoreCase(voiceTimbre)) {
+                pitchMod = 0.85f;
+            } else if ("british_female".equalsIgnoreCase(voiceTimbre)) {
+                pitchMod = 1.05f;
+            }
+
+            float effectivePitch = Math.max(0.2f, Math.min(2.0f, pitch * pitchMod));
+
             try {
-                tts.setPitch(pitch);
+                tts.setPitch(effectivePitch);
                 tts.setSpeechRate(rate);
-            } catch (Exception ignored) {}
+
+                if (voiceTimbre != null && (voiceTimbre.contains("british") || voiceTimbre.contains("uk"))) {
+                    tts.setLanguage(java.util.Locale.UK);
+                } else {
+                    tts.setLanguage(java.util.Locale.US);
+                }
+
+                Set<android.speech.tts.Voice> voices = tts.getVoices();
+                if (voices != null && !voices.isEmpty()) {
+                    boolean isBritish = voiceTimbre != null && (voiceTimbre.contains("british") || voiceTimbre.contains("uk"));
+                    boolean isMale = voiceTimbre != null && (voiceTimbre.contains("male") || voiceTimbre.contains("narrator"));
+
+                    android.speech.tts.Voice bestMatch = null;
+                    for (android.speech.tts.Voice v : voices) {
+                        if (v.getLocale() == null) continue;
+                        String lang = v.getLocale().getLanguage();
+                        String country = v.getLocale().getCountry();
+                        String name = v.getName().toLowerCase();
+
+                        if ("en".equalsIgnoreCase(lang)) {
+                            if (isBritish && !"GB".equalsIgnoreCase(country) && !name.contains("gb") && !name.contains("en-gb")) continue;
+                            if (!isBritish && "GB".equalsIgnoreCase(country) && !name.contains("us")) continue;
+
+                            if (isMale) {
+                                if (name.contains("male") || name.contains("man") || name.contains("deep") || name.contains("boy") || name.contains("guy")) {
+                                    bestMatch = v;
+                                    break;
+                                }
+                            } else {
+                                if (name.contains("female") || name.contains("woman") || name.contains("girl") || name.contains("lady") || name.contains("aria")) {
+                                    bestMatch = v;
+                                    break;
+                                }
+                            }
+                            if (bestMatch == null) bestMatch = v;
+                        }
+                    }
+                    if (bestMatch != null) {
+                        tts.setVoice(bestMatch);
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed setting native voice timbre: " + voiceTimbre, e);
+            }
         }
         call.resolve();
     }

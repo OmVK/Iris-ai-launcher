@@ -303,13 +303,17 @@ export async function stopSpeakingNative() {
   }
 }
 
-export async function setVoiceSettingsNative(pitch, rate) {
+export async function setVoiceSettingsNative(pitch, rate, voiceTimbre = 'natural_female') {
   if (isNative) {
     try {
-      await NativeLauncher.setVoiceSettings({ pitch, rate })
+      await NativeLauncher.setVoiceSettings({ pitch, rate, voiceTimbre })
+      return true
     } catch (e) {
-      console.error("Failed to set native voice settings", e)
+      console.error("Native TTS setVoiceSettings failed", e)
+      return false
     }
+  } else {
+    return true
   }
 }
 
