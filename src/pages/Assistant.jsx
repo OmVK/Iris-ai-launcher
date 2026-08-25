@@ -4,7 +4,7 @@ import { useAIStore } from '../stores/aiStore'
 import { useAssistantStore } from '../stores/assistantStore'
 import { useAppStore } from '../stores/appStore'
 import { SecureStorage } from '../utils/secureStorage'
-import { checkAllBackends, getBackendStatus } from '../utils/AIProviderManager'
+import { checkAllBackends, getBackendStatus, getSanitizedOllamaEndpoint } from '../utils/AIProviderManager'
 import SessionSidebar from './assistant/SessionSidebar'
 import EngineModelBar from './assistant/EngineModelBar'
 import OllamaManager from './assistant/OllamaManager'
@@ -87,7 +87,7 @@ export default function Assistant({
   const fetchOllamaModels = useCallback(async () => {
     try {
       setOllamaStatus('fetching')
-      const endpoint = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+      const endpoint = getSanitizedOllamaEndpoint()
       const res = await fetch(`${endpoint}/api/tags`)
       if (!res.ok) throw new Error("Offline")
       const data = await res.json()

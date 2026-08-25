@@ -359,7 +359,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     } finally {
       setIsSearching(false)
     }
-  }, [searchApps, searchSettings, searchWeb, searchContacts])
+  }, [searchApps, searchSettings, searchWeb, searchContacts, isExpandedSearch, searchFiles])
 
   const handleQueryChange = useCallback((newQuery) => {
     setQuery(newQuery)

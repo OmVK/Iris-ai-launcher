@@ -18,6 +18,7 @@ async function createBackupBundle() {
   for (const key of keys) {
     if (key.startsWith('CapacitorStorage')) continue
     if (key === 'custom_wallpaper') continue
+    if (key.startsWith('ks_') || key.startsWith('iris_enc_') || key.includes('api_key') || key.includes('token') || key.includes('secret')) continue
     const { value } = await Preferences.get({ key })
     if (value !== null) {
       bundle.localStorage[key] = value

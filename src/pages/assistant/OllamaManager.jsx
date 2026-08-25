@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getSanitizedOllamaEndpoint } from '../../utils/AIProviderManager'
 
 const OLLAMA_RECOMMENDED_MODELS = [
   { id: 'deepseek-r1:1.5b', tier: 'LOW', desc: '1.5B reasoning model for low-end devices' },
@@ -33,7 +34,7 @@ export default function OllamaManager({ ollamaModels, onSelectModel, onClose }) 
 
   const fetchOllamaModels = async () => {
     try {
-      const endpoint = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+      const endpoint = getSanitizedOllamaEndpoint()
       const res = await fetch(`${endpoint}/api/tags`)
       if (!res.ok) throw new Error("Offline")
       const data = await res.json()
@@ -50,7 +51,7 @@ export default function OllamaManager({ ollamaModels, onSelectModel, onClose }) 
     if (!modelName.trim()) return
     setPullStatus('pulling'); setPullProgress(0); setPullMessage('Connecting...')
     try {
-      const endpoint = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+      const endpoint = getSanitizedOllamaEndpoint()
       const res = await fetch(`${endpoint}/api/pull`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: modelName })
       })

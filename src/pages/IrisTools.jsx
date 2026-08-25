@@ -1,5 +1,4 @@
 import React, { useState, useCallback } from 'react'
-import { useAppStore } from '../stores/appStore'
 import { TOOLS } from '../tools/irisToolsData'
 import ResultDisplay from '../components/ToolResultDisplay'
 import { useThemeStore } from '../stores/themeStore'
@@ -22,7 +21,6 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
   const [copied, setCopied] = useState(null)
   const [showVaultLock, setShowVaultLock] = useState(false)
   const [vaultUnlockedForTool, setVaultUnlockedForTool] = useState(false)
-  const { setShowVpnBrowser, setVpnBrowserUrl } = useAppStore()
   const glassOpacity = useThemeStore(s => s.glassOpacity)
   const glassBg = `rgba(24, 27, 37, ${glassOpacity / 100})`
 
@@ -50,10 +48,7 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
   }, [tool, inputVals, onNavigate, onTriggerChronoLock, onTriggerVault])
 
   const handleToolClick = (t) => {
-    if (t.browserUrl) {
-      setVpnBrowserUrl(t.browserUrl)
-      setShowVpnBrowser(true)
-    } else if (t.locked && !vaultUnlockedForTool) {
+    if (t.locked && !vaultUnlockedForTool) {
       setActiveTool(t.id)
       setInputVals({})
       setResult(null)

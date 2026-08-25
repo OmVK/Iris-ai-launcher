@@ -24,7 +24,6 @@ const IrisTools = lazy(() => import('./pages/IrisTools'))
 
 const PrivateVault = lazy(() => import('./pages/PrivateVault'))
 const ZeroScreen = lazy(() => import('./components/ZeroScreen'))
-const VpnBrowser = lazy(() => import('./pages/VpnBrowser'))
 
 import { useAppStore } from './stores/appStore'
 import { useThemeStore } from './stores/themeStore'
@@ -41,7 +40,7 @@ import useThemeVars from './hooks/useThemeVars'
 import usePageRouter from './hooks/usePageRouter'
 
 export default function App() {
-  const { activePage, setActivePage, showChronoLock, setShowChronoLock, chronoTarget, setChronoTarget, isVaultUnlocked, setIsVaultUnlocked, showVaultExplorer, setShowVaultExplorer, vaultTab, setVaultTab, lockedApps, toggleAppLock, showArcSearch, setShowArcSearch, isAppActive, setIsAppActive, setupComplete, setSetupComplete, showVpnBrowser, setShowVpnBrowser, vpnBrowserUrl, setVpnBrowserUrl } = useAppStore()
+  const { activePage, setActivePage, showChronoLock, setShowChronoLock, chronoTarget, setChronoTarget, isVaultUnlocked, setIsVaultUnlocked, showVaultExplorer, setShowVaultExplorer, vaultTab, setVaultTab, lockedApps, toggleAppLock, showArcSearch, setShowArcSearch, isAppActive, setIsAppActive, setupComplete, setSetupComplete } = useAppStore()
   const { themeColor, glassOpacity, wallpaper, hasCustomWallpaper, dpiScale, showAppLabels, use24HourClock, globalIconTheme, activeLiveWallpaper, pageTransitionEffect, pageTransitionSpeed, pageTransitionEasing, fullscreenActive, darkGlassTheme, wallpaperBlur, wallpaperVignette, setThemeColor, setGlassOpacity } = useThemeStore()
   const { llmBackend, setLlmBackend, geminiKey, geminiModel, groqKey, voicePitch, voiceRate } = useAIStore()
   const { isLiveVoice, isListening, showLiveConfigModal, setShowLiveConfigModal, liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey } = useAssistantStore()
@@ -252,7 +251,6 @@ export default function App() {
         />
       )}
       {!setupComplete && <SetupWizard onComplete={() => setSetupComplete(true)} />}
-      {showVpnBrowser && <Suspense fallback={null}><VpnBrowser url={vpnBrowserUrl} onClose={() => { setShowVpnBrowser(false); setVpnBrowserUrl('') }} /></Suspense>}
       {showFeatureTour && <FeatureTour onClose={() => setShowFeatureTour(false)} />}
       {showRecents && <RecentsOverlay isOpen={showRecents} onClose={() => setShowRecents(false)} />}
       <GracefulDegradation />

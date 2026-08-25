@@ -41,7 +41,7 @@ export default function Settings({
     pageTransitionEffect, setPageTransitionEffect, pageTransitionSpeed, setPageTransitionSpeed,
     pageTransitionEasing, setPageTransitionEasing, drawerLayout, setDrawerLayout,
     darkGlassTheme, setDarkGlassTheme, homePages, setHomePages,
-    iconShape, setIconShape, dockColumns, setDockColumns, dockBackground, setDockBackground, homeScreenFolders, setHomeScreenFolders
+    iconShape, setIconShape, dockColumns, setDockColumns, dockBackground, setDockBackground
   } = useThemeStore()
   const [expandedSections, setExpandedSections] = useState({
     wallpaperTheme: false, apiKeys: false, layoutConfig: false,

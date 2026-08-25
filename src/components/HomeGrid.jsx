@@ -1,3 +1,5 @@
+import { getIconContainerStyle } from '../utils/IconShapeMask'
+
 export default function HomeGrid({
   installedApps,
   lockedApps,
@@ -7,6 +9,7 @@ export default function HomeGrid({
   homeTextSize,
   gridColumns,
   gridRows,
+  iconShape = 'system',
   tilt,
   handleAppClick,
   handleContextMenu,
@@ -18,6 +21,7 @@ export default function HomeGrid({
 
   const iconPixel = 48 * (homeIconSize / 100)
   const fontPixel = 8 * (homeTextSize / 100)
+  const shapeStyle = getIconContainerStyle(iconShape, iconPixel)
 
   const dynamicGridStyle = {
     display: 'grid',
@@ -47,12 +51,11 @@ export default function HomeGrid({
 
             <div
               style={{
-                width: `${iconPixel}px`,
-                height: `${iconPixel}px`,
+                ...shapeStyle,
                 transform: `translateZ(10px)`,
                 boxShadow: '0 4px 16px rgba(var(--primary-rgb), 0.22), 0 0 8px rgba(var(--primary-rgb), 0.08)'
               }}
-              className="flex items-center justify-center rounded-xl border transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme.toLowerCase()} border-primary-fixed-dim/20 glass-icon-container app-icon-hover-effect"
+              className="flex items-center justify-center border transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme.toLowerCase()} border-primary-fixed-dim/20 glass-icon-container app-icon-hover-effect"
             >
               {app.icon && typeof app.icon === 'string' && app.icon.startsWith('data:') ? (
                 <img

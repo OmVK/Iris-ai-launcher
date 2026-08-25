@@ -17,14 +17,26 @@ async function getOrCreateKey() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
     const req = tx.objectStore(STORE_NAME).get(KEY_NAME)
-    req.onsuccess = () => {
+    req.onsuccess = async () => {
       if (req.result) { resolve(req.result); return }
-      crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']).then(key => {
+      try {
+        const salt = crypto.getRandomValues(new Uint8Array(16))
+        const pinMaterial = new TextEncoder().encode(localStorage.getItem('iris_chrono_pin_offset') || 'iris-system-master')
+        const baseKey = await crypto.subtle.importKey('raw', pinMaterial, 'PBKDF2', false, ['deriveKey'])
+        const derivedKey = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' },
+          baseKey,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['encrypt', 'decrypt']
+        )
         const tx2 = db.transaction(STORE_NAME, 'readwrite')
-        tx2.objectStore(STORE_NAME).put(key, KEY_NAME)
-        tx2.oncomplete = () => resolve(key)
+        tx2.objectStore(STORE_NAME).put(derivedKey, KEY_NAME)
+        tx2.oncomplete = () => resolve(derivedKey)
         tx2.onerror = () => reject(tx2.error)
-      })
+      } catch (err) {
+        reject(err)
+      }
     }
     req.onerror = () => reject(req.error)
   })
@@ -78,7 +90,6 @@ async function setItem(key, value) {
       if (isNative) await KeystoreStorage.removeItem(key)
       else localStorage.removeItem(OLD_PREFIX + key)
       localStorage.removeItem(KS_PREFIX + key)
-      if (key === 'nvidia_api_key') localStorage.removeItem('iris_has_nvidia_key')
       return
     }
     if (isNative) {
@@ -87,7 +98,6 @@ async function setItem(key, value) {
       const encrypted = await encrypt(value)
       localStorage.setItem(KS_PREFIX + key, encrypted)
     }
-    if (key === 'nvidia_api_key') localStorage.setItem('iris_has_nvidia_key', 'true')
   } catch (e) {
     console.warn('SecureStorage.setItem failed:', e)
   }
@@ -113,7 +123,6 @@ function removeItem(key) {
   localStorage.removeItem(KS_PREFIX + key)
   localStorage.removeItem(OLD_PREFIX + key)
   localStorage.removeItem(key)
-  if (key === 'nvidia_api_key') localStorage.removeItem('iris_has_nvidia_key')
 }
 
 async function migrateAll() {

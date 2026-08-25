@@ -28,21 +28,24 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 4.9.4
+- **Version**: 5.0.0
 - **App ID**: `com.stitch.iris.launcher`
-- **Platform**: Android
+- **Platform**: Android (Capacitor 8)
+- **Target SDK**: 36 (Android 14+)
 
-## 👁️ v4.9.4 Multimodal Vision & Kokoro Neural TTS Upgrades
+## ⚡ v5.0.0 Hardened Security & Cybernetic Edition
 
-IRIS v4.9.4 completes all approved roadmap phases:
-- **"IRIS Optics" Vision Assistant (`VisionAssistant.jsx`)**: Camera feed & screenshot analyzer capable of reading code errors, translating text, and identifying real-world objects using multimodal Gemini Vision.
-- **Kokoro-82M Neural Voice Synthesis (`kokoroWorker.js`)**: 100% offline neural text-to-speech synthesis with selectable voice timbres (`af_heart`, `am_adam`, `bf_emma`, `bm_george`, `af_nicole`, `am_michael`) in `VoiceSettingsSection.jsx`.
-- **App Permission Auditor (`AppPermissionAuditor.jsx`)**: Scans installed Android apps and assigns privacy risk scores.
-- **Wi-Fi & Rogue AP Inspector (`WifiInspector.jsx`)**: Audits Wi-Fi encryption, ARP spoofing MITM defenses, gateway latency, and scans router ports.
-- **State Store Consolidation**: Unified `AppLockSection` into `useAppsStore` and removed redundant store code.
-- **Native Bridge Optimization**: Pruned 11 unreferenced native helper exports in `LauncherPlugin.js`.
-- **Bundle Optimization**: Cleaned up unused static binary assets in `public/piper/` for a leaner build footprint.
-- **Zero Circular Dependencies**: Graph verified as 100% DAG reachable from `src/main.jsx`.
+IRIS v5.0.0 delivers comprehensive cryptographic, privacy, and architectural enhancements:
+- **On-Device Notification PII Redaction**: Automatic real-time regex sanitization in `IrisNotificationListenerService.java` redacting OTPs, 2FA codes, account tokens, credit cards, emails, phone numbers, crypto addresses, and UPI IDs before dispatch.
+- **Hardware-Backed AES-256 GCM Storage**: AndroidKeyStore integration with PBKDF2 (SHA-256, 310,000 iterations) fallback derivation and non-extractable keys.
+- **Biometric & Chrono Lockout Shield**: Dynamic time-synced PIN verification paired with a 5-attempt threshold and native 30-second brute-force cooldown.
+- **Native Vault Token Binding**: High-entropy `UUID.randomUUID()` tokens with immediate auto-revocation upon screen-off or app suspension.
+- **Prompt Injection Delimiter Isolation**: External RAG documents and live web search data encapsulated in `<untrusted_context>` tags with strict system override prevention.
+- **Content Security Policy (CSP)**: Strict WebView CSP restricting network transport to verified HTTPS and local loopback RPCs.
+- **"IRIS Optics" Vision Assistant (`VisionAssistant.jsx`)**: Real-time camera feed and screenshot analyzer powered by multimodal AI.
+- **Kokoro-82M Neural Voice Synthesis**: 100% offline neural text-to-speech synthesis with multi-timbre voice selection.
+- **13 Built-in Cybersecurity Tools & 10 Widgets**: Network latency probes, IP geolocation, password generator, crypto hash calculator, DNS/WHOIS queries, battery telemetry, and real-time stocks/crypto charts.
+- **3D Mesh Sphere Drawer (DrawerMesh)**: GPU-accelerated Fibonacci sphere layout with dynamic search, alphabetical letter jumps, and custom app folders.
 
 ## 📦 Build & Run
 

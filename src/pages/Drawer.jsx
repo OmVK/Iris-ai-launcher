@@ -44,10 +44,10 @@ export default function Drawer({
   onToggleAppLock
 }) {
   const { gridColumns, gridRows, showAppLabels, showDrawerSearch, globalIconTheme, drawerIconSize, drawerTextSize, drawerLayout, setDrawerLayout, iconShape } = useThemeStore()
-  const { hiddenApps, toggleHiddenApp, appFrequency, recordAppLaunch } = useAppsStore()
+  const { hiddenApps, appFrequency, recordAppLaunch } = useAppsStore()
   
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeCategory, setActiveCategory] = useState('ALL')
+  const [activeCategory] = useState('ALL')
   const [sortBy, setSortBy] = useState('A-Z')
   const [activeLetter, setActiveLetter] = useState(null)
   const [showHidden, setShowHidden] = useState(false)
@@ -111,8 +111,6 @@ export default function Drawer({
   const activeContextMenuRef = useRef(null)
   const scrollRef = useRef(null)
   const scrollTimerRef = useRef(null)
-
-  const categories = ['ALL', 'COMMUNICATION', 'MEDIA', 'GAMES', 'SYSTEM', 'PRODUCTIVITY', 'FINANCE', 'HEALTH', 'TRAVEL', 'SHOPPING']
 
   useEffect(() => { localStorage.setItem('iris_custom_folders', JSON.stringify(customFolders)) }, [customFolders])
 
@@ -205,7 +203,7 @@ export default function Drawer({
       recordAppLaunch(app.packageId)
     }
     routeAppClick(app, { onNavigate, launchApp, onTriggerChronoLock, lockedApps, isVaultUnlocked })
-  }, [onNavigate, recordAppLaunch, onTriggerChronoLock, lockedApps, isVaultUnlocked])
+  }, [onNavigate, recordAppLaunch, onTriggerChronoLock, lockedApps, isVaultUnlocked, setActiveContextMenu])
 
   const handleToggleHomePlacement = useCallback((app) => {
     setInstalledApps(prev => prev.map(a =>
@@ -213,7 +211,7 @@ export default function Drawer({
     ))
     setToastText(`${app.label.toUpperCase()} ${app.isHome ? 'REMOVED FROM' : 'ADDED TO'} HOME`)
     setTimeout(() => setActiveContextMenu(null), 250)
-  }, [setInstalledApps, setToastText])
+  }, [setInstalledApps, setToastText, setActiveContextMenu])
 
   const handleClearAllHome = useCallback(() => {
     setInstalledApps(prev => prev.map(a => a.isHome ? { ...a, isHome: false } : a))

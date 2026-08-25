@@ -2,7 +2,6 @@ import { registerPlugin, Capacitor } from '@capacitor/core'
 
 // Register the custom native LauncherPlugin
 const NativeLauncher = registerPlugin('LauncherPlugin')
-const VpnBrowser = registerPlugin('IrisVpnBrowser')
 
 export const isNative = Capacitor.isNativePlatform()
 
@@ -357,6 +356,49 @@ export async function setVaultPackages(packages) {
   }
 }
 
+export async function authorizeVaultSession() {
+  if (isNative) {
+    try {
+      return await NativeLauncher.authorizeVaultSession()
+    } catch (e) {
+      console.error("Failed to authorize vault session", e)
+    }
+  }
+  return { authorized: true }
+}
+
+export async function revokeVaultSession() {
+  if (isNative) {
+    try {
+      return await NativeLauncher.revokeVaultSession()
+    } catch (e) {
+      console.error("Failed to revoke vault session", e)
+    }
+  }
+  return { revoked: true }
+}
+
+export async function isVaultSessionActive() {
+  if (isNative) {
+    try {
+      const res = await NativeLauncher.isVaultSessionActive()
+      return res?.active === true
+    } catch (e) {
+      return false
+    }
+  }
+  return true
+}
+
+export async function recordFailedVaultAttempt() {
+  if (!isNative) return { lockedOut: false, failedAttempts: 0, remainingLockoutMs: 0 }
+  try {
+    return await NativeLauncher.recordFailedVaultAttempt()
+  } catch (e) {
+    return { lockedOut: false, failedAttempts: 0, remainingLockoutMs: 0 }
+  }
+}
+
 export function addNotificationListener(callback) {
   if (isNative) {
     return NativeLauncher.addListener('onNotificationUpdated', callback)
@@ -621,32 +663,6 @@ export async function getSystemWallpaper() {
     }
   }
   return null
-}
-
-
-// ─── VPN Browser ─────────────────────────────────────────
-export async function startVpnBrowser(url = 'https://search.censys.io') {
-  if (isNative) {
-    try {
-      return await VpnBrowser.startVpnBrowser({ url })
-    } catch (e) {
-      console.error('Failed to start VPN browser:', e)
-      return { status: 'error', error: e.message }
-    }
-  }
-  return { status: 'web_unsupported' }
-}
-
-export async function stopVpnBrowser() {
-  if (isNative) {
-    try {
-      return await VpnBrowser.stopVpnBrowser()
-    } catch (e) {
-      console.error('Failed to stop VPN browser:', e)
-      return { status: 'error' }
-    }
-  }
-  return { status: 'web_unsupported' }
 }
 
 
@@ -1088,8 +1104,6 @@ export async function getDeviceSecurityPosture() {
       isAdbEnabled: false,
       isRootDetected: false,
       androidVersion: '14.0 (Web Simulation)',
-      sdkInt: 34,
-      securityPatch: '2024-08-01',
       deviceModel: 'IRIS Cybernetic Terminal',
       brand: 'IRIS'
     }
@@ -1101,5 +1115,3 @@ export async function getDeviceSecurityPosture() {
     return null
   }
 }
-
-

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { logNotification, authenticateBiometric } from './LauncherPlugin'
+import { logNotification, authenticateBiometric, authorizeVaultSession, recordFailedVaultAttempt } from './LauncherPlugin'
 import PinKeypad from './PinKeypad'
 import ChronoClockDial from './ChronoClockDial'
 import ThreatPhotoCapture from './ThreatPhotoCapture'
@@ -119,13 +119,11 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
             reason: "Authenticate to access Iris Vault",
             title: "Iris Security"
           })
-          setStatusState('GRANTED')
-          addLog("SYS: BIOMETRIC MATCH CONFIRMED!")
-          logNotification('BIOMETRIC', 'Access Granted: Fingerprint validation succeeded.', 'success')
+          addLog("SYS: BIOMETRIC IDENTITY CONFIRMED. ACCESS GRANTED.")
+          logNotification('BIOMETRIC', 'Access Granted via Biometric Scan', 'success')
           HapticFeedback.success()
-          setTimeout(() => {
-            if (onUnlockSuccess) onUnlockSuccess()
-          }, 1200)
+          await authorizeVaultSession()
+          if (mountedRef.current && onUnlockSuccess) onUnlockSuccess()
         } else {
           addLog("SYS: BIOMETRIC HARDWARE UNAVAILABLE. FALLING BACK TO PIN.")
           // Don't capture threat if hardware is just unavailable
@@ -155,11 +153,14 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     setLogs(prev => [...prev, `[${timestamp}] ${text}`])
   }
 
-  // Calculate dynamic active PINs based on clock (both 24h and 12h formats)
+  // Calculate dynamic active PINs based on clock + optional salt offset
   const getCorrectPins = () => {
-    const h24 = currentTime.getHours()
-    const minutes = String(currentTime.getMinutes()).padStart(2, '0')
-    
+    const rawOffset = parseInt(localStorage.getItem('iris_chrono_pin_offset') || '0', 10)
+    const offsetMinutes = isNaN(rawOffset) ? 0 : rawOffset
+    const targetDate = new Date(currentTime.getTime() + offsetMinutes * 60 * 1000)
+
+    const h24 = targetDate.getHours()
+    const minutes = String(targetDate.getMinutes()).padStart(2, '0')
     const h24Str = String(h24).padStart(2, '0')
     
     const h12 = h24 % 12
@@ -224,6 +225,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
         addLog("SYS: ACCESS GRANTED. UNLOCKING VAULT MATRIX INDICES.")
         logNotification('BIOMETRIC', 'Access Granted: Chrono-key validation succeeded.', 'success')
         HapticFeedback.success()
+        authorizeVaultSession()
         
         const unlockTimeout = setTimeout(() => {
           if (mountedRef.current && onUnlockSuccess) onUnlockSuccess()
@@ -237,6 +239,12 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
         logNotification('SECURITY', `Access Denied: Unrecognized passcode node: '${input}'`, 'warning')
         captureThreatPhoto()
         HapticFeedback.error()
+        recordFailedVaultAttempt().then(res => {
+          if (res && res.lockedOut) {
+            addLog(`SYS: [LOCKOUT] 5 CONSECUTIVE FAILURES. RATE-LIMIT LOCKOUT ACTIVE (30s).`)
+            logNotification('SECURITY', 'Vault locked out for 30s due to repeated failures.', 'error')
+          }
+        }).catch(() => {})
 
         const resetTimeout = setTimeout(() => {
           if (!mountedRef.current) return

@@ -278,6 +278,69 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
+    private static long vaultAuthTimestamp = 0;
+    private static String currentVaultToken = null;
+    private static int failedVaultAttempts = 0;
+    private static long vaultLockoutUntil = 0;
+    private static final long VAULT_SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+
+    public static boolean isVaultSessionActive() {
+        return (System.currentTimeMillis() - vaultAuthTimestamp) <= VAULT_SESSION_TIMEOUT_MS && currentVaultToken != null;
+    }
+
+    @PluginMethod
+    public synchronized void authorizeVaultSession(PluginCall call) {
+        if (System.currentTimeMillis() < vaultLockoutUntil) {
+            long remaining = vaultLockoutUntil - System.currentTimeMillis();
+            call.reject("Vault locked out. Please wait " + (remaining / 1000) + "s.");
+            return;
+        }
+        vaultAuthTimestamp = System.currentTimeMillis();
+        currentVaultToken = java.util.UUID.randomUUID().toString();
+        failedVaultAttempts = 0;
+        vaultLockoutUntil = 0;
+
+        JSObject ret = new JSObject();
+        ret.put("authorized", true);
+        ret.put("token", currentVaultToken);
+        ret.put("expiresInMs", VAULT_SESSION_TIMEOUT_MS);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public synchronized void recordFailedVaultAttempt(PluginCall call) {
+        failedVaultAttempts++;
+        if (failedVaultAttempts >= 5) {
+            vaultLockoutUntil = System.currentTimeMillis() + 30000;
+        }
+        JSObject ret = new JSObject();
+        boolean locked = System.currentTimeMillis() < vaultLockoutUntil;
+        ret.put("lockedOut", locked);
+        ret.put("failedAttempts", failedVaultAttempts);
+        ret.put("remainingLockoutMs", Math.max(0, vaultLockoutUntil - System.currentTimeMillis()));
+        call.resolve(ret);
+    }
+
+    public static synchronized void revokeVaultSessionStatic() {
+        vaultAuthTimestamp = 0;
+        currentVaultToken = null;
+    }
+
+    @PluginMethod
+    public void revokeVaultSession(PluginCall call) {
+        revokeVaultSessionStatic();
+        JSObject ret = new JSObject();
+        ret.put("revoked", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void isVaultSessionActive(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("active", isVaultSessionActive());
+        call.resolve(ret);
+    }
+
     public static Set<String> getVaultPackages() {
         return vaultPackages;
     }

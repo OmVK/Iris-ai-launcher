@@ -15,7 +15,7 @@ export function setContextMenuOpen(v) {
 function isOverlayActive() {
   try {
     const s = useAppStore.getState()
-    return !!(s.showArcSearch || s.showChronoLock || s.showVaultExplorer || s.showVpnBrowser || contextMenuOpen)
+    return !!(s.showArcSearch || s.showChronoLock || s.showVaultExplorer || contextMenuOpen)
   } catch {
     return contextMenuOpen
   }

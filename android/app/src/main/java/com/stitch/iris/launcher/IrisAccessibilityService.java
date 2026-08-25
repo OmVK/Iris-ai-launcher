@@ -19,8 +19,8 @@ public class IrisAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null) return;
-        // Track window content changes for recents screenshots
+        if (event == null || event.isPassword()) return;
+        // Track window content changes for recents task switching
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             try {
                 CharSequence pkg = event.getPackageName();

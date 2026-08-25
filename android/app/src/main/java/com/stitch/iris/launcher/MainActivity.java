@@ -14,7 +14,6 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(LauncherPlugin.class);
-        registerPlugin(IrisVpnBrowserPlugin.class);
         registerPlugin(IrisKeystorePlugin.class);
         registerPlugin(IrisGenAIPlugin.class);
         super.onCreate(savedInstanceState);
@@ -156,5 +155,11 @@ public class MainActivity extends BridgeActivity {
                 );
             }
         }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        LauncherPlugin.revokeVaultSessionStatic();
     }
 }

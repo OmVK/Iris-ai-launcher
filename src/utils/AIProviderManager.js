@@ -74,8 +74,19 @@ const checkCloud = async (backend) => {
   return { available: false, error: 'Unknown backend' }
 }
 
+export function getSanitizedOllamaEndpoint() {
+  const raw = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+  try {
+    const url = new URL(raw)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return url.origin
+    }
+  } catch {}
+  return 'http://localhost:11434'
+}
+
 const checkOllama = async () => {
-  const endpoint = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+  const endpoint = getSanitizedOllamaEndpoint()
   try {
     const res = await fetch(`${endpoint}/api/tags`, { signal: AbortSignal.timeout(5000) })
     if (res.ok) return { available: true, error: null }

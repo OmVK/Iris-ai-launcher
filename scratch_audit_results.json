@@ -1,9 +1,0 @@
-{
-  "totalJsFiles": 145,
-  "reachableCount": 142,
-  "unreachableFiles": [
-    "src/components/HomeScreenWidgetHost.jsx",
-    "src/workers/kokoroWorker.js",
-    "src/workers/piperWorker.js"
-  ]
-}

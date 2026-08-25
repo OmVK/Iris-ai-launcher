@@ -149,15 +149,15 @@ export default function SetupWizard({ onComplete }) {
 
   // Build the permission rows dynamically based on SDK version
   const permissionRows = [
-    { id: 'defaultLauncher', icon: 'home', label: 'Default Home OS', desc: 'Set IRIS as system launcher' },
-    { id: 'location', icon: 'my_location', label: 'GPS Telemetry', desc: 'Required for weather & radar' },
-    { id: 'mic', icon: 'mic', label: 'Audio Input', desc: 'Required for voice commands' },
-    { id: 'camera', icon: 'videocam', label: 'Optical Sensor', desc: 'Required for vision models' },
-    { id: 'storage', icon: 'folder_open', label: 'Storage Access', desc: 'Required for file system access' },
+    { id: 'defaultLauncher', icon: 'home', label: 'Default Home OS', desc: 'Set IRIS as system home launcher' },
+    { id: 'location', icon: 'my_location', label: 'GPS Telemetry', desc: 'Required for local weather station' },
+    { id: 'mic', icon: 'mic', label: 'Audio Input', desc: 'Voice assistant & hands-free triggers' },
+    { id: 'camera', icon: 'videocam', label: 'Optical Sensor', desc: 'Optics Vision AI & Vault threat alerts' },
+    { id: 'storage', icon: 'folder_open', label: 'Storage Access', desc: 'Secure files & custom wallpapers' },
   ];
   // Only show notification permission row for SDK 33+ (Android 13+)
   if (oemInfo.sdkVersion >= 33) {
-    permissionRows.push({ id: 'notifications', icon: 'notifications', label: 'Notifications', desc: 'Required for alerts (Android 13+)' });
+    permissionRows.push({ id: 'notifications', icon: 'notifications', label: 'Notifications', desc: 'Task reminders & launcher badges' });
   }
 
   return (

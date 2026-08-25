@@ -152,8 +152,8 @@ public class IrisNotificationListenerService extends NotificationListenerService
                         
                         if (title.isEmpty() && text.isEmpty()) continue;
 
-                        obj.put("title", title);
-                        obj.put("text", text);
+                        obj.put("title", sanitizePii(title));
+                        obj.put("text", sanitizePii(text));
                     }
                     jsonArray.put(obj);
                 }
@@ -162,6 +162,26 @@ public class IrisNotificationListenerService extends NotificationListenerService
             Log.e(TAG, "Error getting active notifications", e);
         }
         return jsonArray;
+    }
+
+    public static String sanitizePii(String input) {
+        if (input == null || input.isEmpty()) return "";
+        // 1. Scrub OTPs & authentication codes
+        String sanitized = input.replaceAll("(?i)\\b(?:otp|code|pin|verification|auth|password|passcode)\\s*[:=-]?\\s*\\d{4,8}\\b", "[PROTECTED_OTP]");
+        // 2. Scrub standalone 6-digit verification codes
+        sanitized = sanitized.replaceAll("\\b\\d{3}[-\\s]\\d{3}\\b", "[SECURE_CODE]");
+        // 3. Scrub credit card / payment account sequences
+        sanitized = sanitized.replaceAll("\\b(?:\\d[ -]*?){13,19}\\b", "[CONFIDENTIAL_ACCOUNT]");
+        // 4. Scrub email addresses
+        sanitized = sanitized.replaceAll("(?i)[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "[REDACTED_EMAIL]");
+        // 5. Scrub international phone numbers
+        sanitized = sanitized.replaceAll("(?i)(\\+?\\d{1,3}[- .]?)?\\(?\\d{3}\\)?[- .]?\\d{3}[- .]?\\d{4}", "[REDACTED_PHONE]");
+        // 6. Scrub crypto addresses (Ethereum / Bitcoin)
+        sanitized = sanitized.replaceAll("\\b0x[a-fA-F0-9]{40}\\b", "[CRYPTO_ADDR]");
+        sanitized = sanitized.replaceAll("\\b(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}\\b", "[CRYPTO_ADDR]");
+        // 7. Scrub UPI IDs
+        sanitized = sanitized.replaceAll("(?i)[a-zA-Z0-9.\\-_]{2,256}@[a-zA-Z]{2,64}", "[UPI_HANDLE]");
+        return sanitized;
     }
 
     public void dismissNotification(String key) {

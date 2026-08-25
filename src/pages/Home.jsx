@@ -44,8 +44,8 @@ export default function Home({
   const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, homePages, activeHomePage, setActiveHomePage, homeScreenFolders, setHomeScreenFolders, iconShape } = useThemeStore()
   
   const [showOfflineAssistant, setShowOfflineAssistant] = useState(false)
-  const [assistantState, setAssistantState] = useState({ isListening: false, isProcessing: false })
-  const [sysStats, setSysStats] = useState({ memTotal: 0, memUsed: 0, memAvailable: 0, cpuTemp: 35.0 })
+  const [, setAssistantState] = useState({ isListening: false, isProcessing: false })
+  const [, setSysStats] = useState({ memTotal: 0, memUsed: 0, memAvailable: 0, cpuTemp: 35.0 })
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
 
   const {
@@ -148,7 +148,7 @@ export default function Home({
     }
 
     routeAppClick(app, { onTriggerChronoLock, onTriggerVault, onNavigate, launchApp, lockedApps, isVaultUnlocked })
-  }, [activeContextMenu, onTriggerChronoLock, onTriggerVault, onNavigate, lockedApps, isVaultUnlocked])
+  }, [activeContextMenu, onTriggerChronoLock, onTriggerVault, onNavigate, lockedApps, isVaultUnlocked, setActiveContextMenu])
 
   const handleRemoveFromHome = (app) => {
     setInstalledApps(prev => prev.map(a => a.packageId === app.packageId ? { ...a, isHome: false } : a))
@@ -166,13 +166,14 @@ export default function Home({
     homeTextSize,
     gridColumns,
     gridRows,
+    iconShape,
     tilt,
     handleAppClick,
     handleContextMenu,
     IRIS_ICON_PACK,
     HudIcon,
     HudFallbackIcon
-  }), [installedApps, lockedApps, isVaultUnlocked, globalIconTheme, showAppLabels, homeIconSize, homeTextSize, gridColumns, gridRows, tilt, handleAppClick, handleContextMenu])
+  }), [installedApps, lockedApps, isVaultUnlocked, globalIconTheme, showAppLabels, homeIconSize, homeTextSize, gridColumns, gridRows, iconShape, tilt, handleAppClick, handleContextMenu])
 
   const homeApps = useMemo(() => {
     return installedApps.filter(app => app.isHome !== false).slice(0, gridColumns * gridRows * homePages)
