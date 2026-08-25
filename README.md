@@ -26,12 +26,6 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 | Vite | 5 |
 | Capacitor | 8 (Android) |
 
-## 📱 App Info
-
-- **Version**: 5.0.0
-- **App ID**: `com.stitch.iris.launcher`
-- **Platform**: Android (Capacitor 8)
-- **Target SDK**: 36 (Android 14+)
 
 ## ⚡ v5.0.0 Hardened Security & Cybernetic Edition
 
