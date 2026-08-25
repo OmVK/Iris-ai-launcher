@@ -1,5 +1,5 @@
 # IRIS Cybernetic AI Launcher — System & Security Audit Ledger
-**Version**: 5.0.0  
+**Version**: 5.1.0  
 **App ID**: `com.stitch.iris.launcher`  
 **Last Audit Date**: 2026-08-25  
 **Audit Status**: Verified Clean (0 Build Errors, 0 Lint Errors)
