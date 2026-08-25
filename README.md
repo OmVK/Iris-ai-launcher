@@ -62,11 +62,6 @@ npm run lint
 npm run deploy:android
 ```
 
-cd android && ./gradlew assembleRelease
-```
-
-The release keystore (`android/app/release.keystore`) is gitignored. Build outputs land in `android/app/build/outputs/apk/`.
-
 ## 🏗️ Project Structure
 
 ```
