@@ -28,12 +28,12 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.1.0
+- **Version**: 5.2.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
 
-## ⚡ v5.1.0 Hardened Security & Cybernetic Edition
+## ⚡ v5.2.0 Hardened Security & Cybernetic Edition
 
 IRIS v5.0.0 delivers comprehensive cryptographic, privacy, and architectural enhancements:
 - **On-Device Notification PII Redaction**: Automatic real-time regex sanitization in `IrisNotificationListenerService.java` redacting OTPs, 2FA codes, account tokens, credit cards, emails, phone numbers, crypto addresses, and UPI IDs before dispatch.
