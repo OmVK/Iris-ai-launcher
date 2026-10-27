@@ -24,10 +24,10 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
             key={app.id}
             onClick={(e) => onAppClick(e, app)}
             onContextMenu={(e) => onContextMenu(e, app)}
-            className="app-icon-item bg-slate-900/60 border border-white/10 rounded-2xl p-3.5 flex flex-col gap-3 cursor-pointer group hover:bg-slate-800/80 hover:border-primary-fixed-dim/40 shadow-xl transition-all select-none"
+            className="app-icon-item bg-white/[0.04] backdrop-blur-md border border-white/10 rounded-2xl p-3.5 flex flex-col gap-3 cursor-pointer group hover:bg-white/[0.08] hover:border-primary-fixed-dim/40 shadow-xl transition-all select-none"
           >
             {/* App Preview Area */}
-            <div className="w-full aspect-square rounded-xl bg-black/40 border border-white/5 p-2 flex items-center justify-center overflow-hidden">
+            <div className="w-full aspect-square rounded-xl bg-white/[0.03] border border-white/5 p-2 flex items-center justify-center overflow-hidden">
               {appCount === 0 ? (
                 <div className="flex flex-col items-center justify-center text-white/20">
                   <span className="material-symbols-outlined text-3xl mb-1">folder_open</span>

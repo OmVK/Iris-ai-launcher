@@ -3,7 +3,7 @@ import DrawerIcon from './DrawerIcon'
 
 function DrawerList({ filteredApps, drawerIconSize, drawerTextSize, globalIconTheme, onContextMenu, onAppClick, iconShape = 'system' }) {
   return (
-    <div className="max-w-xl mx-auto mt-6 flex flex-col gap-2 bg-black/10 rounded-xl border border-outline-variant/15 p-2 font-mono-data">
+    <div className="max-w-xl mx-auto mt-6 flex flex-col gap-2 bg-transparent rounded-xl border border-outline-variant/15 p-2 font-mono-data">
       {filteredApps.map((app) => {
         const iconSize = 40 * (drawerIconSize / 100)
         return (

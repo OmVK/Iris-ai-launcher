@@ -132,6 +132,16 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
 
   const abortRef = useRef(null)
   const searchTimeoutRef = useRef(null)
+  const onLaunchAppRef = useRef(onLaunchApp)
+  const onNavigateRef = useRef(onNavigate)
+  const queryRef = useRef(query)
+  queryRef.current = query
+  const performSearchRef = useRef(null)
+
+  useEffect(() => {
+    onLaunchAppRef.current = onLaunchApp
+    onNavigateRef.current = onNavigate
+  }, [onLaunchApp, onNavigate])
 
   useEffect(() => {
     return () => {
@@ -154,12 +164,12 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
           fuzzyMatch(q, app.packageId) * 0.8,
           app.label.toLowerCase().startsWith(q.toLowerCase()) ? 200 : 0
         ),
-        action: () => onLaunchApp?.(app),
+        action: () => onLaunchAppRef.current?.(app),
       }))
       .filter(r => r.score > 0)
       .sort((a, b) => b.score - a.score)
     return scored.slice(0, 6)
-  }, [installedApps, onLaunchApp])
+  }, [installedApps])
 
   const searchSettings = useCallback((q) => {
     if (!q) return []
@@ -172,11 +182,11 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
         sublabel: 'System Setting',
         icon: s.icon,
         score: fuzzyMatch(q, s.label),
-        action: () => onNavigate?.('settings'),
+        action: () => onNavigateRef.current?.('settings'),
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
-  }, [onNavigate])
+  }, [])
 
   const searchWeb = useCallback((q) => {
     if (!q) return []
@@ -191,10 +201,10 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     }]
   }, [])
 
-  const searchContacts = useCallback(async (q) => {
-    if (!q || !isExpandedSearch) return []
+  const searchContacts = useCallback(async (q, force = false) => {
+    if (!q || (!isExpandedSearch && !force)) return []
     
-    // Auto-request permission if expanded search is used
+    // Auto-request permission if expanded search is used or forced by command
     const perm = await checkAndRequestPermission('READ_CONTACTS')
     if (!perm.granted) return []
 
@@ -257,6 +267,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
       setCalculatorResult(null)
       setUnitResult(null)
       setIsSearching(false)
+      setActiveSource('all')
       return
     }
 
@@ -275,7 +286,14 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
         const potentialCommand = parts[0].toLowerCase()
         const availableCommands = ['/contact', '/calculator', '/unit', '/files', '/search']
         
-        if (availableCommands.includes(potentialCommand) && (parts.length > 1 || q.endsWith(' '))) {
+        const isDirectCommand = availableCommands.includes(potentialCommand) && (
+          parts.length > 1 || 
+          q.endsWith(' ') || 
+          potentialCommand === '/calculator' || 
+          potentialCommand === '/unit'
+        )
+
+        if (isDirectCommand) {
           command = potentialCommand.substring(1)
           actualQuery = parts.slice(1).join(' ')
           setActiveSource(command)
@@ -302,11 +320,15 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
 
       if (command === 'calculator') {
         // Handled entirely by UI
+        setResults([])
+        setIsSearching(false)
         return
       }
 
       if (command === 'unit') {
         // Handled entirely by UI
+        setResults([])
+        setIsSearching(false)
         return
       }
 
@@ -338,7 +360,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
       if (!command || command === 'all' || command === 'contact') {
         // If /contact, force search Contacts even if isExpandedSearch is false
         if (command === 'contact' || isExpandedSearch) {
-          const contactResults = await searchContacts(actualQuery)
+          const contactResults = await searchContacts(actualQuery, command === 'contact')
           allResults.push(...contactResults)
         }
       }
@@ -361,9 +383,25 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     }
   }, [searchApps, searchSettings, searchWeb, searchContacts, isExpandedSearch, searchFiles])
 
+  performSearchRef.current = performSearch
+
+  const prevAppsRef = useRef(installedApps)
+  useEffect(() => {
+    if (prevAppsRef.current !== installedApps) {
+      prevAppsRef.current = installedApps
+      if (queryRef.current && performSearchRef.current) {
+        performSearchRef.current(queryRef.current)
+      }
+    }
+  }, [installedApps])
+
   const handleQueryChange = useCallback((newQuery) => {
     setQuery(newQuery)
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    if (!newQuery || newQuery.trim().length === 0) {
+      performSearch('')
+      return
+    }
     searchTimeoutRef.current = setTimeout(() => {
       performSearch(newQuery)
     }, 150)
@@ -374,6 +412,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     setResults([])
     setCalculatorResult(null)
     setUnitResult(null)
+    setActiveSource('all')
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
   }, [])
 

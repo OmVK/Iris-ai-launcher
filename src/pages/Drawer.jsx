@@ -180,6 +180,12 @@ export default function Drawer({
     if (dy > 12 && dx < dy * 1.5 && swipeStartPos.current.scrollTop <= 5) {
       drawerSheetRef.current.style.transition = 'none'
       drawerSheetRef.current.style.transform = `translate3d(0, ${Math.max(0, dy)}px, 0)`
+      const mainEl = document.querySelector('main')
+      if (mainEl) {
+        const vh = window.innerHeight || 800
+        const progress = Math.min(1, Math.max(0, dy / (vh * 0.4)))
+        mainEl.style.opacity = `${progress.toFixed(2)}`
+      }
     }
   }
 
@@ -199,11 +205,23 @@ export default function Drawer({
           drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
           drawerSheetRef.current.style.pointerEvents = 'none'
         }
+        const mainEl = document.querySelector('main')
+        if (mainEl) {
+          mainEl.style.transition = 'opacity 240ms cubic-bezier(0.16, 1, 0.3, 1)'
+          mainEl.style.opacity = '1'
+          mainEl.style.pointerEvents = 'auto'
+        }
         onNavigate('home')
       } else {
         if (drawerSheetRef?.current) {
           drawerSheetRef.current.style.transition = 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)'
           drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
+        }
+        const mainEl = document.querySelector('main')
+        if (mainEl) {
+          mainEl.style.transition = 'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1)'
+          mainEl.style.opacity = '0'
+          mainEl.style.pointerEvents = 'none'
         }
       }
     }
@@ -260,8 +278,7 @@ export default function Drawer({
   }, [setInstalledApps, setToastText])
 
   return (
-    <div className="relative flex-1 flex flex-col h-[100lvh] min-h-0 overflow-hidden">
-      <div className="fixed inset-0 -z-10 bg-gradient-to-b from-black/35 via-transparent to-black/45 pointer-events-none" />
+    <div className="relative flex-1 flex flex-col h-[100lvh] min-h-0 overflow-hidden bg-transparent">
 
       <div
         ref={scrollRef}

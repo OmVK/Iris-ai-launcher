@@ -28,10 +28,26 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.3.0
+- **Version**: 5.4.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
+
+## ⚡ v5.4.0 Dynamic Notification Notch, Quick Search & Transparent Drawer Edition
+
+IRIS v5.4.0 introduces live notification expansion, app-color glows, permanent notification archiving, deep search quick chips, and a fully transparent app drawer:
+- **Dynamic Notification Island & Signature Glow**:
+  - The top notch dynamically expands into an interactive notification pill upon receiving notifications, displaying app badges, sender headers, and message previews.
+  - Features real-time app-signature illumination across both the notch and the bottom dock (WhatsApp green, Messenger blue, Telegram cyan, Gmail red).
+- **Permanent Notification Archive ("Even if Deleted")**:
+  - Automatically intercepts and preserves notification history locally, accessible via Zero Screen and the 3-tab notch carousel with instant search, category filtering, and direct app launching.
+- **Three-Tab Expanded Notch Carousel**:
+  - Seamless bidirectional swipe navigation between `SYS TELEMETRY`, `ZERO SCREEN`, and `NOTIF LOG`.
+- **ArcSearch Quick Action Chips & Collapsible Favorites**:
+  - Instant one-tap chips (`ALL`, `CALC`, `UNITS`, `CONTACTS`, `FILES`, `WEB`, `DEEP SEARCH`) below the search bar.
+  - Collapsible favorite apps pull-down accordion with smooth spring animations.
+- **Fully Transparent App Drawer**:
+  - Removed dark gradient backdrops for complete wallpaper visibility; integrated smooth cross-fading of home screen icons during drawer gestures.
 
 ## ⚡ v5.3.0 Cybernetic HUD & Dynamic Island Edition
 

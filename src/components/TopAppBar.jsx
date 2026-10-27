@@ -27,8 +27,11 @@ const CONDITION_ICONS = {
 }
 
 import { useThemeStore } from '../stores/themeStore'
+import { useNotificationStore } from '../stores/notificationStore'
 import CondensedZeroScreen from './CondensedZeroScreen'
 import CondensedTelemetry from './CondensedTelemetry'
+import CondensedNotifLog from './CondensedNotifLog'
+import { launchApp } from './LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
 
 const PROFILE_PRESETS = {
@@ -55,6 +58,7 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
   const { isListening, isSpeaking } = useAssistantStore()
   const { totalUnread } = useBadgeStore()
   const { islandProfile, islandWidthScale, islandHeightScale, islandTopMargin } = useThemeStore()
+  const { activeNotification, activeGlow, dismissActive, history } = useNotificationStore()
 
   const preset = PROFILE_PRESETS[islandProfile] || PROFILE_PRESETS.AUTO
   const collapsedWidth = Math.round(preset.baseWidth * (islandWidthScale / 100))
@@ -159,7 +163,8 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
   const startCollapseTimer = useCallback(() => {
     if (autoExpand) return // Handled by auto-expand effect
     if (collapseTimer.current) clearTimeout(collapseTimer.current)
-    collapseTimer.current = setTimeout(() => setExpanded(false), expandedTab === 'zero_screen' ? 15000 : 5000)
+    const timeout = (expandedTab === 'zero_screen' || expandedTab === 'notif_log') ? 25000 : 8000
+    collapseTimer.current = setTimeout(() => setExpanded(false), timeout)
   }, [autoExpand, expandedTab])
 
   useEffect(() => {
@@ -210,12 +215,14 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
     const dy = t.clientY - touchStartRef.current.y
     startCollapseTimer()
 
-    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
-      if (dx < 0 && expandedTab === 'telemetry') {
-        setExpandedTab('zero_screen')
+    const tabList = ['telemetry', 'zero_screen', 'notif_log']
+    if (Math.abs(dx) > 25 && Math.abs(dx) > Math.abs(dy)) {
+      const idx = tabList.indexOf(expandedTab)
+      if (dx < 0 && idx < tabList.length - 1) {
+        setExpandedTab(tabList[idx + 1])
         HapticFeedback.light()
-      } else if (dx > 0 && expandedTab === 'zero_screen') {
-        setExpandedTab('telemetry')
+      } else if (dx > 0 && idx > 0) {
+        setExpandedTab(tabList[idx - 1])
         HapticFeedback.light()
       }
     } else if (dy < -35 && Math.abs(dy) > Math.abs(dx)) {
@@ -234,7 +241,18 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
   let glowColor = 'rgba(0, 0, 0, 0.4)'
   let borderColor = 'rgba(255, 255, 255, 0.08)'
-  if (isListening) {
+
+  const isPoppingNotif = !!activeNotification && !expanded
+  const notifWidth = Math.min(typeof window !== 'undefined' ? window.innerWidth - 24 : 360, 360)
+  const notifHeight = 72
+
+  if (isPoppingNotif && activeGlow) {
+    glowColor = activeGlow.glow
+    borderColor = activeGlow.color
+  } else if (activeGlow) {
+    glowColor = activeGlow.glow
+    borderColor = activeGlow.color
+  } else if (isListening) {
     glowColor = 'rgba(168, 85, 247, 0.85)'
     borderColor = 'rgba(168, 85, 247, 0.9)'
   } else if (isSpeaking) {
@@ -252,10 +270,10 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
   // Expanded dimensions
   const expWidth = 360
-  const expHeight = expandedTab === 'zero_screen' ? 310 : 215
+  const expHeight = expandedTab === 'zero_screen' ? 310 : expandedTab === 'notif_log' ? 290 : 215
 
-  const activeWidth = expanded ? expWidth : (isAiActive ? Math.max(collapsedWidth, 240) : collapsedWidth)
-  const activeHeight = expanded ? expHeight : (isAiActive ? Math.max(collapsedHeight, 40) : collapsedHeight)
+  const activeWidth = expanded ? expWidth : isPoppingNotif ? notifWidth : (isAiActive ? Math.max(collapsedWidth, 240) : collapsedWidth)
+  const activeHeight = expanded ? expHeight : isPoppingNotif ? notifHeight : (isAiActive ? Math.max(collapsedHeight, 40) : collapsedHeight)
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ paddingTop: `${computedTopMargin}px` }}>
@@ -272,10 +290,12 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
           border: isAiActive ? undefined : `1px solid ${borderColor}`,
           boxShadow: isAiActive
             ? undefined
-            : (expanded ? `0 10px 40px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)` : `0 4px 12px ${glowColor}`),
+            : (isPoppingNotif && activeGlow
+              ? `0 10px 40px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}, inset 0 1px 0 rgba(255, 255, 255, 0.18)`
+              : (expanded ? `0 10px 40px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)` : `0 4px 12px ${glowColor}`)),
           width: activeWidth,
           height: activeHeight,
-          borderRadius: expanded ? 28 : Math.round(activeHeight * 0.55),
+          borderRadius: expanded ? 28 : isPoppingNotif ? 24 : Math.round(activeHeight * 0.55),
         }}
       >
         {isAiActive && (
@@ -284,13 +304,79 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
             <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-400 via-purple-500 to-emerald-400 shadow-[0_0_14px_#a855f7] animate-pulse" />
           </>
         )}
+
+        {/* Active Notification Banner State (Pops when notification arrives) */}
+        {isPoppingNotif && (
+          <div 
+            onClick={() => {
+              HapticFeedback.light()
+              if (activeNotification.packageId) {
+                launchApp(activeNotification.packageId)
+              }
+              dismissActive()
+            }}
+            className="absolute inset-0 flex items-center justify-between px-3 py-2 cursor-pointer z-20 animate-in fade-in zoom-in-95 duration-200 select-none"
+          >
+            {/* Top accent glow line in app color */}
+            <div 
+              className="absolute top-0 left-0 right-0 h-[2px] animate-pulse" 
+              style={{ backgroundColor: activeNotification.color, boxShadow: `0 0 14px ${activeNotification.color}` }}
+            />
+
+            <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1.5">
+              {/* App Icon / Badge */}
+              <div 
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border shadow-md transition-transform active:scale-95"
+                style={{
+                  backgroundColor: `${activeNotification.color}22`,
+                  borderColor: `${activeNotification.color}66`,
+                  color: activeNotification.color
+                }}
+              >
+                <span className="material-symbols-outlined text-lg">{activeNotification.icon || 'notifications'}</span>
+              </div>
+
+              {/* Sender & Text */}
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <div className="flex items-center gap-1.5 leading-tight">
+                  <span 
+                    className="text-[9.5px] font-bold uppercase tracking-wider truncate"
+                    style={{ color: activeNotification.color }}
+                  >
+                    {activeNotification.appName}
+                  </span>
+                  <span className="text-[7.5px] text-white/40">•</span>
+                  <span className="text-[10px] font-semibold text-white/95 truncate">
+                    {activeNotification.title}
+                  </span>
+                </div>
+                <p className="text-[10px] text-white/80 truncate font-sans mt-0.5 leading-normal">
+                  {activeNotification.text}
+                </p>
+              </div>
+            </div>
+
+            {/* Right Controls */}
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[8px] font-mono text-white/40 pr-0.5">{activeNotification.time}</span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); HapticFeedback.selection(); dismissActive() }}
+                className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-colors"
+                title="Dismiss"
+              >
+                <span className="material-symbols-outlined text-xs">close</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Collapsed State */}
         <div 
           onClick={handleToggle}
           className={`absolute inset-0 flex items-center justify-center cursor-pointer transition-all ${
-            expanded ? 'opacity-0 scale-95 duration-200 pointer-events-none' : 'opacity-100 scale-100 duration-300 delay-200'
+            expanded || isPoppingNotif ? 'opacity-0 scale-95 duration-200 pointer-events-none' : 'opacity-100 scale-100 duration-300 delay-200'
           }`}
-          style={{ pointerEvents: expanded ? 'none' : 'auto' }}
+          style={{ pointerEvents: expanded || isPoppingNotif ? 'none' : 'auto' }}
         >
           <div className="px-3 flex items-center justify-between" style={{ width: `${activeWidth}px`, height: `${activeHeight}px` }}>
             {autoExpand ? (
@@ -357,6 +443,18 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
                   <span className="w-1.5 h-1.5 rounded-full bg-[#ff007f] animate-pulse" />
                   ZERO SCREEN
                 </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setExpandedTab('notif_log'); HapticFeedback.light() }}
+                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center gap-1 ${
+                    expandedTab === 'notif_log'
+                      ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                      : 'text-white/40 hover:text-white/70'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[10px]">mark_email_unread</span>
+                  ARCHIVE ({history.length})
+                </button>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
@@ -373,10 +471,16 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
             {/* Sliding Carousel of Tabs */}
             <div className="flex-1 w-full overflow-hidden relative min-h-0" onClick={(e) => e.stopPropagation()}>
               <div 
-                className="flex w-[200%] h-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                style={{ transform: expandedTab === 'zero_screen' ? 'translateX(-50%)' : 'translateX(0%)' }}
+                className="flex w-[300%] h-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                style={{ 
+                  transform: expandedTab === 'zero_screen' 
+                    ? 'translateX(-33.333%)' 
+                    : expandedTab === 'notif_log' 
+                      ? 'translateX(-66.666%)' 
+                      : 'translateX(0%)' 
+                }}
               >
-                <div className="w-1/2 h-full pr-2 flex flex-col justify-between">
+                <div className="w-1/3 h-full pr-2 flex flex-col justify-between">
                   <CondensedTelemetry
                     weather={weather}
                     weatherIcon={weatherIcon}
@@ -389,8 +493,11 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
                     totalUnread={totalUnread}
                   />
                 </div>
-                <div className="w-1/2 h-full pl-2">
+                <div className="w-1/3 h-full px-2">
                   <CondensedZeroScreen onNavigate={onNavigate} onClose={() => setExpanded(false)} />
+                </div>
+                <div className="w-1/3 h-full pl-2">
+                  <CondensedNotifLog onClose={() => setExpanded(false)} />
                 </div>
               </div>
             </div>

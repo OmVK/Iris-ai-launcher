@@ -54,9 +54,9 @@ export default function HomeGrid({
                 transform: `translateZ(10px)`,
                 boxShadow: '0 4px 16px rgba(var(--primary-rgb), 0.22), 0 0 8px rgba(var(--primary-rgb), 0.08)'
               }}
-              className="flex items-center justify-center border transition-[background-color,border-color] duration-200 icon-theme-${globalIconTheme.toLowerCase()} border-primary-fixed-dim/20 glass-icon-container app-icon-hover-effect"
+              className={`flex items-center justify-center border transition-[background-color,border-color] duration-200 icon-theme-${(globalIconTheme || 'default').toLowerCase()} border-primary-fixed-dim/20 glass-icon-container app-icon-hover-effect`}
             >
-              {app.icon && typeof app.icon === 'string' && app.icon.startsWith('data:') ? (
+              {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
                 <img
                   src={app.icon}
                   loading="lazy"

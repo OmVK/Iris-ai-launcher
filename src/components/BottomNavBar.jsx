@@ -1,11 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useThemeStore } from '../stores/themeStore'
 import { useAssistantStore } from '../stores/assistantStore'
+import { useNotificationStore } from '../stores/notificationStore'
 import HapticFeedback from '../utils/HapticFeedback'
 
 export default function BottomNavBar({ activePage, setActivePage, showAppLabels = true }) {
   const { dockColumns, dockBackground } = useThemeStore()
   const { isListening, isSpeaking } = useAssistantStore()
+  const { activeGlow } = useNotificationStore()
   const [collapsed, setCollapsed] = useState(false)
   const collapseTimer = useRef(null)
   const navRef = useRef(null)
@@ -157,17 +159,32 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
           className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
         style={{
           ...getDockBgStyle(),
-          border: isAiActive ? undefined : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)'),
+          border: isAiActive
+            ? undefined
+            : (activeGlow
+              ? `1px solid ${activeGlow.color}`
+              : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)')),
           boxShadow: isAiActive
             ? undefined
-            : (dockBackground === 'none' ? 'none' : (collapsed
-              ? '0 -2px 12px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
-              : '0 -4px 24px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)')),
+            : (activeGlow
+              ? `0 -4px 30px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}, inset 0 1px 0 rgba(255, 255, 255, 0.2)`
+              : (dockBackground === 'none' ? 'none' : (collapsed
+                ? '0 -2px 12px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
+                : '0 -4px 24px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)'))),
           width: collapsed ? colWidth : expWidth,
           height: collapsed ? colHeight : expHeight,
           borderRadius: collapsed ? 20 : 34,
         }}
       >
+        {activeGlow && (
+          <div 
+            className="absolute top-0 left-0 right-0 h-[2px] animate-pulse z-10" 
+            style={{ 
+              backgroundColor: activeGlow.color, 
+              boxShadow: `0 0 16px ${activeGlow.color}` 
+            }} 
+          />
+        )}
         {isAiActive && (
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-purple-500 via-emerald-400 to-purple-500 shadow-[0_0_14px_#34d399] animate-pulse" />
         )}

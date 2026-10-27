@@ -2,6 +2,9 @@ import { useEffect } from 'react'
 import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, dismissNotification, addPackageChangeListener } from '../components/LauncherPlugin'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { useAppStore } from '../stores/appStore'
+import { useAppsStore } from '../stores/appsStore'
+import useBadgeStore from '../stores/badgeStore'
+import { useNotificationStore } from '../stores/notificationStore'
 
 export default function useAppEffects({ isAppActive, setIsAppActive, setShowChronoLock, setShowVaultExplorer, setIsVaultUnlocked, setShowLiveConfigModal, setActivePage, loadNativeApps, lockedApps, fullscreenActive, isVaultUnlocked, powerSaveMode }) {
   useEffect(() => { setVaultPackages(lockedApps) }, [lockedApps])
@@ -129,15 +132,41 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
   }, [])
 
   useEffect(() => {
-    const listener = addNotificationListener((notif) => {
+    const listener = addNotificationListener((data) => {
       try {
-        const pkg = notif.packageId || notif.packageName
-        if (!pkg) return
-        const locked = useAppStore.getState().lockedApps
-        if (Array.isArray(locked) && locked.includes(pkg)) {
-          dismissNotification(notif.key || notif.id)
+        if (!data) return
+
+        if (data.badgeCounts || data.totalUnread !== undefined) {
+          useBadgeStore.getState().setBadgeData(data)
         }
-      } catch (e) { console.error("Failed to process Vault notification intercept:", e) }
+
+        const rawList = Array.isArray(data.notifications)
+          ? data.notifications
+          : (data.packageId ? [data] : [])
+
+        const locked = useAppStore.getState().lockedApps || []
+        const installed = useAppsStore?.getState?.()?.installedApps || []
+
+        for (const notif of rawList) {
+          const pkg = notif.packageId || notif.packageName
+          if (!pkg) continue
+
+          if (Array.isArray(locked) && locked.includes(pkg)) {
+            dismissNotification(notif.key || notif.id)
+            continue
+          }
+
+          const matchedApp = installed.find(a => (a.packageId === pkg || a.id === pkg))
+          const appName = matchedApp?.label || matchedApp?.name || notif.appName || ''
+
+          useNotificationStore.getState().recordNotification({
+            ...notif,
+            appName
+          })
+        }
+      } catch (e) {
+        console.error("Failed to process notification update:", e)
+      }
     })
     return () => { if (listener && typeof listener.remove === 'function') listener.remove() }
   }, [])

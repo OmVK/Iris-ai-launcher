@@ -188,6 +188,11 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
             drawerSheetRef.current.style.transition = 'none'
             drawerSheetRef.current.style.transform = `translate3d(0, ${currentTranslate}px, 0)`
             drawerSheetRef.current.style.pointerEvents = 'auto'
+            const mainEl = document.querySelector('main')
+            if (mainEl) {
+              const progress = Math.min(1, Math.max(0, -deltaY / (vh * 0.4)))
+              mainEl.style.opacity = `${(1 - progress).toFixed(2)}`
+            }
           }
         }
       }
@@ -226,6 +231,12 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
             HapticFeedback.light()
             drawerSheetRef.current.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
             drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
+            const mainEl = document.querySelector('main')
+            if (mainEl) {
+              mainEl.style.transition = 'opacity 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+              mainEl.style.opacity = '0'
+              mainEl.style.pointerEvents = 'none'
+            }
             setActivePage('drawer')
             touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
             initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
@@ -234,6 +245,12 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
             drawerSheetRef.current.style.transition = 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)'
             drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
             drawerSheetRef.current.style.pointerEvents = 'none'
+            const mainEl = document.querySelector('main')
+            if (mainEl) {
+              mainEl.style.transition = 'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1)'
+              mainEl.style.opacity = '1'
+              mainEl.style.pointerEvents = 'auto'
+            }
           }
         }
       }

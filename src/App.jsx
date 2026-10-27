@@ -66,14 +66,23 @@ export default function App() {
 
   useEffect(() => {
     if (!drawerSheetRef.current) return
+    const mainEl = document.querySelector('main')
     if (activePage === 'drawer') {
       drawerSheetRef.current.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
       drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
       drawerSheetRef.current.style.pointerEvents = 'auto'
+      if (mainEl) {
+        mainEl.style.opacity = '0'
+        mainEl.style.pointerEvents = 'none'
+      }
     } else {
       drawerSheetRef.current.style.transition = 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)'
       drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
       drawerSheetRef.current.style.pointerEvents = 'none'
+      if (mainEl) {
+        mainEl.style.opacity = '1'
+        mainEl.style.pointerEvents = 'auto'
+      }
     }
   }, [activePage])
 
@@ -230,7 +239,7 @@ export default function App() {
       <ArcSearch isOpen={showArcSearch} onClose={() => setShowArcSearch(false)} installedApps={installedApps} launchApp={handleLaunchApp} activePage={activePage} setActivePage={setActivePage} globalIconTheme={globalIconTheme} />
       <TaskAlarmOverlay setActivePage={setActivePage} />
       <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} onNavigate={setActivePage} />
-      <main className="flex-1 flex flex-col overflow-hidden min-h-0 relative z-10">
+      <main className={`flex-1 flex flex-col overflow-hidden min-h-0 relative z-10 transition-opacity duration-260 ${activePage === 'drawer' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <div key={activePage === 'drawer' ? 'home' : activePage} className={`page-transition-container effect-${pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.16, 1, 0.3, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.56, 0.64, 1)' : 'cubic-bezier(0.16, 1, 0.3, 1)' }}>
           <Suspense fallback={<div className="flex items-center justify-center h-full"><span className="material-symbols-outlined text-primary-fixed-dim animate-pulse text-3xl">hourglass_empty</span></div>}>
             {renderActivePage()}
@@ -239,7 +248,7 @@ export default function App() {
       </main>
       <div
         ref={drawerSheetRef}
-        className="fixed inset-0 z-30 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] translate-y-full pointer-events-none"
+        className="fixed inset-0 z-30 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] translate-y-full pointer-events-none bg-transparent"
         style={{ willChange: 'transform' }}
       >
         <Drawer
