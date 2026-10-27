@@ -57,9 +57,25 @@ export default function useStockData({ ticker1, ticker2 }) {
         }
       } else {
         const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=15d`
-        const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`, { signal })
-        const proxyJson = await proxyRes.json()
-        const parsed = JSON.parse(proxyJson.contents)
+        let parsed = null
+        try {
+          const directRes = await fetch(yfUrl, { signal, headers: { 'Accept': 'application/json' } })
+          if (directRes.ok) {
+            parsed = await directRes.json()
+          }
+        } catch (_) {}
+
+        if (!parsed || !parsed.chart?.result?.[0]) {
+          try {
+            const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`, { signal })
+            const proxyJson = await proxyRes.json()
+            parsed = JSON.parse(proxyJson.contents)
+          } catch (_) {
+            parsed = null
+          }
+        }
+
+        if (!parsed || !parsed.chart?.result?.[0]) throw new Error("Stock data feed unavailable")
 
         const result = parsed.chart.result[0]
         const realPrice = result.meta.regularMarketPrice

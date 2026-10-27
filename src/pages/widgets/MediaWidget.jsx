@@ -1,15 +1,27 @@
-import { useRef, useEffect } from 'react'
-import RemoveButton from './RemoveButton'
+import React, { useRef, useEffect } from 'react'
+import HapticFeedback from '../../utils/HapticFeedback'
 
 const TRACKS = [
-  { title: "NEURAL_DRIFT", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", time: "LOFI_AMBIENT_CORE" },
-  { title: "CYBER_RESONANCE", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", time: "NEON_BEAT_SYNTH" },
-  { title: "VOID_ECHO", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", time: "DEEP_COGNITIVE_PADS" }
+  { title: 'NEURAL_DRIFT', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', time: 'LOFI_AMBIENT_CORE' },
+  { title: 'CYBER_RESONANCE', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3', time: 'NEON_BEAT_SYNTH' },
+  { title: 'VOID_ECHO', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3', time: 'DEEP_COGNITIVE_PADS' },
 ]
 
-export default function MediaWidget({ isPlaying, trackIndex, playerMode, selectedSystemPlayer, onSetPlayerMode, onPlayToggle, onSkip, onSetSystemPlayer, onLaunchSystemPlayer, onRemove, isAppActive }) {
+export default function MediaWidget({
+  isPlaying,
+  trackIndex,
+  playerMode,
+  selectedSystemPlayer,
+  onSetPlayerMode,
+  onPlayToggle,
+  onSkip,
+  onSetSystemPlayer,
+  onLaunchSystemPlayer,
+  isAppActive,
+}) {
   const canvasRef = useRef(null)
-  const currentTrack = TRACKS[trackIndex]
+  const currentTrack = TRACKS[trackIndex] || TRACKS[0]
+  const phaseRef = useRef(0)
 
   useEffect(() => {
     let animationId
@@ -17,7 +29,8 @@ export default function MediaWidget({ isPlaying, trackIndex, playerMode, selecte
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const cw = 160, ch = 36
+    const cw = 150
+    const ch = 30
     canvas.width = cw * dpr
     canvas.height = ch * dpr
     canvas.style.width = cw + 'px'
@@ -26,127 +39,156 @@ export default function MediaWidget({ isPlaying, trackIndex, playerMode, selecte
 
     const draw = () => {
       ctx.clearRect(0, 0, cw, ch)
-      const barCount = 18
-      const barWidth = 6
-      const gap = 3
+      phaseRef.current += 0.05
 
-      for (let i = 0; i < barCount; i++) {
-        let height = 4
-        if (isPlaying) {
-          height = Math.floor(Math.random() * (ch - 4)) + 4
+      if (isPlaying) {
+        // Equalizer spectrum bars
+        const barCount = 15
+        const barWidth = 6
+        const gap = 4
+        for (let i = 0; i < barCount; i++) {
+          const wave = Math.sin(phaseRef.current * 1.5 + i * 0.4) * 0.3 + 0.7
+          const rand = Math.random() * 0.4 + 0.6
+          const height = Math.max(4, Math.floor(wave * rand * (ch - 4)))
+          ctx.fillStyle = 'rgba(var(--primary-rgb, 0, 219, 231), 0.8)'
+          ctx.fillRect(i * (barWidth + gap), ch - height, barWidth, height)
         }
-        ctx.fillStyle = 'rgba(0, 242, 255, 0.7)'
-        ctx.fillRect(i * (barWidth + gap), ch - height, barWidth, height)
+      } else {
+        // Idle ambient sine wave
+        ctx.beginPath()
+        ctx.strokeStyle = 'rgba(var(--primary-rgb, 0, 219, 231), 0.35)'
+        ctx.lineWidth = 1.5
+        for (let x = 0; x < cw; x += 3) {
+          const y = ch / 2 + Math.sin(x * 0.06 + phaseRef.current * 0.8) * 4
+          if (x === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.stroke()
       }
 
-      if (isAppActive && isPlaying) {
+      if (isAppActive) {
         animationId = requestAnimationFrame(draw)
       }
     }
 
     if (isAppActive) draw()
-    return () => { if (animationId) cancelAnimationFrame(animationId) }
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId)
+    }
   }, [isPlaying, isAppActive])
 
   return (
-    <section style={{ order: 3 }} className="col-span-2 md:col-span-5 glass-surface rounded-lg p-4 relative group">
-      <RemoveButton onClick={onRemove} />
-      <div className="flex flex-col gap-2 flex-1 justify-between min-h-[170px]">
-        <div className="flex justify-between items-center pb-1.5 border-b border-white/5">
-          <h3 className="font-label-caps text-label-caps text-primary tracking-widest">MEDIA CORE</h3>
-          <div className="flex border border-outline-variant/30 rounded bg-black/40 text-[8px] p-0.5 z-10 mr-5">
-            {['SONIC', 'EXTERNAL', 'SYSTEM'].map(mode => (
-              <button key={mode} onClick={() => onSetPlayerMode(mode)}
-                className={`px-2 py-0.5 rounded transition-all ${playerMode === mode ? 'bg-[#00f2ff] text-black font-bold' : 'text-on-surface-variant'}`}>
-                {mode}
-              </button>
-            ))}
-          </div>
+    <section className="glass-surface border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full overflow-hidden hover:border-primary-fixed-dim/40 transition-all bg-[#080d16]/85 backdrop-blur-xl">
+      <div className="flex justify-between items-center pb-2 border-b border-white/10">
+        <div>
+          <h3 className="font-label-caps text-[10px] text-primary-fixed-dim tracking-widest uppercase font-bold">
+            MEDIA CORE
+          </h3>
+          <p className="text-[8px] font-mono-data text-on-surface-variant/70 uppercase">
+            {playerMode === 'SONIC' ? 'SYNTH ENGINE' : playerMode === 'EXTERNAL' ? 'ANDROID SYSTEM DISPATCH' : 'STREAM STREAM'}
+          </p>
         </div>
 
-        {playerMode === 'SONIC' && (
-          <>
-            <div className="flex gap-3 mt-1.5">
-              <div className="w-12 h-12 bg-surface-container-highest rounded overflow-hidden flex-shrink-0 border border-white/5 relative">
-                <div className={`absolute inset-0 bg-gradient-to-tr from-[#00f2ff]/20 to-[#d1bcff]/20 flex items-center justify-center ${isPlaying ? 'animate-[pulse_2s_infinite]' : ''}`}>
-                  <span className="material-symbols-outlined text-primary-fixed-dim text-2xl">{isPlaying ? 'graphic_eq' : 'music_note'}</span>
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-label-caps text-[8px] text-primary-container tracking-wider uppercase">TRACK_{trackIndex + 1}_STREAM</p>
-                <h3 className="font-mono-data text-xs font-bold text-on-surface truncate mt-0.5">{currentTrack.title}</h3>
-                <p className="font-mono-data text-[9px] text-on-surface-variant/70 mt-0.5">{currentTrack.time}</p>
-              </div>
-            </div>
-            <div className="my-1.5 flex items-center justify-center bg-black/20 rounded p-1 border border-white/5 h-10">
-              <canvas ref={canvasRef} className="opacity-80" />
-            </div>
-            <div className="flex items-center justify-between mt-auto">
-              <div className="flex items-center gap-3">
-                <button onClick={() => onSkip(-1)} className="material-symbols-outlined text-on-surface-variant/60 hover:text-white transition-colors active:scale-90">skip_previous</button>
-                <button onClick={onPlayToggle} className="material-symbols-outlined text-[#00f2ff] text-2xl active:scale-95">
-                  {isPlaying ? 'pause_circle' : 'play_circle'}
-                </button>
-                <button onClick={() => onSkip(1)} className="material-symbols-outlined text-on-surface-variant/60 hover:text-white transition-colors active:scale-90">skip_next</button>
-              </div>
-              <span className="material-symbols-outlined text-[#00f2ff]/40 text-sm">spotify</span>
-            </div>
-          </>
-        )}
+        <div className="flex border border-white/10 rounded-lg bg-black/50 text-[8px] p-0.5">
+          {['SONIC', 'EXTERNAL', 'SYSTEM'].map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => {
+                HapticFeedback.light()
+                onSetPlayerMode(mode)
+              }}
+              className={`px-2 py-0.5 rounded transition-all font-mono font-bold ${
+                playerMode === mode
+                  ? 'bg-primary-fixed-dim text-black shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]'
+                  : 'text-on-surface-variant/70 hover:text-white'
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        {playerMode === 'EXTERNAL' && (
-          <>
-            <div className="flex gap-3 mt-1.5">
-              <div className="w-12 h-12 bg-surface-container-highest rounded overflow-hidden flex-shrink-0 border border-white/5 relative">
-                <div className={`absolute inset-0 bg-gradient-to-tr from-[#00f2ff]/20 to-[#d1bcff]/20 flex items-center justify-center ${isPlaying ? 'animate-[pulse_2s_infinite]' : ''}`}>
-                  <span className="material-symbols-outlined text-primary-fixed-dim text-2xl">{isPlaying ? 'graphic_eq' : 'music_note'}</span>
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-label-caps text-[8px] text-primary-container tracking-wider uppercase">NATIVE_MEDIA_SESSION</p>
-                <h3 className="font-mono-data text-xs font-bold text-on-surface truncate mt-0.5">EXTERNAL PLAYER</h3>
-                <p className="font-mono-data text-[9px] text-on-surface-variant/70 mt-0.5">CONTROLS ANY ACTIVE PLAYER</p>
-              </div>
-            </div>
-            <div className="my-1.5 flex items-center justify-center bg-black/20 rounded p-1 border border-white/5 h-10">
-              <canvas ref={canvasRef} className="opacity-80" />
-            </div>
-            <div className="flex items-center justify-between mt-auto">
-              <div className="flex items-center gap-3">
-                <button onClick={() => onSkip(-1)} className="material-symbols-outlined text-on-surface-variant/60 hover:text-white transition-colors active:scale-90">skip_previous</button>
-                <button onClick={onPlayToggle} className="material-symbols-outlined text-[#00f2ff] text-2xl active:scale-95">
-                  {isPlaying ? 'pause_circle' : 'play_circle'}
-                </button>
-                <button onClick={() => onSkip(1)} className="material-symbols-outlined text-on-surface-variant/60 hover:text-white transition-colors active:scale-90">skip_next</button>
-              </div>
-              <span className="material-symbols-outlined text-[#00f2ff]/40 text-sm">cell_tower</span>
-            </div>
-          </>
-        )}
+      <div className="py-2.5 flex items-center justify-between">
+        <div className="min-w-0 pr-2 flex-1">
+          <p className="text-xs font-mono font-bold uppercase truncate text-white">
+            {playerMode === 'EXTERNAL' ? 'SYSTEM AUDIO GATEWAY' : currentTrack.title}
+          </p>
+          <p className="text-[8.5px] font-mono text-primary-fixed-dim/80 uppercase tracking-wider mt-0.5 truncate">
+            {playerMode === 'EXTERNAL' ? 'SPOTIFY // YT MUSIC // AUDIBLE' : currentTrack.time}
+          </p>
+        </div>
+        <canvas ref={canvasRef} className="shrink-0" />
+      </div>
 
-        {playerMode === 'SYSTEM' && (
-          <>
-            <div className="flex flex-col gap-2.5 py-2 flex-1 justify-center">
-              <div className="flex flex-col gap-1">
-                <label className="text-[8px] text-on-surface-variant uppercase">CHOOSE DEFAULT PLAYER</label>
-                <select value={selectedSystemPlayer} onChange={e => onSetSystemPlayer(e.target.value)}
-                  className="w-full bg-black/40 border border-outline-variant/30 rounded px-2 py-1 text-[10px] text-primary-fixed-dim pr-6 focus:outline-none cursor-pointer">
-                  <option value="spotify">Spotify Music</option>
-                  <option value="ytmusic">YouTube Music</option>
-                  <option value="apple">Apple Music</option>
-                  <option value="samsung">Samsung Player</option>
-                  <option value="default">Android System Default</option>
-                </select>
-              </div>
-              <button onClick={onLaunchSystemPlayer}
-                className="w-full py-2 bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim text-[9.5px] font-bold rounded-lg hover:bg-primary-fixed-dim/30 transition-all active:scale-95 uppercase flex items-center justify-center gap-1 shadow-[0_0_10px_rgba(var(--primary-rgb),0.15)]">
-                <span className="material-symbols-outlined text-xs">open_in_new</span>LAUNCH SYSTEM PLAYER
-              </button>
-            </div>
-            <p className="text-[7px] text-on-surface-variant/35 text-center mt-auto font-mono-data leading-none">
-              WILL LAUNCH MOBILE AUDIO PROTOCOL
-            </p>
-          </>
+      <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              HapticFeedback.light()
+              onSkip(-1)
+            }}
+            className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center text-white hover:border-primary-fixed-dim/40 active:scale-95 transition-all"
+            title="Previous"
+          >
+            <span className="material-symbols-outlined text-base">skip_previous</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              HapticFeedback.light()
+              onPlayToggle()
+            }}
+            className="w-10 h-8 rounded-lg bg-primary-fixed-dim/20 border border-primary-fixed-dim/50 text-primary-fixed-dim flex items-center justify-center hover:bg-primary-fixed-dim/30 active:scale-95 transition-all shadow-[0_0_12px_rgba(var(--primary-rgb),0.2)]"
+            title={isPlaying ? 'Pause' : 'Play'}
+          >
+            <span className="material-symbols-outlined text-lg">
+              {isPlaying ? 'pause' : 'play_arrow'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              HapticFeedback.light()
+              onSkip(1)
+            }}
+            className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center text-white hover:border-primary-fixed-dim/40 active:scale-95 transition-all"
+            title="Next"
+          >
+            <span className="material-symbols-outlined text-base">skip_next</span>
+          </button>
+        </div>
+
+        {playerMode === 'SYSTEM' ? (
+          <div className="flex items-center gap-1.5">
+            <select
+              value={selectedSystemPlayer}
+              onChange={(e) => onSetSystemPlayer(e.target.value)}
+              className="bg-black/60 border border-white/10 text-white rounded px-1.5 py-1 text-[8.5px] font-mono"
+            >
+              <option value="spotify">Spotify</option>
+              <option value="ytmusic">YT Music</option>
+              <option value="apple">Apple</option>
+              <option value="samsung">Samsung</option>
+              <option value="default">Default</option>
+            </select>
+            <button
+              type="button"
+              onClick={onLaunchSystemPlayer}
+              className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-primary-fixed-dim hover:bg-primary-fixed-dim/20"
+              title="Launch App"
+            >
+              <span className="material-symbols-outlined text-xs">launch</span>
+            </button>
+          </div>
+        ) : (
+          <span className="text-[7.5px] font-mono text-white/40 uppercase tracking-widest">
+            {isPlaying ? 'AUDIO ACTIVE' : 'IDLE // READY'}
+          </span>
         )}
       </div>
     </section>

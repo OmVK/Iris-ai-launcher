@@ -1,300 +1,293 @@
-import React, { useState, useEffect } from 'react';
-import { OEM_INSTRUCTIONS } from '../data/oemData';
-import PermissionsStep from './PermissionsStep';
+import React, { useState, useEffect, useCallback } from 'react'
+import { OEM_INSTRUCTIONS } from '../data/oemData'
+import PermissionsStep from './PermissionsStep'
+import SetupWelcomeStep from './setup/SetupWelcomeStep'
+import SetupOemStep from './setup/SetupOemStep'
+import SetupNodeStep from './setup/SetupNodeStep'
+import SetupVaultStep from './setup/SetupVaultStep'
+import SetupReadyStep from './setup/SetupReadyStep'
 
 export default function SetupWizard({ onComplete }) {
-  const [step, setStep] = useState(0);
-  const [city, setCity] = useState('Neo Tokyo');
-  const [oemInfo, setOemInfo] = useState({ manufacturer: 'unknown', model: 'unknown', sdkVersion: 0 });
-  const [oemBatteryDone, setOemBatteryDone] = useState(false);
+  const [step, setStep] = useState(0)
+  const [city, setCity] = useState('Neo Tokyo')
+  const [oemInfo, setOemInfo] = useState({ manufacturer: 'unknown', model: 'unknown', sdkVersion: 0 })
+  const [oemBatteryDone, setOemBatteryDone] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
   const [permissionsGranted, setPermissionsGranted] = useState({
+    defaultLauncher: false,
+    location: false,
     mic: false,
     camera: false,
-    location: false,
     storage: false,
-    defaultLauncher: false,
-    notifications: false
-  });
+    notifications: false,
+  })
 
-  // Detect device OEM info on mount
   useEffect(() => {
     (async () => {
       try {
-        const { getDeviceOemInfo } = await import('./LauncherPlugin');
-        const info = await getDeviceOemInfo();
-        setOemInfo(info);
+        const { getDeviceOemInfo, batchCheckPermissions, isStorageAccessGranted } = await import('./LauncherPlugin')
+        const info = await getDeviceOemInfo()
+        setOemInfo(info)
+
+        const storageOk = await isStorageAccessGranted()
+        const checked = await batchCheckPermissions([
+          'RECORD_AUDIO',
+          'CAMERA',
+          'ACCESS_FINE_LOCATION',
+          'READ_EXTERNAL_STORAGE',
+          'POST_NOTIFICATIONS',
+        ])
+        const permMap = { storage: storageOk }
+        checked.forEach((c) => {
+          if (c.permission === 'RECORD_AUDIO' && c.granted) permMap.mic = true
+          if (c.permission === 'CAMERA' && c.granted) permMap.camera = true
+          if (c.permission === 'ACCESS_FINE_LOCATION' && c.granted) permMap.location = true
+          if (c.permission === 'READ_EXTERNAL_STORAGE' && (c.granted || storageOk)) permMap.storage = true
+          if (c.permission === 'POST_NOTIFICATIONS' && c.granted) permMap.notifications = true
+        })
+        setPermissionsGranted((p) => ({ ...p, ...permMap }))
       } catch (e) {
-        console.error("Failed to detect OEM info", e);
+        console.error('Failed to initialize device setup telemetry', e)
       }
-    })();
-  }, []);
+    })()
+  }, [])
 
-  const handleNext = () => setStep(s => s + 1);
+  const manufacturer = (oemInfo.manufacturer || '').toLowerCase().trim()
+  const oemData = OEM_INSTRUCTIONS[manufacturer]
+  const needsOemStep = !!oemData
 
-  const manufacturer = (oemInfo.manufacturer || '').toLowerCase().trim();
-  const oemData = OEM_INSTRUCTIONS[manufacturer];
-  // Skip OEM step for stock Android (Google, etc.)
-  const needsOemStep = !!oemData;
+  const handleNext = useCallback(() => {
+    setStep((s) => {
+      const next = s + 1
+      if (next === 2 && !needsOemStep) return 3
+      return next
+    })
+  }, [needsOemStep])
 
-  // Auto-advance past OEM step for non-OEM devices
-  useEffect(() => {
-    if (step === 2 && !needsOemStep) {
-      handleNext()
+  const handleDetectLocation = useCallback(async () => {
+    setDetectingLocation(true)
+    try {
+      const { Geolocation } = await import('@capacitor/geolocation')
+      const pos = await Geolocation.getCurrentPosition({ timeout: 8000, enableHighAccuracy: false })
+      const lat = pos.coords.latitude
+      const lon = pos.coords.longitude
+      localStorage.setItem('iris_weather_lat', lat)
+      localStorage.setItem('iris_weather_lon', lon)
+
+      const res = await fetch(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+      )
+      const data = await res.json()
+      const detected = data.city || data.locality || data.principalSubdivision
+      if (detected) setCity(detected)
+      setPermissionsGranted((p) => ({ ...p, location: true }))
+    } catch (e) {
+      console.warn('Manual GPS detect error:', e)
+    } finally {
+      setDetectingLocation(false)
     }
-  }, [step, needsOemStep])
+  }, [])
 
-  const requestPermission = (type) => {
-    // In a real native Capacitor app, we would use native plugins here.
-    // For pure HTML5 / Web, we prompt using browser standard APIs to trigger Android OS permission dialogs.
-    if (type === 'mic') {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then((stream) => {
-          stream.getTracks().forEach(t => t.stop())
-          setPermissionsGranted(p => ({ ...p, mic: true }))
-        })
-        .catch(() => setPermissionsGranted(p => ({ ...p, mic: false })));
-    } else if (type === 'camera') {
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then((stream) => {
-          stream.getTracks().forEach(t => t.stop())
-          setPermissionsGranted(p => ({ ...p, camera: true }))
-        })
-        .catch(() => setPermissionsGranted(p => ({ ...p, camera: false })));
-    } else if (type === 'storage') {
-      import('./LauncherPlugin').then(m => {
-        m.requestStorageAccess().then(success => {
-          if (!success) throw new Error('Fallback');
-          setPermissionsGranted(p => ({ ...p, storage: true }));
-        }).catch(() => {
-          // Fallback to Capacitor standard permission
-          import('@capacitor/filesystem').then(({ Filesystem }) => {
-            Filesystem.requestPermissions().then(() => {
-              setPermissionsGranted(p => ({ ...p, storage: true }));
-            }).catch(() => setPermissionsGranted(p => ({ ...p, storage: true })));
-          }).catch(() => setPermissionsGranted(p => ({ ...p, storage: true })));
-        });
-      });
-    } else if (type === 'location') {
-      const runLocationLogic = async () => {
+  const requestPermission = useCallback(
+    async (type) => {
+      if (type === 'mic') {
         try {
-          const { Geolocation } = await import('@capacitor/geolocation');
-          const perm = await Geolocation.requestPermissions();
-          if (perm.location !== 'granted') throw new Error('Permission denied');
-          
-          const pos = await Geolocation.getCurrentPosition();
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          
-          let detectedCity = 'Local Node';
-          try {
-            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
-            const data = await res.json();
-            detectedCity = data.city || data.locality || data.principalSubdivision || 'Local Node';
-          } catch(e) {
-            console.error("Reverse geocode failed", e);
+          const { checkAndRequestPermission } = await import('./LauncherPlugin')
+          const res = await checkAndRequestPermission('RECORD_AUDIO')
+          if (res?.granted) {
+            setPermissionsGranted((p) => ({ ...p, mic: true }))
+            return
           }
-          
-          localStorage.setItem('iris_weather_lat', lat);
-          localStorage.setItem('iris_weather_lon', lon);
-          
-          setCity(detectedCity);
-          setPermissionsGranted(p => ({ ...p, location: true }));
-        } catch (e) {
-          console.error("Location request failed:", e);
-          setPermissionsGranted(p => ({ ...p, location: true })); // Auto-fail safe
+        } catch {}
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          stream.getTracks().forEach((t) => t.stop())
+          setPermissionsGranted((p) => ({ ...p, mic: true }))
+        } catch {
+          setPermissionsGranted((p) => ({ ...p, mic: false }))
         }
-      };
-      runLocationLogic();
-    } else if (type === 'defaultLauncher') {
-      import('./LauncherPlugin').then(m => {
-        m.requestDefaultLauncher();
-        // Since we can't easily wait for the native intent result in this demo, we assume success or attempt.
-        setTimeout(() => setPermissionsGranted(p => ({ ...p, defaultLauncher: true })), 1500);
-      });
-    } else if (type === 'notifications') {
-      import('./LauncherPlugin').then(m => {
-        m.checkAndRequestPermission('POST_NOTIFICATIONS').then(result => {
-          setPermissionsGranted(p => ({ ...p, notifications: true }));
-        }).catch(() => setPermissionsGranted(p => ({ ...p, notifications: true })));
-      });
-    }
-  };
+      } else if (type === 'camera') {
+        try {
+          const { checkAndRequestPermission } = await import('./LauncherPlugin')
+          const res = await checkAndRequestPermission('CAMERA')
+          if (res?.granted) {
+            setPermissionsGranted((p) => ({ ...p, camera: true }))
+            return
+          }
+        } catch {}
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+          stream.getTracks().forEach((t) => t.stop())
+          setPermissionsGranted((p) => ({ ...p, camera: true }))
+        } catch {
+          setPermissionsGranted((p) => ({ ...p, camera: false }))
+        }
+      } else if (type === 'storage') {
+        try {
+          const { checkAndRequestPermission, requestStorageAccess, isStorageAccessGranted } = await import(
+            './LauncherPlugin'
+          )
+          await checkAndRequestPermission('READ_MEDIA_IMAGES')
+          await requestStorageAccess()
+          const granted = await isStorageAccessGranted()
+          setPermissionsGranted((p) => ({ ...p, storage: granted }))
+        } catch (e) {
+          console.error('Storage request error:', e)
+        }
+      } else if (type === 'location') {
+        try {
+          const { Geolocation } = await import('@capacitor/geolocation')
+          const perm = await Geolocation.requestPermissions({ permissions: ['location', 'coarseLocation'] })
+          const isGranted = perm?.location === 'granted' || perm?.coarseLocation === 'granted'
+          if (isGranted) {
+            setPermissionsGranted((p) => ({ ...p, location: true }))
+            handleDetectLocation()
+          } else {
+            setPermissionsGranted((p) => ({ ...p, location: false }))
+          }
+        } catch (err) {
+          console.error('Location request failed:', err)
+          setPermissionsGranted((p) => ({ ...p, location: false }))
+        }
+      } else if (type === 'defaultLauncher') {
+        try {
+          const { requestDefaultLauncher } = await import('./LauncherPlugin')
+          await requestDefaultLauncher()
+        } catch {}
+        setTimeout(() => setPermissionsGranted((p) => ({ ...p, defaultLauncher: true })), 1500)
+      } else if (type === 'notifications') {
+        try {
+          const { checkAndRequestPermission } = await import('./LauncherPlugin')
+          await checkAndRequestPermission('POST_NOTIFICATIONS')
+        } catch {}
+        setPermissionsGranted((p) => ({ ...p, notifications: true }))
+      }
+    },
+    [handleDetectLocation]
+  )
 
-  const handleBatteryOptimization = async () => {
+  const handleGrantAll = useCallback(async () => {
+    const sequence = ['defaultLauncher', 'location', 'mic', 'camera', 'storage', 'notifications']
+    for (const key of sequence) {
+      if (!permissionsGranted[key]) {
+        await requestPermission(key)
+      }
+    }
+  }, [permissionsGranted, requestPermission])
+
+  const handleBatteryOptimization = useCallback(async () => {
     try {
-      const { requestIgnoreBatteryOptimizations } = await import('./LauncherPlugin');
-      await requestIgnoreBatteryOptimizations();
-    } catch (e) {
-      console.error("Battery optimization request failed", e);
-    }
-  };
+      const { requestIgnoreBatteryOptimizations } = await import('./LauncherPlugin')
+      await requestIgnoreBatteryOptimizations()
+    } catch {}
+  }, [])
 
-  const handleOpenOemSettings = async () => {
+  const handleOpenOemSettings = useCallback(async () => {
     try {
-      const { openOemBatterySettings } = await import('./LauncherPlugin');
-      await openOemBatterySettings(oemInfo.manufacturer);
-      setOemBatteryDone(true);
-    } catch (e) {
-      console.error("OEM battery settings open failed", e);
-      setOemBatteryDone(true);
+      const { openOemBatterySettings } = await import('./LauncherPlugin')
+      await openOemBatterySettings(oemInfo.manufacturer)
+      setOemBatteryDone(true)
+    } catch {
+      setOemBatteryDone(true)
     }
-  };
+  }, [oemInfo.manufacturer])
 
-  const finalizeSetup = () => {
-    localStorage.setItem('iris_weather_city', city);
-    localStorage.setItem('iris_setup_complete', 'true');
-    localStorage.setItem('iris_oem_battery_prompted', 'true');
-    onComplete();
-  };
+  const finalizeSetup = useCallback(
+    (options = {}) => {
+      localStorage.setItem('iris_weather_city', city)
+      localStorage.setItem('iris_setup_complete', 'true')
+      localStorage.setItem('iris_oem_battery_prompted', 'true')
+      onComplete(options)
+    },
+    [city, onComplete]
+  )
 
-  // Build the permission rows dynamically based on SDK version
   const permissionRows = [
-    { id: 'defaultLauncher', icon: 'home', label: 'Default Home OS', desc: 'Set IRIS as system home launcher' },
-    { id: 'location', icon: 'my_location', label: 'GPS Telemetry', desc: 'Required for local weather station' },
-    { id: 'mic', icon: 'mic', label: 'Audio Input', desc: 'Voice assistant & hands-free triggers' },
-    { id: 'camera', icon: 'videocam', label: 'Optical Sensor', desc: 'Optics Vision AI & Vault threat alerts' },
+    { id: 'defaultLauncher', icon: 'home', label: 'Default Home OS', desc: 'Set IRIS as primary system launcher' },
+    { id: 'location', icon: 'my_location', label: 'GPS Telemetry', desc: 'Orbital weather synchronization' },
+    { id: 'mic', icon: 'mic', label: 'Audio Input', desc: 'Voice assistant & hands-free engine' },
+    { id: 'camera', icon: 'videocam', label: 'Optical Sensor', desc: 'Vision scanner & Vault intrusion alerts' },
     { id: 'storage', icon: 'folder_open', label: 'Storage Access', desc: 'Secure files & custom wallpapers' },
-  ];
-  // Only show notification permission row for SDK 33+ (Android 13+)
+  ]
   if (oemInfo.sdkVersion >= 33) {
-    permissionRows.push({ id: 'notifications', icon: 'notifications', label: 'Notifications', desc: 'Task reminders & launcher badges' });
+    permissionRows.push({
+      id: 'notifications',
+      icon: 'notifications',
+      label: 'Notifications',
+      desc: 'Task reminders & launcher badges',
+    })
   }
 
-  return (
-    <div className="fixed inset-0 z-[9999] bg-[#05070a] text-white flex flex-col justify-center items-center overflow-hidden font-mono-data select-none">
-      {/* Background Cyber grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,242,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,242,255,0.03)_1px,transparent_1px)] bg-[size:30px_30px] [transform:perspective(500px)_rotateX(60deg)_translateY(-100px)_translateZ(-200px)] opacity-50" />
-      
-      <div className="relative z-10 max-w-sm w-full p-6 glass-surface border border-primary-fixed-dim/30 rounded-2xl shadow-[0_0_50px_rgba(var(--primary-rgb),0.1)]">
-        
-        {/* Step 0: Welcome */}
-        {step === 0 && (
-          <div className="text-center space-y-6 animate-fade-in">
-            <div className="w-24 h-24 mx-auto rounded-full border border-primary-fixed-dim flex items-center justify-center animate-[pulse_3s_infinite] shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)]">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 text-primary-fixed-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-headline-lg tracking-widest text-primary-fixed-dim neon-glow">IRIS OS</h1>
-            <p className="text-xs text-on-surface-variant/70 leading-relaxed uppercase">
-              Neural interface initialized. Welcome to your new high-performance personal computing environment.
-            </p>
-            <button 
-              onClick={handleNext}
-              className="w-full py-3 bg-primary-fixed-dim/20 border border-primary-fixed-dim/50 text-primary-fixed-dim font-bold rounded-lg hover:bg-primary-fixed-dim/30 transition-all active:scale-95 uppercase tracking-widest mt-4"
-            >
-              INITIALIZE BOOT
-            </button>
-          </div>
-        )}
+  const stepLabels = ['BOOT', 'AUTH', 'OEM', 'NODE', 'VAULT', 'READY']
 
-        {/* Step 1: Hardware Permissions */}
+  return (
+    <div className="fixed inset-0 z-[9999] bg-[#03060a] text-white flex flex-col justify-center items-center overflow-hidden font-mono-data select-none px-4">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,242,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,242,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] [transform:perspective(500px)_rotateX(60deg)_translateY(-100px)_translateZ(-200px)] opacity-60" />
+
+      <div className="relative z-10 max-w-sm w-full p-5 glass-surface border border-primary-fixed-dim/30 rounded-2xl shadow-[0_0_60px_rgba(var(--primary-rgb),0.15)] backdrop-blur-xl">
+        <div className="flex items-center justify-between pb-3 mb-2 border-b border-white/10 text-[9px] text-primary-fixed-dim font-bold tracking-widest">
+          <span>PROTOCOL // 0{step + 1}</span>
+          <div className="flex gap-1.5 items-center">
+            {stepLabels.map((lbl, idx) => {
+              if (idx === 2 && !needsOemStep) return null
+              const isCurrent = step === idx
+              const isPast = step > idx
+              return (
+                <div
+                  key={lbl}
+                  className={`h-1.5 rounded-full transition-all ${
+                    isCurrent
+                      ? 'w-4 bg-primary-fixed-dim shadow-[0_0_8px_rgba(var(--primary-rgb),0.6)]'
+                      : isPast
+                      ? 'w-1.5 bg-success'
+                      : 'w-1.5 bg-white/20'
+                  }`}
+                  title={lbl}
+                />
+              )
+            })}
+          </div>
+          <span>INIT</span>
+        </div>
+
+        {step === 0 && <SetupWelcomeStep oemInfo={oemInfo} onNext={handleNext} />}
+
         {step === 1 && (
           <PermissionsStep
             permissionsGranted={permissionsGranted}
             permissionRows={permissionRows}
             requestPermission={requestPermission}
+            onGrantAll={handleGrantAll}
             onNext={handleNext}
             onBatteryOptimization={handleBatteryOptimization}
           />
         )}
 
-        {/* Step 2: OEM Battery Optimization (only for OEM devices) */}
-        {step === 2 && (
-          <div className="space-y-6 animate-fade-in text-center">
-            {needsOemStep ? (
-              <>
-                <h2 className="text-lg font-bold text-[#ff9800] uppercase tracking-widest border-b border-white/10 pb-3">
-                  Background Protection
-                </h2>
-                <div className="w-16 h-16 mx-auto bg-[#ff9800]/10 rounded-full border border-[#ff9800]/30 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-3xl text-[#ff9800]">battery_alert</span>
-                </div>
-                <div className="text-left bg-black/40 border border-[#ff9800]/20 rounded-lg p-4 space-y-3">
-                  <p className="text-[10px] text-[#ff9800] uppercase font-bold tracking-widest">
-                    {oemData.brand} Detected
-                  </p>
-                  <p className="text-[10px] text-on-surface-variant/80 leading-relaxed">
-                    Your device manufacturer aggressively kills background apps to save battery. 
-                    To keep Iris running smoothly for voice commands, alarms, and notifications, 
-                    please whitelist Iris from battery optimization:
-                  </p>
-                  <div className="bg-[#ff9800]/5 border border-[#ff9800]/15 rounded-md p-3">
-                    <p className="text-[10px] text-[#ff9800]/90 leading-relaxed font-bold">
-                      {oemData.steps}
-                    </p>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={handleOpenOemSettings}
-                  className="w-full py-3 bg-[#ff9800]/20 border border-[#ff9800]/50 text-[#ff9800] font-bold rounded-lg hover:bg-[#ff9800]/30 transition-all active:scale-95 uppercase tracking-widest"
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-lg">settings</span>
-                    OPEN SETTINGS
-                  </span>
-                </button>
-
-                {oemBatteryDone && (
-                  <p className="text-[9px] text-success uppercase tracking-widest animate-fade-in">
-                    ✓ Settings opened — follow the steps above then return here
-                  </p>
-                )}
-
-                <button 
-                  onClick={handleNext}
-                  className="w-full py-2 bg-primary-fixed-dim/10 border border-primary-fixed-dim/30 text-primary-fixed-dim/70 font-bold rounded-lg hover:bg-primary-fixed-dim/20 transition-all active:scale-95 uppercase tracking-widest text-[10px]"
-                >
-                  {oemBatteryDone ? 'CONTINUE' : 'SKIP FOR NOW'}
-                </button>
-              </>
-            ) : (
-              // Stock Android (Google/Pixel) — skip the OEM card, auto-advance
-              null
-            )}
-          </div>
+        {step === 2 && needsOemStep && (
+          <SetupOemStep
+            oemData={oemData}
+            oemBatteryDone={oemBatteryDone}
+            onOpenOemSettings={handleOpenOemSettings}
+            onBatteryOptimization={handleBatteryOptimization}
+            onNext={handleNext}
+          />
         )}
 
-        {/* Step 3: Location Setup */}
         {step === 3 && (
-          <div className="space-y-6 animate-fade-in text-center">
-            <h2 className="text-lg font-bold text-primary-fixed-dim uppercase tracking-widest border-b border-white/10 pb-3">
-              Meteorological Link
-            </h2>
-            <div className="w-16 h-16 mx-auto bg-primary-fixed-dim/10 rounded-full border border-primary-fixed-dim/30 flex items-center justify-center animate-pulse">
-              <span className="material-symbols-outlined text-3xl text-primary-fixed-dim">satellite_alt</span>
-            </div>
-            <p className="text-[10px] text-on-surface-variant/70 uppercase">
-              {permissionsGranted.location 
-                ? "Primary node auto-detected via GPS telemetry." 
-                : "Select your primary node for orbital weather synchronization."}
-            </p>
-            
-            {permissionsGranted.location ? (
-              <div className="w-full bg-success/10 border border-success/40 rounded-lg px-4 py-3 text-xs text-success font-bold uppercase tracking-widest text-center shadow-[0_0_15px_rgba(0,255,100,0.1)]">
-                {city}
-              </div>
-            ) : (
-              <input 
-                type="text"
-                value={city} 
-                onChange={e => setCity(e.target.value)}
-                placeholder="Enter City Name"
-                className="w-full bg-black/60 border border-primary-fixed-dim/40 rounded-lg px-4 py-3 text-xs text-primary-fixed-dim focus:outline-none uppercase tracking-widest text-center"
-              />
-            )}
-
-            <button 
-              onClick={finalizeSetup}
-              className="w-full py-3 bg-[#00f2ff]/20 border border-[#00f2ff]/60 text-[#00f2ff] font-bold rounded-lg hover:bg-[#00f2ff]/30 shadow-[0_0_15px_rgba(0,242,255,0.3)] transition-all active:scale-95 uppercase tracking-widest mt-4"
-            >
-              FINALIZE BOOT
-            </button>
-          </div>
+          <SetupNodeStep
+            city={city}
+            setCity={setCity}
+            locationGranted={permissionsGranted.location}
+            onDetectLocation={handleDetectLocation}
+            detectingLocation={detectingLocation}
+            onNext={handleNext}
+          />
         )}
+
+        {step === 4 && <SetupVaultStep onNext={handleNext} />}
+
+        {step === 5 && <SetupReadyStep city={city} onComplete={finalizeSetup} />}
       </div>
     </div>
-  );
+  )
 }

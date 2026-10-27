@@ -48,12 +48,9 @@ public class IrisAccessibilityService extends AccessibilityService {
         if (info == null) {
             info = new AccessibilityServiceInfo();
         }
-        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED | AccessibilityEvent.TYPE_VIEW_CLICKED;
+        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
         info.notificationTimeout = 100;
-        info.flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS |
-                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS |
-                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
         setServiceInfo(info);
     }
 
@@ -107,21 +104,6 @@ public class IrisAccessibilityService extends AccessibilityService {
         }
     }
 
-    public AccessibilityNodeInfo findNodeByText(String text) {
-        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-        if (rootNode == null) return null;
-        List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByText(text);
-        if (nodes != null && !nodes.isEmpty()) {
-            return nodes.get(0);
-        }
-        return null;
-    }
-
-    public void clickNode(AccessibilityNodeInfo node) {
-        if (node != null) {
-            node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-        }
-    }
 
     private void broadcastWindowChanged(String packageName) {
         try {

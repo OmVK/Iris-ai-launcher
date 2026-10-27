@@ -128,6 +128,15 @@ public class PermissionManager {
         PermissionInfo info = permissionMap.get(permission);
         if (info == null) return false;
 
+        if ("READ_EXTERNAL_STORAGE".equals(permission)) {
+            if (Build.VERSION.SDK_INT >= 30 && android.os.Environment.isExternalStorageManager()) {
+                return true;
+            }
+            if (Build.VERSION.SDK_INT >= 33) {
+                return ContextCompat.checkSelfPermission(context, "android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED;
+            }
+        }
+
         if (!info.isRuntime) {
             return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED;
         }

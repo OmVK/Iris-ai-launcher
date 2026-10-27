@@ -102,7 +102,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
       holdTriggeredRef.current = true
       HapticFeedback.double()
       window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
-    }, 600)
+    }, 1000)
   }, [])
 
   const handleTouchMove = useCallback((e) => {

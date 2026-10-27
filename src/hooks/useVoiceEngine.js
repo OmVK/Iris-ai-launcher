@@ -147,8 +147,7 @@ export default function useVoiceEngine() {
           return
         }
       } catch (e) {
-        console.error("[IRIS Cartesia Exception]", e)
-        alert(`Cartesia Connection Exception: ${e.message}`)
+        console.warn("[IRIS Cartesia Exception]", e)
         finishSpeaking()
         return
       }

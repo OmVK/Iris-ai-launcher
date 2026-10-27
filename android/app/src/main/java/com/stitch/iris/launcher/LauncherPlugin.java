@@ -464,12 +464,16 @@ public class LauncherPlugin extends Plugin {
                             iconDrawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
                             iconDrawable.draw(canvas);
                             
-                            // Downscale to 192x192 for crisp rendering on high-DPI screens
-                            Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 192, 192, true);
+                            // Downscale to 128x128 with WebP compression for crisp rendering and 60% memory savings
+                            Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true);
                             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                            resizedBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
-                            byte[] byteArray = outputStream.toByteArray();
-                            iconBase64 = "data:image/png;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP);
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                resizedBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, outputStream);
+                                iconBase64 = "data:image/webp;base64," + Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP);
+                            } else {
+                                resizedBitmap.compress(Bitmap.CompressFormat.PNG, 85, outputStream);
+                                iconBase64 = "data:image/png;base64," + Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP);
+                            }
                             
                             // Safely release native memory immediately
                             bitmap.recycle();
@@ -991,6 +995,10 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void captureSilentPhotos(PluginCall call) {
+        if (!isVaultSessionActive()) {
+            call.reject("Vault session unauthorized. Biometric or Chrono PIN authentication required.");
+            return;
+        }
         if (androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             call.reject("Camera permission not granted");
             return;
@@ -1005,6 +1013,10 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void captureSilentPhoto(PluginCall call) {
+        if (!isVaultSessionActive()) {
+            call.reject("Vault session unauthorized. Biometric or Chrono PIN authentication required.");
+            return;
+        }
         if (androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             call.reject("Camera permission not granted");
             return;
@@ -1020,6 +1032,10 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void recordSilentVideo(PluginCall call) {
+        if (!isVaultSessionActive()) {
+            call.reject("Vault session unauthorized. Biometric or Chrono PIN authentication required.");
+            return;
+        }
         if (androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             call.reject("Camera permission not granted");
             return;
@@ -1038,6 +1054,10 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void recordSilentAudio(PluginCall call) {
+        if (!isVaultSessionActive()) {
+            call.reject("Vault session unauthorized. Biometric or Chrono PIN authentication required.");
+            return;
+        }
         if (androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             call.reject("Audio recording permission not granted");
             return;
@@ -1115,92 +1135,11 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void startScreenShare(PluginCall call) {
-        if (!android.provider.Settings.canDrawOverlays(getContext())) {
-            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getContext().getPackageName()));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
-            call.reject("Please grant Display over other apps permission first.");
-            return;
-        }
-
-        // Just start the background audio service directly
-        Intent serviceIntent = new Intent(getContext(), IrisScreenCaptureService.class);
-        getContext().startForegroundService(serviceIntent);
-        
-        IrisScreenCaptureService.frameListener = new IrisScreenCaptureService.FrameListener() {
-            @Override
-            public void onFrame(String base64Image) {
-                JSObject ret = new JSObject();
-                ret.put("frame", base64Image);
-                notifyListeners("onScreenFrame", ret);
-            }
-
-            @Override
-            public void onSpeechPartial(String text) {
-                JSObject ret = new JSObject();
-                ret.put("text", text);
-                notifyListeners("onNativeSpeechPartial", ret);
-            }
-
-            @Override
-            public void onSpeechFinal(String text) {
-                JSObject ret = new JSObject();
-                ret.put("text", text);
-                notifyListeners("onNativeSpeechFinal", ret);
-            }
-        };
-        
-        call.resolve();
-    }
-
-    @com.getcapacitor.annotation.ActivityCallback
-    private void screenCaptureResult(PluginCall call, androidx.activity.result.ActivityResult result) {
-        if (result.getResultCode() == android.app.Activity.RESULT_OK) {
-            Intent data = result.getData();
-            Intent serviceIntent = new Intent(getContext(), IrisScreenCaptureService.class);
-            serviceIntent.putExtra("code", result.getResultCode());
-            serviceIntent.putExtra("data", data);
-            
-            IrisScreenCaptureService.frameListener = new IrisScreenCaptureService.FrameListener() {
-                @Override
-                public void onFrame(String base64Image) {
-                    JSObject ret = new JSObject();
-                    ret.put("frame", base64Image);
-                    notifyListeners("onScreenFrame", ret);
-                }
-                
-                @Override
-                public void onSpeechPartial(String text) {
-                    JSObject ret = new JSObject();
-                    ret.put("text", text);
-                    notifyListeners("onNativeSpeechPartial", ret);
-                }
-                
-                @Override
-                public void onSpeechFinal(String text) {
-                    JSObject ret = new JSObject();
-                    ret.put("text", text);
-                    notifyListeners("onNativeSpeechFinal", ret);
-                }
-            };
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                getContext().startForegroundService(serviceIntent);
-            } else {
-                getContext().startService(serviceIntent);
-            }
-            call.resolve();
-        } else {
-            call.reject("Screen capture permission denied");
-        }
+        call.reject("Screen share is currently managed via Accessibility service screenshots.");
     }
 
     @PluginMethod
     public void stopScreenShare(PluginCall call) {
-        Intent serviceIntent = new Intent(getContext(), IrisScreenCaptureService.class);
-        serviceIntent.setAction("STOP");
-        getContext().startService(serviceIntent);
         call.resolve();
     }
 
@@ -1953,18 +1892,46 @@ public class LauncherPlugin extends Plugin {
     public void requestStorageAccess(PluginCall call) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                if (android.os.Environment.isExternalStorageManager()) {
+                    JSObject ret = new JSObject();
+                    ret.put("granted", true);
+                    call.resolve(ret);
+                    return;
+                }
                 Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
                 intent.setData(Uri.parse("package:" + getContext().getPackageName()));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 getContext().startActivity(intent);
-                call.resolve();
+                JSObject ret = new JSObject();
+                ret.put("granted", false);
+                ret.put("prompted", true);
+                call.resolve(ret);
             } else {
-                call.reject("Use standard runtime permissions for Android < 11");
+                String[] perms = {android.Manifest.permission.READ_EXTERNAL_STORAGE};
+                if (getActivity() != null) {
+                    androidx.core.app.ActivityCompat.requestPermissions(getActivity(), perms, 9116);
+                }
+                JSObject ret = new JSObject();
+                ret.put("granted", false);
+                call.resolve(ret);
             }
         } catch (Exception e) {
             e.printStackTrace();
             call.reject("Failed to request storage access: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void isStorageAccessGranted(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean granted = false;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            granted = android.os.Environment.isExternalStorageManager();
+        } else {
+            granted = androidx.core.content.ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        }
+        ret.put("granted", granted);
+        call.resolve(ret);
     }
 
     @PluginMethod
@@ -2236,7 +2203,7 @@ public class LauncherPlugin extends Plugin {
                 results.put(obj);
 
                 if (!granted && isRuntimePermission(perm)) {
-                    toRequest.add(perm);
+                    toRequest.add(getPermissionString(perm));
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error reading permission at index " + i, e);

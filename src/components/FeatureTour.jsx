@@ -12,7 +12,7 @@ const STEPS = [
   {
     title: 'HOME SCREEN',
     subtitle: 'YOUR COMMAND CENTER',
-    description: 'Your home screen features a live clock, weather data, battery status, and an AI orb. Swipe up to open the drawer, right for the daily briefing.',
+    description: 'Your home screen features a live clock, telemetry, and the AI neural orb. Double-tap to search, swipe up for App Drawer, and swipe down for notifications.',
     icon: 'home',
     color: '#00e5ff',
     highlight: 'home',
@@ -99,8 +99,27 @@ export default function FeatureTour({ onClose }) {
     return () => window.removeEventListener('keydown', handleKey)
   }, [next, prev, onClose])
 
+  const touchStartRef = useState({ x: 0, y: 0 })[0]
+  const handleTouchStart = (e) => {
+    touchStartRef.x = e.touches[0].clientX
+    touchStartRef.y = e.touches[0].clientY
+  }
+  const handleTouchEnd = (e) => {
+    const deltaX = e.changedTouches[0].clientX - touchStartRef.x
+    const deltaY = e.changedTouches[0].clientY - touchStartRef.y
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaY) < 60) {
+      if (deltaX < 0) next()
+      else prev()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Skip */}
       <button onClick={onClose} className="absolute top-5 right-5 font-mono-data text-[10px] text-on-surface-variant/40 hover:text-on-surface-variant tracking-wider uppercase transition-colors z-10">
         Skip

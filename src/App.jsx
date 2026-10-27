@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import TopAppBar from './components/TopAppBar'
 import BottomNavBar from './components/BottomNavBar'
 import ChronoPinLock from './components/ChronoPinLock'
@@ -10,15 +10,14 @@ import VaultExplorer from './components/VaultExplorer'
 import LiveVoiceFAB from './components/LiveVoiceFAB'
 import LiveConfigModal from './components/LiveConfigModal'
 import FeatureTour from './components/FeatureTour'
-import RecentsOverlay from './components/RecentsOverlay'
 import GracefulDegradation from './components/GracefulDegradation'
 import PowerSaveManager from './utils/PowerSaveManager'
 import WallpaperManager from './utils/WallpaperManager'
+import Home from './pages/Home'
+import Drawer from './pages/Drawer'
 
-const Home = lazy(() => import('./pages/Home'))
 const Widgets = lazy(() => import('./pages/Widgets'))
 const Assistant = lazy(() => import('./pages/Assistant'))
-const Drawer = lazy(() => import('./pages/Drawer'))
 const Settings = lazy(() => import('./pages/Settings'))
 const IrisTools = lazy(() => import('./pages/IrisTools'))
 
@@ -47,7 +46,7 @@ export default function App() {
   const { installedApps, setInstalledApps, loadNativeApps, resetToDefaults } = useAppsStore()
   const { powerSaveMode, setPowerSaveMode } = usePowerStore()
   const [showFeatureTour, setShowFeatureTour] = useState(false)
-  const [showRecents, setShowRecents] = useState(false)
+  const drawerSheetRef = useRef(null)
 
   const voiceEngine = useVoiceEngine()
   const aiBackend = useAIBackend(voiceEngine.speakText)
@@ -57,13 +56,26 @@ export default function App() {
   useAppEffects({ isAppActive, setIsAppActive, setShowChronoLock, setShowVaultExplorer, setIsVaultUnlocked, setShowLiveConfigModal, setActivePage, loadNativeApps, lockedApps, fullscreenActive, isVaultUnlocked, powerSaveMode })
   const { handleLaunchApp, handleTriggerVault, handleTriggerChronoLock } = usePageRouter({ setActivePage, setChronoTarget, setShowChronoLock, isVaultUnlocked, setShowVaultExplorer })
 
-  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp: handleLaunchApp })
+  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp: handleLaunchApp, drawerSheetRef })
 
   useEffect(() => { loadNativeApps() }, [])
 
   useEffect(() => {
     WallpaperManager.checkDailyRotation()
   }, [])
+
+  useEffect(() => {
+    if (!drawerSheetRef.current) return
+    if (activePage === 'drawer') {
+      drawerSheetRef.current.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+      drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
+      drawerSheetRef.current.style.pointerEvents = 'auto'
+    } else {
+      drawerSheetRef.current.style.transition = 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)'
+      drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
+      drawerSheetRef.current.style.pointerEvents = 'none'
+    }
+  }, [activePage])
 
   const handleUnlockSuccess = () => {
     setIsVaultUnlocked(true); setShowChronoLock(false)
@@ -98,6 +110,7 @@ export default function App() {
   const renderActivePage = () => {
     switch (activePage) {
       case 'home':
+      case 'drawer':
         return <Home onNavigate={setActivePage} onTriggerVault={handleTriggerVault}
           onTriggerChronoLock={handleTriggerChronoLock} isVaultUnlocked={isVaultUnlocked}
           installedApps={installedApps} setInstalledApps={setInstalledApps} lockedApps={lockedApps} onToggleAppLock={toggleAppLock}
@@ -114,12 +127,6 @@ export default function App() {
           handleSaveLiveConfig={voiceEngine.handleSaveLiveConfig} handleOpenLiveMode={voiceEngine.handleOpenLiveMode}
           handleExitLiveModeOnly={voiceEngine.handleExitLiveModeOnly} handleStopLiveModeCompletely={voiceEngine.handleStopLiveModeCompletely}
           isAppActive={isAppActive} />
-      case 'drawer':
-        return <Drawer onNavigate={setActivePage} onTriggerChronoLock={handleTriggerChronoLock}
-          onTriggerVault={handleTriggerVault}
-          isVaultUnlocked={isVaultUnlocked} installedApps={installedApps} setInstalledApps={setInstalledApps}
-          setActivePage={setActivePage} showAppLabels={showAppLabels}
-          onToggleAppLock={toggleAppLock} lockedApps={lockedApps} globalIconTheme={globalIconTheme} />
       case 'settings':
         return <Settings geminiKey={geminiKey} setGeminiKey={useAIStore.getState().setGeminiKey} geminiModel={geminiModel} setGeminiModel={useAIStore.getState().setGeminiModel}
           groqKey={groqKey} setGroqKey={useAIStore.getState().setGroqKey} isVaultUnlocked={isVaultUnlocked} onResetVault={() => { setIsVaultUnlocked(false); setShowVaultExplorer(false) }}
@@ -222,14 +229,33 @@ export default function App() {
       )}
       <ArcSearch isOpen={showArcSearch} onClose={() => setShowArcSearch(false)} installedApps={installedApps} launchApp={handleLaunchApp} activePage={activePage} setActivePage={setActivePage} globalIconTheme={globalIconTheme} />
       <TaskAlarmOverlay setActivePage={setActivePage} />
-      <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} />
+      <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} onNavigate={setActivePage} />
       <main className="flex-1 flex flex-col overflow-hidden min-h-0 relative z-10">
-        <div key={activePage} className={`page-transition-container effect-${pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.16, 1, 0.3, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.56, 0.64, 1)' : 'cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <div key={activePage === 'drawer' ? 'home' : activePage} className={`page-transition-container effect-${pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.16, 1, 0.3, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.56, 0.64, 1)' : 'cubic-bezier(0.16, 1, 0.3, 1)' }}>
           <Suspense fallback={<div className="flex items-center justify-center h-full"><span className="material-symbols-outlined text-primary-fixed-dim animate-pulse text-3xl">hourglass_empty</span></div>}>
             {renderActivePage()}
           </Suspense>
         </div>
       </main>
+      <div
+        ref={drawerSheetRef}
+        className="fixed inset-0 z-30 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] translate-y-full pointer-events-none"
+        style={{ willChange: 'transform' }}
+      >
+        <Drawer
+          onNavigate={setActivePage}
+          onTriggerChronoLock={handleTriggerChronoLock}
+          onTriggerVault={handleTriggerVault}
+          isVaultUnlocked={isVaultUnlocked}
+          installedApps={installedApps}
+          setInstalledApps={setInstalledApps}
+          showAppLabels={showAppLabels}
+          onToggleAppLock={toggleAppLock}
+          lockedApps={lockedApps}
+          globalIconTheme={globalIconTheme}
+          drawerSheetRef={drawerSheetRef}
+        />
+      </div>
       <BottomNavBar activePage={activePage} setActivePage={setActivePage} showAppLabels={showAppLabels} />
       {showChronoLock && <ChronoPinLock onUnlockSuccess={handleUnlockSuccess} onClose={() => setShowChronoLock(false)} source={chronoTarget} />}
       {showVaultExplorer && (
@@ -250,12 +276,16 @@ export default function App() {
           onSave={voiceEngine.handleSaveLiveConfig} onClose={() => setShowLiveConfigModal(false)}
         />
       )}
-      {!setupComplete && <SetupWizard onComplete={() => setSetupComplete(true)} />}
+      {!setupComplete && (
+        <SetupWizard
+          onComplete={(opts) => {
+            setSetupComplete(true)
+            if (opts?.startTour) setShowFeatureTour(true)
+          }}
+        />
+      )}
       {showFeatureTour && <FeatureTour onClose={() => setShowFeatureTour(false)} />}
-      {showRecents && <RecentsOverlay isOpen={showRecents} onClose={() => setShowRecents(false)} />}
       <GracefulDegradation />
-      <video id="hidden-capture-video" style={{ display: 'none' }} playsInline muted></video>
-      <canvas id="hidden-capture-canvas" style={{ display: 'none' }}></canvas>
     </div>
   )
 }

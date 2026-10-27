@@ -117,15 +117,11 @@ body.dark-glass-theme .glass-icon-container {
 .scroll-container {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  will-change: scroll-position;
-  contain: layout style;
 }
 
-/* Drawer performance: isolate each app item's paint */
+/* Drawer performance: isolate each app item's layout */
 .drawer-app-item {
-  contain: layout style paint;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 72px;
+  contain: layout style;
 }
 
 /* Suppress transitions during fast scroll */
@@ -457,7 +453,11 @@ body.dark-glass-theme .glass-icon-container {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
+
 
 /* Global Icon Theme Modifiers */
 

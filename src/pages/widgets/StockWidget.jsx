@@ -1,10 +1,9 @@
+import React from 'react'
 import StockChart from '../../components/StockChart'
-import RemoveButton from './RemoveButton'
 
-export default function StockWidget({ onRemove }) {
+export default function StockWidget() {
   return (
-    <section style={{ order: 2 }} className="col-span-2 glass-surface rounded-lg p-4 relative flex flex-col justify-between">
-      <RemoveButton onClick={onRemove} />
+    <section className="glass-surface border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full overflow-hidden hover:border-primary-fixed-dim/40 transition-all">
       <StockChart />
     </section>
   )

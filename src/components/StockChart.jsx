@@ -27,11 +27,13 @@ export default function StockChart() {
   const mm1 = getMinMaxPath(liveData1.history)
   const mm2 = getMinMaxPath(liveData2.history)
 
-  // Standard line points
+  // Standard line points with safe margin
+  const padX = 10
+  const usableWidth = chartWidth - padX * 2
   const getLinePoints = (history, mm) => {
     return history.map((val, idx) => {
-      const x = (idx / (history.length - 1)) * chartWidth
-      const y = chartHeight - ((val - mm.min) / (mm.range || 1)) * (chartHeight - 12) - 6
+      const x = padX + (idx / Math.max(1, history.length - 1)) * usableWidth
+      const y = chartHeight - ((val - mm.min) / (mm.range || 1)) * (chartHeight - 16) - 8
       return { x, y }
     })
   }
@@ -45,8 +47,8 @@ export default function StockChart() {
   const getLiveCandles = (candles, min, max, range) => {
     if (!candles || candles.length === 0) return []
     return candles.map((c, idx) => {
-      const x = (idx / (candles.length - 1)) * chartWidth
-      const scaleY = (v) => chartHeight - ((v - min) / (range || 1)) * (chartHeight - 12) - 6
+      const x = padX + (idx / Math.max(1, candles.length - 1)) * usableWidth
+      const scaleY = (v) => chartHeight - ((v - min) / (range || 1)) * (chartHeight - 16) - 8
 
       return {
         x,
@@ -121,11 +123,11 @@ export default function StockChart() {
       </div>
 
       {/* Main Graph Canvas */}
-      <div className="relative bg-black/40 border border-white/5 rounded-lg p-3 flex flex-col items-center">
+      <div className="relative bg-black/40 border border-white/5 rounded-lg p-3 flex flex-col items-center w-full overflow-hidden">
         
         {/* SVG Drawing Canvas */}
-        <div className="relative" style={{ width: `${chartWidth}px`, height: `${chartHeight}px` }}>
-          <svg className="w-full h-full overflow-visible">
+        <div className="relative w-full max-w-[340px] aspect-[320/110] overflow-hidden">
+          <svg viewBox="0 0 320 110" className="w-full h-full overflow-hidden" preserveAspectRatio="none">
             {/* Grid helper lines */}
             <line x1="0" y1="25" x2={chartWidth} y2="25" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
             <line x1="0" y1="55" x2={chartWidth} y2="55" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />

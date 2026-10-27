@@ -28,14 +28,26 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.2.0
+- **Version**: 5.3.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
 
+## ⚡ v5.3.0 Cybernetic HUD & Dynamic Island Edition
+
+IRIS v5.3.0 introduces an expandable cybernetic Dynamic Island notch, real-time HUD utilities, and refined gesture orchestration:
+- **Dynamic Island Top Notch Island**: Tap or swipe to expand the notch status bar into an interactive cybernetic HUD with seamless horizontal swiping between `SYS TELEMETRY` and `ZERO SCREEN` briefings.
+- **Quick HUD Action Bar**: Integrated one-tap quick toggles directly inside the expanded island:
+  - **`TORCH`**: Instant hardware flashlight toggle with amber cyber glow.
+  - **`PURGE RAM`**: One-tap native memory optimizer invoking `LauncherPlugin.optimizeMemory()` with an animated cleaning indicator, haptic feedback, and an `OPTIMIZED` badge.
+  - **`MUTE`**: Instant audio volume and mute toggle.
+- **Refined System Telemetry**: Formatted memory counters in gigabytes (`GB`) alongside live CPU thermals, battery telemetry, and network status.
+- **Home Dock Safety Threshold**: Upgraded press-and-hold duration on the bottom navigation dock to 1 full second (1000ms) with double haptic feedback, preventing accidental voice assistant triggers while keeping dock swiping and page switching fluid.
+- **Conflict-Free Gesture Routing**: Inbuilt gestures streamlined through user settings to eliminate conflicts between drawer pull-downs and Android system notification shades.
+
 ## ⚡ v5.2.0 Hardened Security & Cybernetic Edition
 
-IRIS v5.0.0 delivers comprehensive cryptographic, privacy, and architectural enhancements:
+IRIS v5.2.0 delivers comprehensive cryptographic, privacy, and architectural enhancements:
 - **On-Device Notification PII Redaction**: Automatic real-time regex sanitization in `IrisNotificationListenerService.java` redacting OTPs, 2FA codes, account tokens, credit cards, emails, phone numbers, crypto addresses, and UPI IDs before dispatch.
 - **Hardware-Backed AES-256 GCM Storage**: AndroidKeyStore integration with PBKDF2 (SHA-256, 310,000 iterations) fallback derivation and non-extractable keys.
 - **Biometric & Chrono Lockout Shield**: Dynamic time-synced PIN verification paired with a 5-attempt threshold and native 30-second brute-force cooldown.

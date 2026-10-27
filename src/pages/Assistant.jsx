@@ -10,6 +10,7 @@ import EngineModelBar from './assistant/EngineModelBar'
 import OllamaManager from './assistant/OllamaManager'
 import DiagnosticsTerminal from './assistant/DiagnosticsTerminal'
 import ChatMessage from './assistant/ChatMessage'
+import ChronoPinLock from '../components/ChronoPinLock'
 import { logNotification } from '../components/LauncherPlugin'
 
 export default function Assistant({
@@ -29,6 +30,7 @@ export default function Assistant({
 
   // Local UI state
   const [chatUnlocked, setChatUnlocked] = useState(false)
+  const [showPinFallback, setShowPinFallback] = useState(false)
   const [isChatMaximized, setIsChatMaximized] = useState(true)
   const [showDiagTerminal, setShowDiagTerminal] = useState(false)
   const [showKeyInput, setShowKeyInput] = useState(false)
@@ -165,10 +167,12 @@ export default function Assistant({
         setChatUnlocked(true);
         logNotification('BIOMETRIC', 'Session Decrypted Successfully', 'success');
       } else { 
-        logNotification('BIOMETRIC', 'Biometric hardware unavailable.', 'warning');
+        logNotification('BIOMETRIC', 'Biometric hardware unavailable. Please use PIN.', 'warning');
+        setShowPinFallback(true);
       } 
     } catch (e) { 
       logNotification('BIOMETRIC', "Authentication failed: " + (e.message || e), 'error');
+      setShowPinFallback(true);
     }
   }, [])
 
@@ -257,12 +261,28 @@ export default function Assistant({
               {showDiagTerminal && <DiagnosticsTerminal onClose={() => setShowDiagTerminal(false)} />}
 
               {!chatUnlocked && (
-                <div onClick={handleBiometricUnlock}
-                  className="absolute inset-0 z-50 bg-[#020617]/60 backdrop-blur-2xl flex flex-col items-center justify-center gap-4 cursor-pointer group hover:bg-[#020617]/70 transition-colors">
-                  <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]">
+                <div className="absolute inset-0 z-50 bg-[#020617]/70 backdrop-blur-2xl flex flex-col items-center justify-center gap-4">
+                  <div onClick={handleBiometricUnlock}
+                    className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group hover:scale-110 transition-transform shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)] cursor-pointer">
                     <span className="material-symbols-outlined text-4xl text-[var(--primary-color)]">fingerprint</span>
                   </div>
                   <span className="font-sans text-[12px] font-bold text-white/70 tracking-widest uppercase">Tap to Decrypt Session</span>
+                  <button
+                    onClick={() => setShowPinFallback(true)}
+                    className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white text-[10px] font-mono-data tracking-wider uppercase transition-all"
+                  >
+                    Use Chrono PIN
+                  </button>
+                </div>
+              )}
+
+              {showPinFallback && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md">
+                  <ChronoPinLock
+                    onUnlockSuccess={() => { setChatUnlocked(true); setShowPinFallback(false) }}
+                    onClose={() => setShowPinFallback(false)}
+                    source="assistant"
+                  />
                 </div>
               )}
 

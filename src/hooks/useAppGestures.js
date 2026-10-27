@@ -4,7 +4,7 @@ import HapticFeedback from '../utils/HapticFeedback'
 import { useAppStore } from '../stores/appStore'
 
 let contextMenuOpen = false
-let tripleTapTimerRef = null
+let doubleTapTimerRef = null
 let tapCountRef = 0
 let longPressTimerRef = null
 
@@ -21,13 +21,24 @@ function isOverlayActive() {
   }
 }
 
+const DEFAULT_GESTURE_MAP = {
+  swipe_up: { action: 'open_drawer' },
+  swipe_down: { action: 'notifications' },
+  double_tap: { action: 'open_search' },
+  swipe_left: { action: 'do_nothing' },
+  swipe_right: { action: 'do_nothing' },
+  long_press_empty: { action: 'do_nothing' },
+  pinch_in: { action: 'do_nothing' },
+  two_finger_swipe_up: { action: 'do_nothing' },
+  two_finger_swipe_down: { action: 'do_nothing' },
+}
+
 function getGestureMap() {
   try {
     const raw = localStorage.getItem('iris_gesture_map')
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
+    if (raw) return { ...DEFAULT_GESTURE_MAP, ...JSON.parse(raw) }
+  } catch {}
+  return DEFAULT_GESTURE_MAP
 }
 
 function getGestureAction(gestureId) {
@@ -37,7 +48,7 @@ function getGestureAction(gestureId) {
   return entry
 }
 
-export default function useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp }) {
+export default function useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp, drawerSheetRef }) {
   const touchStartX = useRef(null)
   const touchStartY = useRef(null)
   const touchEndX = useRef(null)
@@ -49,9 +60,9 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
   useEffect(() => {
     return () => {
-      if (tripleTapTimerRef) {
-        clearTimeout(tripleTapTimerRef)
-        tripleTapTimerRef = null
+      if (doubleTapTimerRef) {
+        clearTimeout(doubleTapTimerRef)
+        doubleTapTimerRef = null
       }
       if (longPressTimerRef) {
         clearTimeout(longPressTimerRef)
@@ -90,14 +101,15 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
     const absDeltaX = Math.abs(deltaX)
     const absDeltaY = Math.abs(deltaY)
-    const minSwipe = 80
+    const isFlick = duration > 0 && duration < 320
+    const dynamicMinSwipe = isFlick ? 40 : 55
 
     if (absDeltaX < 10 && absDeltaY < 10) {
       if (duration > 500) return 'long_press_empty'
       return null
     }
 
-    if (absDeltaX < minSwipe && absDeltaY < minSwipe) return null
+    if (absDeltaX < dynamicMinSwipe && absDeltaY < dynamicMinSwipe) return null
 
     if (absDeltaX > absDeltaY) {
       const dir = deltaX > 0 ? 'right' : 'left'
@@ -128,7 +140,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       if (!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.app-icon-item') && !e.target.closest('[data-no-arc]')) {
         tapCountRef++
         if (tapCountRef === 1) {
-          tripleTapTimerRef = setTimeout(() => { tapCountRef = 0 }, 500)
+          doubleTapTimerRef = setTimeout(() => { tapCountRef = 0 }, 350)
           longPressTimerRef = setTimeout(() => {
             if (tapCountRef === 1) {
               const gesture = getGestureAction('long_press_empty')
@@ -138,23 +150,16 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
           }, 600)
         } else if (tapCountRef === 2) {
           if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
-          if (tripleTapTimerRef) { clearTimeout(tripleTapTimerRef); tripleTapTimerRef = null }
+          if (doubleTapTimerRef) { clearTimeout(doubleTapTimerRef); doubleTapTimerRef = null }
           const gesture = getGestureAction('double_tap')
           if (gesture) {
             executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
           }
           tapCountRef = 0
-        } else if (tapCountRef >= 3) {
-          clearTimeout(tripleTapTimerRef)
-          tripleTapTimerRef = null
-          tapCountRef = 0
-          HapticFeedback.double()
-          setShowArcSearch(true)
-          return
         }
       }
     }
-  }, [activePage, setShowArcSearch, executeAction])
+  }, [activePage, executeAction])
 
   const handleTouchMove = useCallback((e) => {
     if (isOverlayActive()) return
@@ -171,6 +176,21 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
           longPressTimerRef = null
         }
       }
+
+      // Interactive 1:1 finger tracking when swiping up on Home (only if swipe_up is assigned to open_drawer)
+      if (activePage === 'home' && drawerSheetRef?.current) {
+        const swipeUpGesture = getGestureAction('swipe_up')
+        if (swipeUpGesture?.action === 'open_drawer') {
+          const deltaY = touchEndY.current - touchStartY.current
+          if (deltaY < -10 && dx < Math.abs(deltaY) * 1.5) {
+            const vh = window.innerHeight || 800
+            const currentTranslate = Math.max(0, vh + deltaY)
+            drawerSheetRef.current.style.transition = 'none'
+            drawerSheetRef.current.style.transform = `translate3d(0, ${currentTranslate}px, 0)`
+            drawerSheetRef.current.style.pointerEvents = 'auto'
+          }
+        }
+      }
     }
 
     if (e.touches.length === 2) {
@@ -178,7 +198,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       const dy = e.touches[0].clientY - e.touches[1].clientY
       currentPinchDistRef.current = Math.hypot(dx, dy)
     }
-  }, [])
+  }, [activePage, drawerSheetRef])
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
@@ -196,12 +216,37 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     const absDeltaY = Math.abs(deltaY)
     const absDeltaX = Math.abs(deltaX)
 
-    // iOS-Style Edge Swipe Right on Sub-Pages -> Smoothly Navigate Back to Home
+    // Interactive release on Home: snap open or closed with spring physics (only if swipe_up is assigned to open_drawer)
+    if (activePage === 'home' && drawerSheetRef?.current && touchStartY.current !== null && touchEndY.current !== null) {
+      const swipeUpGesture = getGestureAction('swipe_up')
+      if (swipeUpGesture?.action === 'open_drawer') {
+        if (deltaY < -15 && absDeltaX < Math.abs(deltaY) * 1.5) {
+          const velocity = Math.abs(deltaY) / Math.max(1, duration)
+          if (deltaY < -80 || (velocity > 0.35 && deltaY < -30)) {
+            HapticFeedback.light()
+            drawerSheetRef.current.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+            drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
+            setActivePage('drawer')
+            touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
+            initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
+            return
+          } else {
+            drawerSheetRef.current.style.transition = 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)'
+            drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
+            drawerSheetRef.current.style.pointerEvents = 'none'
+          }
+        }
+      }
+    }
+
+    // Sub-Pages & Drawer handling: Home gestures must not run outside 'home'
     if (activePage !== 'home') {
-      const edgeThreshold = Math.min(100, (typeof window !== 'undefined' ? window.innerWidth : 400) * 0.3)
-      if (deltaX > 70 && absDeltaY < 65 && startX < edgeThreshold) {
-        HapticFeedback.light()
-        setActivePage('home')
+      if (activePage !== 'drawer') {
+        const edgeThreshold = Math.min(100, (typeof window !== 'undefined' ? window.innerWidth : 400) * 0.3)
+        if (deltaX > 70 && absDeltaY < 65 && startX < edgeThreshold) {
+          HapticFeedback.light()
+          setActivePage('home')
+        }
       }
       touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
       initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
@@ -222,13 +267,9 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       }
     }
 
-    if (deltaY > 80 && absDeltaX < 50) {
-      expandNotificationPanel()
-    }
-
     touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
     initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
-  }, [activePage, setActivePage, detectGesture, executeAction])
+  }, [activePage, setActivePage, detectGesture, executeAction, drawerSheetRef])
 
   return { handleTouchStart, handleTouchMove, handleTouchEnd }
 }

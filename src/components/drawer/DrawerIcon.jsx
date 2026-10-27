@@ -16,7 +16,7 @@ function DrawerIcon({ app, isLocked, size, iconTheme, iconShape = 'system' }) {
       {isLocked ? (
         <span className="material-symbols-outlined text-error animate-pulse" style={{ fontSize: `${symbolSizePx}px` }}>lock</span>
       ) : app?.icon && (typeof app.icon === 'string') && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
-        <img src={app.icon} decoding="async" className="w-[65%] h-[65%] object-contain rounded-lg drop-shadow-md" alt="" />
+        <img src={app.icon} decoding="async" className="w-[65%] h-[65%] object-contain rounded-lg" alt="" />
       ) : (
         <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: `${symbolSizePx}px` }}>{app?.icon || 'rocket_launch'}</span>
       )}

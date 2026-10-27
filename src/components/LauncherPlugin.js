@@ -460,6 +460,19 @@ export async function requestStorageAccess() {
   return false
 }
 
+export async function isStorageAccessGranted() {
+  if (!isNative) return true
+  try {
+    if (NativeLauncher.isStorageAccessGranted) {
+      const res = await NativeLauncher.isStorageAccessGranted()
+      return !!res?.granted
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 export async function getSystemStats() {
   if (isNative) {
     try {

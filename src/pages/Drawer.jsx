@@ -23,14 +23,25 @@ const CATEGORY_PATTERNS = {
   SHOPPING: ['shop', 'store', 'amazon', 'ebay', 'market', 'buy'],
 }
 
+const categoryCache = new Map()
+
 function detectCategory(app) {
+  if (!app?.packageId) return app?.cat || 'OTHER'
+  const cached = categoryCache.get(app.packageId)
+  if (cached) return cached
+
   const pkg = (app.packageId || '').toLowerCase()
   const label = (app.label || '').toLowerCase()
   const combined = `${pkg} ${label}`
   for (const [cat, patterns] of Object.entries(CATEGORY_PATTERNS)) {
-    if (patterns.some(p => combined.includes(p))) return cat
+    if (patterns.some(p => combined.includes(p))) {
+      categoryCache.set(app.packageId, cat)
+      return cat
+    }
   }
-  return app.cat || 'OTHER'
+  const fallback = app.cat || 'OTHER'
+  categoryCache.set(app.packageId, fallback)
+  return fallback
 }
 
 export default function Drawer({
@@ -41,13 +52,14 @@ export default function Drawer({
   installedApps = [],
   setInstalledApps,
   lockedApps = [],
-  onToggleAppLock
+  onToggleAppLock,
+  drawerSheetRef,
 }) {
   const { gridColumns, gridRows, showAppLabels, showDrawerSearch, globalIconTheme, drawerIconSize, drawerTextSize, drawerLayout, setDrawerLayout, iconShape } = useThemeStore()
   const { hiddenApps, appFrequency, recordAppLaunch } = useAppsStore()
   
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeCategory] = useState('ALL')
+  const [activeCategory, setActiveCategory] = useState('ALL')
   const [sortBy, setSortBy] = useState('A-Z')
   const [activeLetter, setActiveLetter] = useState(null)
   const [showHidden, setShowHidden] = useState(false)
@@ -154,7 +166,20 @@ export default function Drawer({
     swipeStartPos.current = {
       x: touch.clientX,
       y: touch.clientY,
-      scrollTop: e.currentTarget.scrollTop
+      scrollTop: e.currentTarget.scrollTop,
+      time: Date.now()
+    }
+  }
+
+  const handleDrawerTouchMove = (e) => {
+    if (!swipeStartPos.current || !drawerSheetRef?.current) return
+    const touch = e.touches ? e.touches[0] : e
+    if (!touch) return
+    const dx = Math.abs(touch.clientX - swipeStartPos.current.x)
+    const dy = touch.clientY - swipeStartPos.current.y
+    if (dy > 12 && dx < dy * 1.5 && swipeStartPos.current.scrollTop <= 5) {
+      drawerSheetRef.current.style.transition = 'none'
+      drawerSheetRef.current.style.transform = `translate3d(0, ${Math.max(0, dy)}px, 0)`
     }
   }
 
@@ -162,11 +187,27 @@ export default function Drawer({
     if (!swipeStartPos.current) return
     const touch = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : e)
     if (!touch || !touch.clientX) return
-    const dx = touch.clientX - swipeStartPos.current.x
+    const dx = Math.abs(touch.clientX - swipeStartPos.current.x)
     const dy = touch.clientY - swipeStartPos.current.y
-    if (dy > 100 && Math.abs(dx) < 80 && swipeStartPos.current.scrollTop <= 5) {
-      onNavigate('home')
+    const duration = Date.now() - (swipeStartPos.current.time || Date.now())
+    const velocity = Math.abs(dy) / Math.max(1, duration)
+
+    if (dy > 12 && dx < dy * 1.5 && swipeStartPos.current.scrollTop <= 5) {
+      if (dy > 80 || (velocity > 0.35 && dy > 30)) {
+        if (drawerSheetRef?.current) {
+          drawerSheetRef.current.style.transition = 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)'
+          drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
+          drawerSheetRef.current.style.pointerEvents = 'none'
+        }
+        onNavigate('home')
+      } else {
+        if (drawerSheetRef?.current) {
+          drawerSheetRef.current.style.transition = 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)'
+          drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
+        }
+      }
     }
+    swipeStartPos.current = null
   }
 
   const handleCreateFolder = () => {
@@ -226,6 +267,7 @@ export default function Drawer({
         ref={scrollRef}
         data-no-arc
         onTouchStart={handleDrawerTouchStart}
+        onTouchMove={handleDrawerTouchMove}
         onTouchEnd={handleDrawerTouchEnd}
         className="flex-grow pt-12 px-margin overflow-y-auto pb-20 scroll-container select-none"
       >
@@ -255,6 +297,22 @@ export default function Drawer({
               )}
             </div>
           )}
+
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[8px] font-label-caps tracking-wider">
+            {['ALL', 'COMMUNICATION', 'MEDIA', 'GAMES', 'SYSTEM', 'PRODUCTIVITY', 'FINANCE'].map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-2 py-0.5 rounded-full border transition-all shrink-0 ${
+                  activeCategory === cat
+                    ? 'bg-primary-fixed-dim/20 text-primary-fixed-dim border-primary-fixed-dim/50 shadow-[0_0_8px_rgba(var(--primary-rgb),0.2)] font-bold'
+                    : 'border-outline-variant/20 text-on-surface-variant/40 hover:text-white hover:border-white/20'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
 
 
           <div className="flex gap-2 justify-center pt-1 flex-wrap items-center">

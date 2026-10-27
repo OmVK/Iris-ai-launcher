@@ -15,12 +15,11 @@ $env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe
 ```
 
 ## Project Info
-- **Version**: 5.0.0
+- **Version**: 5.3.0
 - **App ID**: com.stitch.iris.launcher
 - **Platform**: Android (Capacitor 8)
 - **Stack**: React 18, Zustand 5, Tailwind 3, Vite 5
 - **Native**: 16 Java files under `android/app/src/main/java/com/stitch/iris/launcher/`
-- **Future Roadmap**: See [`FUTURE_ROADMAP.md`](file:///c:/Users/Oz/Desktop/Projects/Iris-ai-launcher-main/FUTURE_ROADMAP.md) for approved future upgrades (Kokoro-82M TTS, On-Device SLM, Vision Assistant, IRIS Security Suite, Gyro 3D).
 
 ## Code Style
 - Functional components with hooks

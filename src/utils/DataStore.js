@@ -118,39 +118,4 @@ function getStore(name) {
   return stores.get(name)
 }
 
-const AppPositionStore = getStore('app_positions')
-const FolderStore = getStore('folders')
-const WidgetStore = getStore('widgets')
-const GestureStore = getStore('gestures')
-export const HiddenAppsStore = getStore('hidden_apps')
-const LockedAppsStore = getStore('locked_apps')
-const SettingsStore = getStore('settings')
 export const BadgeStore = getStore('badges')
-const SessionStore = getStore('sessions')
-
-async function migrateFromLocalStorage(mappings) {
-  for (const [lsKey, store, storeKey] of mappings) {
-    try {
-      const raw = localStorage.getItem(lsKey)
-      if (raw !== null) {
-        const existing = await store.get(storeKey)
-        if (existing === null) {
-          const parsed = JSON.parse(raw)
-          await store.set(storeKey, parsed)
-        }
-      }
-    } catch (e) {
-      // Skip failed migrations
-    }
-  }
-}
-
-async function runMigrations() {
-  await migrateFromLocalStorage([
-    ['installed_apps', AppPositionStore, 'positions'],
-    ['iris_custom_folders', FolderStore, 'folders'],
-    ['iris_active_widgets', WidgetStore, 'active_ids'],
-    ['iris_custom_widgets', WidgetStore, 'custom'],
-    ['iris_locked_apps', LockedAppsStore, 'locked'],
-  ])
-}

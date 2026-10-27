@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
-import { launchApp, expandNotificationPanel, getSystemStats } from '../components/LauncherPlugin'
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
+import { launchApp } from '../components/LauncherPlugin'
 import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
 import OfflineAssistantOverlay from '../components/OfflineAssistantOverlay'
 import HudIcon from '../components/HudIcon'
@@ -11,7 +11,6 @@ import PinnedContacts from '../components/PinnedContacts'
 import HomeScreenFolder from '../components/HomeScreenFolder'
 import { useAppContextMenu } from '../hooks/useAppContextMenu'
 import AppContextMenu from '../components/AppContextMenu'
-import PowerSaveManager from '../utils/PowerSaveManager'
 import { routeAppClick } from '../utils/appClickRouter'
 import { useThemeStore } from '../stores/themeStore'
 
@@ -45,8 +44,6 @@ export default function Home({
   
   const [showOfflineAssistant, setShowOfflineAssistant] = useState(false)
   const [, setAssistantState] = useState({ isListening: false, isProcessing: false })
-  const [, setSysStats] = useState({ memTotal: 0, memUsed: 0, memAvailable: 0, cpuTemp: 35.0 })
-  const [tilt, setTilt] = useState({ x: 0, y: 0 })
 
   const {
     activeContextMenu, setActiveContextMenu,
@@ -57,8 +54,6 @@ export default function Home({
     handleOpenAppInfo
   } = useAppContextMenu({ setInstalledApps, onToggleAppLock })
 
-  const swipeStartPos = useRef({ x: 0, y: 0 })
-
   useEffect(() => {
     const handler = () => {
       setShowOfflineAssistant(true)
@@ -67,77 +62,37 @@ export default function Home({
     return () => window.removeEventListener('iris-trigger-assistant', handler)
   }, [])
 
-  useEffect(() => {
-    if (!isAppActive) return
-
-    const fetchStats = async () => {
-      try {
-        const stats = await getSystemStats()
-        if (stats) setSysStats(stats)
-      } catch (e) {}
-    }
-
-    fetchStats()
-    const statsTimer = setInterval(fetchStats, PowerSaveManager.getPollingInterval('batteryPollMs'))
-
-    return () => {
-      clearInterval(statsTimer)
-    }
-  }, [isAppActive, powerSaveMode])
 
   useEffect(() => {
     if (!isAppActive) return
 
-    let lastUpdate = 0
+    let rafId = null
     const handleOrientation = (event) => {
-      const now = Date.now()
-      if (now - lastUpdate < 16) return
-      lastUpdate = now
-      let x = event.gamma || 0;
-      let y = (event.beta || 45) - 45;
-      
-      if (x > 25) x = 25;
-      if (x < -25) x = -25;
-      if (y > 25) y = 25;
-      if (y < -25) y = -25;
-      
-      setTilt({ x, y });
-    };
+      let x = event.gamma || 0
+      let y = (event.beta || 45) - 45
+      if (x > 25) x = 25
+      if (x < -25) x = -25
+      if (y > 25) y = 25
+      if (y < -25) y = -25
+
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        document.documentElement.style.setProperty('--home-tilt-x', `${(x / 1.5).toFixed(2)}deg`)
+        document.documentElement.style.setProperty('--home-tilt-y', `${(-y / 1.5).toFixed(2)}deg`)
+      })
+    }
 
     if (window.DeviceOrientationEvent) {
-      window.addEventListener('deviceorientation', handleOrientation);
+      window.addEventListener('deviceorientation', handleOrientation)
     }
-    
+
     return () => {
-      window.removeEventListener('deviceorientation', handleOrientation);
-    };
-  }, [isAppActive]);
-
-  const handleSwipeStart = (e) => {
-    const touch = e.touches ? e.touches[0] : e
-    swipeStartPos.current = { x: touch.clientX, y: touch.clientY }
-  }
-
-  const handleSwipeEnd = (e) => {
-    if (!e || !swipeStartPos.current) return
-    const touch = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : e)
-    if (!touch || !touch.clientX) return
-
-    const dx = touch.clientX - swipeStartPos.current.x
-    const dy = touch.clientY - swipeStartPos.current.y
-
-    if (Math.abs(dx) > 100 && Math.abs(dy) < 100) {
-      if (dx > 100 && swipeStartPos.current.x < 100) {
-        onNavigate('zero_screen')
-      }
+      if (rafId) cancelAnimationFrame(rafId)
+      window.removeEventListener('deviceorientation', handleOrientation)
+      document.documentElement.style.setProperty('--home-tilt-x', '0deg')
+      document.documentElement.style.setProperty('--home-tilt-y', '0deg')
     }
-    else if (dy < -60 && Math.abs(dx) < 120) {
-      onNavigate('drawer')
-    }
-    else if (dy > 80 && Math.abs(dx) < 120) {
-      expandNotificationPanel()
-    }
-  }
+  }, [isAppActive])
 
   const handleAppClick = useCallback((e, app) => {
     if (activeContextMenu) {
@@ -167,13 +122,12 @@ export default function Home({
     gridColumns,
     gridRows,
     iconShape,
-    tilt,
     handleAppClick,
     handleContextMenu,
     IRIS_ICON_PACK,
     HudIcon,
     HudFallbackIcon
-  }), [installedApps, lockedApps, isVaultUnlocked, globalIconTheme, showAppLabels, homeIconSize, homeTextSize, gridColumns, gridRows, iconShape, tilt, handleAppClick, handleContextMenu])
+  }), [installedApps, lockedApps, isVaultUnlocked, globalIconTheme, showAppLabels, homeIconSize, homeTextSize, gridColumns, gridRows, iconShape, handleAppClick, handleContextMenu])
 
   const homeApps = useMemo(() => {
     return installedApps.filter(app => app.isHome !== false).slice(0, gridColumns * gridRows * homePages)
@@ -181,11 +135,6 @@ export default function Home({
 
   return (
     <div 
-      onMouseDown={handleSwipeStart}
-      onMouseUp={handleSwipeEnd}
-      onTouchStart={handleSwipeStart}
-      onTouchEnd={handleSwipeEnd}
-      onTouchCancel={handleSwipeEnd}
       className="relative flex-1 flex flex-col pt-4 pb-28 px-margin z-10 select-none overflow-y-auto no-scrollbar"
     >
       

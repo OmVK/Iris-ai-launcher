@@ -45,7 +45,7 @@ export const useAIStore = create((set, get) => ({
   setCartesiaKey: (v) => {
     const trimmed = (v || '').trim()
     SecureStorage.setItem('cartesia_api_key', trimmed)
-    localStorage.setItem('cartesia_api_key', trimmed)
+    localStorage.removeItem('cartesia_api_key')
     set({ cartesiaKey: trimmed })
   },
   setVoiceEngineProvider: (v) => { localStorage.setItem('iris_voice_engine_provider', v); set({ voiceEngineProvider: v }) },

@@ -10,7 +10,6 @@ export default function HomeGrid({
   gridColumns,
   gridRows,
   iconShape = 'system',
-  tilt,
   handleAppClick,
   handleContextMenu,
   IRIS_ICON_PACK,
@@ -29,7 +28,7 @@ export default function HomeGrid({
     gridTemplateRows: `repeat(${gridRows}, auto)`,
     gap: '20px 16px',
     alignItems: 'center',
-    transform: `perspective(1000px) rotateX(${-tilt.y / 1.5}deg) rotateY(${tilt.x / 1.5}deg)`,
+    transform: 'perspective(1000px) rotateX(var(--home-tilt-y, 0deg)) rotateY(var(--home-tilt-x, 0deg))',
     transformStyle: 'preserve-3d',
     transition: 'transform 0.1s ease-out',
     willChange: 'transform'
