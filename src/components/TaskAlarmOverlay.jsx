@@ -1,10 +1,36 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { speakTextNative } from './LauncherPlugin'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { speakTextNative, stopSpeakingNative } from './LauncherPlugin'
 
 export default function TaskAlarmOverlay({ setActivePage }) {
   const [activeTask, setActiveTask] = useState(null)
   const timeoutRef = useRef(null)
   const audioCtxRef = useRef(null)
+
+  const dismiss = useCallback(() => {
+    setActiveTask(null)
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    try {
+      if (stopSpeakingNative) stopSpeakingNative()
+    } catch (e) {}
+  }, [])
+
+  const handleMarkDone = useCallback((id) => {
+    // Send event back to Widgets/App to update localStorage
+    window.dispatchEvent(new CustomEvent('UPDATE_TASK_STATE', {
+      detail: { id, action: 'MARK_DONE' }
+    }))
+    dismiss()
+    // Return to home
+    if (setActivePage) setActivePage('home')
+  }, [dismiss, setActivePage])
+
+  const handleWorkingOn = (task) => {
+    // Send event back to Widgets/App to reschedule +15 mins
+    window.dispatchEvent(new CustomEvent('UPDATE_TASK_STATE', {
+      detail: { id: task.id, action: 'SNOOZE_15' }
+    }))
+    dismiss()
+  }
 
   // Play a cyberpunk-style alert tone
   const playAlertTone = () => {
@@ -62,35 +88,7 @@ export default function TaskAlarmOverlay({ setActivePage }) {
         audioCtxRef.current = null
       }
     }
-  }, [])
-
-  const dismiss = () => {
-    setActiveTask(null)
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    try {
-      import('./LauncherPlugin').then(m => {
-        if (m.stopSpeakingNative) m.stopSpeakingNative()
-      })
-    } catch (e) {}
-  }
-
-  const handleMarkDone = (id) => {
-    // Send event back to Widgets/App to update localStorage
-    window.dispatchEvent(new CustomEvent('UPDATE_TASK_STATE', {
-      detail: { id, action: 'MARK_DONE' }
-    }))
-    dismiss()
-    // Return to home
-    if (setActivePage) setActivePage('home')
-  }
-
-  const handleWorkingOn = (task) => {
-    // Send event back to Widgets/App to reschedule +15 mins
-    window.dispatchEvent(new CustomEvent('UPDATE_TASK_STATE', {
-      detail: { id: task.id, action: 'SNOOZE_15' }
-    }))
-    dismiss()
-  }
+  }, [handleMarkDone])
 
   if (!activeTask) return null
 

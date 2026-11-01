@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import SettingsSection from './SettingsSection'
-import { requestDefaultLauncher, isNative } from '../../components/LauncherPlugin'
+import { requestDefaultLauncher } from '../../components/LauncherPlugin'
 
 export default function LauncherEngineSection({ expandedSections, toggleSection }) {
   const [isDefault, setIsDefault] = useState(null)
@@ -18,10 +18,10 @@ export default function LauncherEngineSection({ expandedSections, toggleSection 
             )}
           </div>
           <button onClick={async () => {
-              const res = await requestDefaultLauncher()
-              if (res?.alreadyDefault) setIsDefault(true)
-              else setIsDefault(false)
-            }}
+            const res = await requestDefaultLauncher()
+            if (res?.alreadyDefault) setIsDefault(true)
+            else setIsDefault(false)
+          }}
             className="px-3 py-1.5 rounded bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim font-bold active:scale-95 transition-transform text-[9px] flex items-center gap-1 shrink-0">
             SET AS DEFAULT HOME
           </button>

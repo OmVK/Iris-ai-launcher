@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAIStore } from '../../stores/aiStore'
 import { SecureStorage } from '../../utils/secureStorage'
 import { GenAI } from '../../components/GenAIPlugin'
-import { checkAllBackends, getBackendStatus, getBackendError } from '../../utils/AIProviderManager'
+import { checkAllBackends, getBackendStatus } from '../../utils/AIProviderManager'
 
 const BACKEND_NAMES = { ONDEVICE: 'Gemini Nano', GEMINI: 'Google Gemini', GROQ: 'Groq LPU', NVIDIA: 'NVIDIA NIM', OLLAMA: 'Ollama Local' }
 

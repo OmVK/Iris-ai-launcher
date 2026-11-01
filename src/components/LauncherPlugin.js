@@ -1,7 +1,7 @@
 import { registerPlugin, Capacitor } from '@capacitor/core'
 
 // Register the custom native LauncherPlugin
-const NativeLauncher = registerPlugin('LauncherPlugin')
+export const NativeLauncher = registerPlugin('LauncherPlugin')
 
 export const isNative = Capacitor.isNativePlatform()
 
@@ -274,10 +274,26 @@ export async function dispatchMediaKey(key = 'play_pause') {
   if (isNative) {
     try {
       await NativeLauncher.dispatchMediaKey({ key })
+      return true
     } catch (e) {
       console.error('Failed to dispatch media key:', e)
+      return false
     }
   }
+  return false
+}
+
+export async function getActiveMediaSession() {
+  if (isNative) {
+    try {
+      if (NativeLauncher.getActiveMediaSession) {
+        return (await NativeLauncher.getActiveMediaSession()) || { isMusicActive: false, isPlaying: false }
+      }
+    } catch (e) {
+      console.error('Failed to get active media session:', e)
+    }
+  }
+  return { isMusicActive: false, isPlaying: false }
 }
 
 export function addAudioFinishedListener(callback) {
@@ -404,6 +420,39 @@ export function addNotificationListener(callback) {
     return NativeLauncher.addListener('onNotificationUpdated', callback)
   }
   return { remove: () => {} }
+}
+
+export function addNotificationPostedListener(callback) {
+  if (isNative) {
+    return NativeLauncher.addListener('onNotificationPosted', callback)
+  }
+  return { remove: () => {} }
+}
+
+export async function getArchivedNotifications() {
+  if (!isNative) return []
+  try {
+    const res = await NativeLauncher.getArchivedNotifications()
+    if (Array.isArray(res?.notifications)) return res.notifications
+    if (typeof res?.notifications === 'string') return JSON.parse(res.notifications)
+    return []
+  } catch {
+    return []
+  }
+}
+
+export async function clearArchivedNotifications() {
+  if (!isNative) return
+  try {
+    await NativeLauncher.clearArchivedNotifications()
+  } catch {}
+}
+
+export async function deleteArchivedNotification(id) {
+  if (!isNative || !id) return
+  try {
+    await NativeLauncher.deleteArchivedNotification({ id: String(id) })
+  } catch {}
 }
 
 export async function expandNotificationPanel() {

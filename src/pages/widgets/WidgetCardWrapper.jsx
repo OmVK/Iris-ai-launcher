@@ -8,9 +8,11 @@ export default function WidgetCardWrapper({
   totalCount,
   label,
   icon,
-  widgetSpans,
+  widgetSpans = {},
+  currentSpan: currentSpanProp,
   toggleWidgetSpan,
-  minimizedWidgets,
+  minimizedWidgets = {},
+  isMinimized: isMinimizedProp,
   toggleWidgetMinimize,
   onRemove,
   onMoveUp,
@@ -27,8 +29,8 @@ export default function WidgetCardWrapper({
   defaultSpan = 'col-span-1',
   children,
 }) {
-  const isMinimized = !!minimizedWidgets[id]
-  const currentSpan = widgetSpans[id] || defaultSpan
+  const isMinimized = isMinimizedProp !== undefined ? isMinimizedProp : !!minimizedWidgets?.[id]
+  const currentSpan = currentSpanProp || widgetSpans?.[id] || defaultSpan
   const [showMenu, setShowMenu] = useState(false)
   const [menuStyle, setMenuStyle] = useState(null)
   const containerRef = useRef(null)
@@ -144,7 +146,8 @@ export default function WidgetCardWrapper({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onDragEnd={handleDragEnd}
-      className={`relative transition-all duration-300 ${currentSpan} ${
+      style={showMenu ? undefined : { contain: 'layout style' }}
+      className={`relative transition-transform duration-200 ${currentSpan} ${
         isBeingDragged ? 'opacity-40 scale-[0.98] ring-2 ring-primary-fixed-dim/80 rounded-2xl' : ''
       } ${
         isTargetOfDrag ? 'ring-2 ring-primary-fixed-dim bg-primary-fixed-dim/10 scale-[1.01] rounded-2xl' : ''
@@ -164,7 +167,7 @@ export default function WidgetCardWrapper({
     >
       {/* Edit Mode HUD Toolbar */}
       {isEditMode && !isSpacer && (
-        <div className="flex items-center justify-between px-3 py-1.5 mb-2 rounded-xl bg-black/80 border border-primary-fixed-dim/40 text-primary-fixed-dim backdrop-blur-md animate-fade-in shadow-[0_0_15px_rgba(var(--primary-rgb),0.15)]">
+        <div className="flex items-center justify-between px-3 py-1.5 mb-2 rounded-xl bg-[#080d16]/95 border border-primary-fixed-dim/40 text-primary-fixed-dim">
           <div className="flex items-center gap-2 cursor-grab active:cursor-grabbing min-w-0 pr-2">
             <span className="material-symbols-outlined text-sm opacity-80 shrink-0">drag_indicator</span>
             <span className="text-[9px] font-mono uppercase tracking-wider font-bold truncate text-white/90">
@@ -253,7 +256,7 @@ export default function WidgetCardWrapper({
             HapticFeedback.light()
             toggleWidgetMinimize(id)
           }}
-          className="glass-surface border border-white/15 rounded-xl px-4 py-3 flex items-center justify-between shadow-lg hover:border-primary-fixed-dim/40 transition-all bg-black/60 backdrop-blur-md cursor-pointer select-none"
+          className="iris-card border border-white/15 rounded-xl px-4 py-3 flex items-center justify-between shadow-lg hover:border-primary-fixed-dim/40 transition-colors cursor-pointer select-none"
         >
           <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-primary-fixed-dim text-base">{icon || 'widgets'}</span>

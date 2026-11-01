@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { memo } from 'react'
 
 const getWeatherIcon = (cond) => {
   switch (cond) {
@@ -12,9 +12,15 @@ const getWeatherIcon = (cond) => {
   }
 }
 
-export default function WeatherWidget({ weatherData, weatherCity, weatherLocalTime, isWeatherLoading }) {
+const WeatherWidget = memo(function WeatherWidget({
+  weatherData,
+  weatherCity,
+  weatherLocalTime,
+  isWeatherLoading,
+  onRefresh,
+}) {
   return (
-    <section className="glass-surface border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full overflow-hidden hover:border-primary-fixed-dim/40 transition-all bg-[#080d16]/85 backdrop-blur-xl">
+    <section className="iris-card border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full overflow-hidden hover:border-primary-fixed-dim/40 transition-colors shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
       <div className="flex flex-col gap-2.5">
         <div className="flex justify-between items-center pb-2 border-b border-white/10">
           <div>
@@ -25,9 +31,17 @@ export default function WeatherWidget({ weatherData, weatherCity, weatherLocalTi
               SECTOR CLOCK: {weatherLocalTime}
             </p>
           </div>
-          <span className="bg-primary-fixed-dim/10 border border-primary-fixed-dim/30 rounded-lg px-2 py-0.5 text-[9px] text-primary-fixed-dim font-bold uppercase truncate max-w-[130px]">
-            {weatherCity}
-          </span>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="bg-primary-fixed-dim/10 border border-primary-fixed-dim/30 hover:bg-primary-fixed-dim/20 rounded-lg px-2 py-0.5 text-[9px] text-primary-fixed-dim font-bold uppercase truncate max-w-[130px] flex items-center gap-1 active:scale-95 transition-colors"
+            title="Tap to refresh weather"
+          >
+            <span className="truncate">{weatherCity}</span>
+            <span className={`material-symbols-outlined text-[10px] ${isWeatherLoading ? 'animate-spin' : ''}`}>
+              sync
+            </span>
+          </button>
         </div>
 
         {isWeatherLoading ? (
@@ -38,7 +52,7 @@ export default function WeatherWidget({ weatherData, weatherCity, weatherLocalTi
           <div className="space-y-3">
             <div className="flex justify-between items-center py-1">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-4xl text-primary-fixed-dim animate-pulse">
+                <span className="material-symbols-outlined text-4xl text-primary-fixed-dim">
                   {getWeatherIcon(weatherData.condition)}
                 </span>
                 <div>
@@ -56,7 +70,7 @@ export default function WeatherWidget({ weatherData, weatherCity, weatherLocalTi
 
             <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-white/5 text-center font-mono-data text-[8.5px]">
               {(weatherData.forecast || []).map((fc, idx) => (
-                <div key={idx} className="bg-black/30 p-1.5 rounded-lg border border-white/5 space-y-0.5">
+                <div key={idx} className="bg-black/40 p-1.5 rounded-lg border border-white/5 space-y-0.5">
                   <span className="text-on-surface-variant/70 text-[7.5px] font-bold block">{fc.day}</span>
                   <span className="material-symbols-outlined text-sm text-primary-fixed-dim block py-0.5">
                     {getWeatherIcon(fc.cond)}
@@ -74,4 +88,6 @@ export default function WeatherWidget({ weatherData, weatherCity, weatherLocalTi
       </span>
     </section>
   )
-}
+})
+
+export default WeatherWidget

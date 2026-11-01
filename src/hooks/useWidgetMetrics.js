@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Device } from '@capacitor/device'
-import { getSystemStats } from '../components/LauncherPlugin'
+import { getSystemStats, optimizeMemory } from '../components/LauncherPlugin'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import HapticFeedback from '../utils/HapticFeedback'
 
@@ -38,7 +38,7 @@ export default function useWidgetMetrics({ isAppActive, activePage, powerSaveMod
       const battery = await Device.getBatteryInfo()
       if (battery.batteryLevel !== undefined) setBatteryLevel(Math.round(battery.batteryLevel * 100))
       if (battery.isCharging !== undefined) setIsCharging(battery.isCharging)
-    } catch {}
+    } catch { }
   }, [])
 
   useEffect(() => {
@@ -58,9 +58,8 @@ export default function useWidgetMetrics({ isAppActive, activePage, powerSaveMod
     HapticFeedback.light()
     setIsDiagnosticRunning(true)
     try {
-      const { optimizeMemory } = await import('../components/LauncherPlugin')
       if (optimizeMemory) await optimizeMemory()
-    } catch {}
+    } catch { }
     await fetchDeviceMetrics()
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {

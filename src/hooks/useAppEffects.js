@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, dismissNotification, addPackageChangeListener } from '../components/LauncherPlugin'
+import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, addNotificationPostedListener, getArchivedNotifications, dismissNotification, addPackageChangeListener } from '../components/LauncherPlugin'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { useAppStore } from '../stores/appStore'
 import { useAppsStore } from '../stores/appsStore'
@@ -95,14 +95,33 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
   }, [isAppActive, powerSaveMode])
 
   useEffect(() => {
-    const timeoutMs = parseInt(localStorage.getItem('vault_auto_lock') || '0')
-    if (!isVaultUnlocked || !timeoutMs) return
+    if (!isVaultUnlocked) return
+
+    const mapAppLockTimeout = (label) => {
+      if (label === '30 seconds') return 30000
+      if (label === '1 minute') return 60000
+      if (label === '5 minutes') return 300000
+      return 0
+    }
+
+    const vaultMs = parseInt(localStorage.getItem('vault_auto_lock') || '0', 10)
+    const appLockLabel = localStorage.getItem('iris_app_lock_timeout') || 'Immediate'
+    const appLockMs = mapAppLockTimeout(appLockLabel)
+
+    if (!isAppActive && (appLockLabel === 'Immediate' || appLockLabel === 'Screen off')) {
+      setIsVaultUnlocked(false)
+      setShowVaultExplorer(false)
+      return
+    }
+
+    const activeTimeoutMs = vaultMs > 0 ? vaultMs : appLockMs
+    if (!activeTimeoutMs) return
     const timer = setTimeout(() => {
       setIsVaultUnlocked(false)
       setShowVaultExplorer(false)
-    }, timeoutMs)
+    }, activeTimeoutMs)
     return () => clearTimeout(timer)
-  }, [isVaultUnlocked, setIsVaultUnlocked, setShowVaultExplorer])
+  }, [isVaultUnlocked, isAppActive, setIsVaultUnlocked, setShowVaultExplorer])
 
   useEffect(() => {
     const handle = (e) => {
@@ -132,6 +151,44 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
   }, [])
 
   useEffect(() => {
+    const syncFromNative = async () => {
+      try {
+        const archived = await getArchivedNotifications()
+        if (Array.isArray(archived) && archived.length > 0) {
+          const installed = useAppsStore?.getState?.()?.installedApps || []
+          useNotificationStore.getState().syncNativeArchive(archived, installed)
+        }
+      } catch {}
+    }
+
+    syncFromNative()
+
+    const onVis = () => {
+      if (!document.hidden) syncFromNative()
+    }
+    document.addEventListener('visibilitychange', onVis)
+
+    const postedListener = addNotificationPostedListener((posted) => {
+      try {
+        if (!posted) return
+        const locked = useAppStore.getState().lockedApps || []
+        const installed = useAppsStore?.getState?.()?.installedApps || []
+        const pkg = posted.packageId || posted.packageName
+        if (pkg && Array.isArray(locked) && locked.includes(pkg)) {
+          dismissNotification(posted.key || posted.id)
+          return
+        }
+        const matchedApp = installed.find(a => a.packageId === pkg || a.id === pkg)
+        const appName = matchedApp?.label || matchedApp?.name || posted.appName || ''
+        useNotificationStore.getState().recordNotification({ ...posted, appName }, { popBanner: true })
+        if (Array.isArray(posted.archivedNotifications)) {
+          useNotificationStore.getState().syncNativeArchive(posted.archivedNotifications, installed)
+        }
+      } catch (e) {
+        console.error('Failed to process posted notification:', e)
+      }
+    })
+
     const listener = addNotificationListener((data) => {
       try {
         if (!data) return
@@ -140,12 +197,16 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
           useBadgeStore.getState().setBadgeData(data)
         }
 
+        const locked = useAppStore.getState().lockedApps || []
+        const installed = useAppsStore?.getState?.()?.installedApps || []
+
+        if (Array.isArray(data.archivedNotifications) && data.archivedNotifications.length > 0) {
+          useNotificationStore.getState().syncNativeArchive(data.archivedNotifications, installed)
+        }
+
         const rawList = Array.isArray(data.notifications)
           ? data.notifications
           : (data.packageId ? [data] : [])
-
-        const locked = useAppStore.getState().lockedApps || []
-        const installed = useAppsStore?.getState?.()?.installedApps || []
 
         for (const notif of rawList) {
           const pkg = notif.packageId || notif.packageName
@@ -162,12 +223,16 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
           useNotificationStore.getState().recordNotification({
             ...notif,
             appName
-          })
+          }, { popBanner: false })
         }
       } catch (e) {
         console.error("Failed to process notification update:", e)
       }
     })
-    return () => { if (listener && typeof listener.remove === 'function') listener.remove() }
-  }, [])
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      if (postedListener && typeof postedListener.remove === 'function') postedListener.remove()
+      if (listener && typeof listener.remove === 'function') listener.remove()
+    }
+  }, [isAppActive])
 }

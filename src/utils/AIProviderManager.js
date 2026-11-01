@@ -1,5 +1,6 @@
 import { SecureStorage } from './secureStorage'
 import { GenAI } from '../components/GenAIPlugin'
+import { useAIStore } from '../stores/aiStore'
 
 const CACHE_TTL = 5 * 60 * 1000
 
@@ -32,10 +33,10 @@ const checkCloud = async (backend) => {
   let key = null
   try {
     if (backend === 'GEMINI') {
-      const { geminiKey } = (await import('../stores/aiStore')).useAIStore.getState()
+      const { geminiKey } = useAIStore.getState()
       key = geminiKey
     } else if (backend === 'GROQ') {
-      const { groqKey } = (await import('../stores/aiStore')).useAIStore.getState()
+      const { groqKey } = useAIStore.getState()
       key = groqKey
     } else if (backend === 'NVIDIA') {
       key = await SecureStorage.getItem('nvidia_api_key')
@@ -44,7 +45,7 @@ const checkCloud = async (backend) => {
   if (!key) return { available: false, error: 'No API key configured' }
 
   try {
-    let url, headers, body
+    let url, headers
     if (backend === 'GEMINI') {
       url = 'https://generativelanguage.googleapis.com/v1beta/models'
       headers = { 'x-goog-api-key': key }

@@ -12,9 +12,9 @@ export default function HomeGrid({
   iconShape = 'system',
   handleAppClick,
   handleContextMenu,
-  IRIS_ICON_PACK,
-  HudIcon,
-  HudFallbackIcon
+  IRIS_ICON_PACK: _IRIS_ICON_PACK,
+  HudIcon: _HudIcon,
+  HudFallbackIcon: _HudFallbackIcon
 }) {
   const homeApps = installedApps.filter(app => app.isHome && !(Array.isArray(lockedApps) && lockedApps.includes(app.packageId)))
 

@@ -43,7 +43,7 @@ const PROFILE_PRESETS = {
   CUSTOM: { baseWidth: 200, baseHeight: 32, topMargin: 8 }
 }
 
-export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = true, isAppActive = true, powerSaveMode, onNavigate }) {
+export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage, use24HourClock = true, isAppActive = true, powerSaveMode: _powerSaveMode, onNavigate }) {
   const [time, setTime] = useState("")
   const [battery, setBattery] = useState({ level: 100, charging: false })
   const [networkType, setNetworkType] = useState('ONLINE')
@@ -51,9 +51,15 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
   const [expandedTab, setExpandedTab] = useState('telemetry')
   const [weather, setWeather] = useState(null)
   const [sysStats, setSysStats] = useState({ memUsed: '0', memTotal: '0', cpuTemp: 0 })
-  
+  const [degradedCount, setDegradedCount] = useState(() => window.__irisDegradedCount || 0)
+
   const collapseTimer = useRef(null)
   const islandRef = useRef(null)
+
+  useEffect(() => {
+    setExpanded(false)
+    setAutoExpand(false)
+  }, [activePage])
 
   const { isListening, isSpeaking } = useAssistantStore()
   const { totalUnread } = useBadgeStore()
@@ -64,7 +70,7 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
   const collapsedWidth = Math.round(preset.baseWidth * (islandWidthScale / 100))
   const collapsedHeight = Math.round(preset.baseHeight * (islandHeightScale / 100))
   const computedTopMargin = islandProfile === 'CUSTOM' ? islandTopMargin : Math.max(0, preset.topMargin + (islandTopMargin - 8))
-  
+
   const [autoExpand, setAutoExpand] = useState(false)
   const previousUnread = useRef(totalUnread)
 
@@ -83,21 +89,43 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
   }, [totalUnread])
 
   useEffect(() => {
+    const handlePermSummary = (e) => {
+      if (e.detail && typeof e.detail.deniedCount === 'number') {
+        setDegradedCount(e.detail.deniedCount)
+      }
+    }
+    window.addEventListener('iris:permission-summary', handlePermSummary)
+    return () => window.removeEventListener('iris:permission-summary', handlePermSummary)
+  }, [])
+
+  useEffect(() => {
+    if (!isAppActive) return
+    let lastFetch = 0
+    const pollMs = PowerSaveManager.getPollingInterval('weatherPollMs')
     const fetchWeather = async () => {
+      if (document.hidden) return
+      lastFetch = Date.now()
       const data = await fetchCurrentWeather()
       if (data) setWeather(data)
     }
     fetchWeather()
-    const interval = setInterval(fetchWeather, PowerSaveManager.getPollingInterval('weatherPollMs'))
-    return () => clearInterval(interval)
-  }, [])
+    const interval = setInterval(fetchWeather, pollMs)
+    const onVisChange = () => {
+      if (!document.hidden && Date.now() - lastFetch >= pollMs) {
+        fetchWeather()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisChange)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisChange)
+    }
+  }, [isAppActive])
 
   useEffect(() => {
-    let batteryRef = null
     const batListeners = []
     if (navigator.getBattery) {
       navigator.getBattery().then(bat => {
-        batteryRef = bat
         const updateBat = () => {
           setBattery({
             level: Math.round(bat.level * 100),
@@ -136,6 +164,7 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
   useEffect(() => {
     const updateTime = () => {
+      if (document.hidden) return
       const now = new Date()
       const formatted = now.toLocaleTimeString([], {
         hour: '2-digit',
@@ -145,19 +174,38 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
       setTime(formatted)
     }
     updateTime()
+    if (!isAppActive) return
     let clockInterval
-    if (isAppActive) {
-      clockInterval = setInterval(updateTime, PowerSaveManager.getPollingInterval('clockPollMs'))
+    const msUntilNextMinute = 60000 - (Date.now() % 60000)
+    const alignTimeout = setTimeout(() => {
+      updateTime()
+      clockInterval = setInterval(updateTime, 60000)
+    }, msUntilNextMinute)
+    const onVisChange = () => {
+      if (!document.hidden) updateTime()
     }
-    return () => { if (clockInterval) clearInterval(clockInterval) }
+    document.addEventListener('visibilitychange', onVisChange)
+    return () => {
+      clearTimeout(alignTimeout)
+      if (clockInterval) clearInterval(clockInterval)
+      document.removeEventListener('visibilitychange', onVisChange)
+    }
   }, [use24HourClock, isAppActive])
 
   useEffect(() => {
-    if (expanded) {
+    getSystemStats().then(stats => {
+      if (stats) setSysStats(stats)
+    }).catch(() => { })
+  }, [])
+
+  useEffect(() => {
+    if (!expanded) return
+    const timer = setTimeout(() => {
       getSystemStats().then(stats => {
         if (stats) setSysStats(stats)
-      }).catch(() => {})
-    }
+      }).catch(() => { })
+    }, 240)
+    return () => clearTimeout(timer)
   }, [expanded])
 
   const startCollapseTimer = useCallback(() => {
@@ -277,25 +325,27 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ paddingTop: `${computedTopMargin}px` }}>
-        <div
-          ref={islandRef}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-breathe' : ''}`}
+      <div
+        ref={islandRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-[width,height,border-radius] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${isAiActive ? 'animate-aurora-breathe' : ''}`}
         style={{
-          background: isAiActive ? 'rgba(8, 12, 24, 0.94)' : 'rgba(12, 16, 28, 0.82)',
-          backdropFilter: 'blur(40px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+          background: isAiActive ? 'rgba(8, 12, 24, 0.97)' : 'rgba(10, 14, 26, 0.96)',
           border: isAiActive ? undefined : `1px solid ${borderColor}`,
           boxShadow: isAiActive
             ? undefined
             : (isPoppingNotif && activeGlow
               ? `0 10px 40px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}, inset 0 1px 0 rgba(255, 255, 255, 0.18)`
-              : (expanded ? `0 10px 40px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)` : `0 4px 12px ${glowColor}`)),
+              : (expanded ? `0 8px 28px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)` : `0 4px 12px ${glowColor}`)),
           width: activeWidth,
           height: activeHeight,
           borderRadius: expanded ? 28 : isPoppingNotif ? 24 : Math.round(activeHeight * 0.55),
+          transform: 'translate3d(0, 0, 0)',
+          backfaceVisibility: 'hidden',
+          contain: 'layout paint style',
+          willChange: 'width, height, border-radius',
         }}
       >
         {isAiActive && (
@@ -307,7 +357,7 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
         {/* Active Notification Banner State (Pops when notification arrives) */}
         {isPoppingNotif && (
-          <div 
+          <div
             onClick={() => {
               HapticFeedback.light()
               if (activeNotification.packageId) {
@@ -318,14 +368,14 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
             className="absolute inset-0 flex items-center justify-between px-3 py-2 cursor-pointer z-20 animate-in fade-in zoom-in-95 duration-200 select-none"
           >
             {/* Top accent glow line in app color */}
-            <div 
-              className="absolute top-0 left-0 right-0 h-[2px] animate-pulse" 
+            <div
+              className="absolute top-0 left-0 right-0 h-[2px] animate-pulse"
               style={{ backgroundColor: activeNotification.color, boxShadow: `0 0 14px ${activeNotification.color}` }}
             />
 
             <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1.5">
               {/* App Icon / Badge */}
-              <div 
+              <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border shadow-md transition-transform active:scale-95"
                 style={{
                   backgroundColor: `${activeNotification.color}22`,
@@ -339,7 +389,7 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
               {/* Sender & Text */}
               <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <div className="flex items-center gap-1.5 leading-tight">
-                  <span 
+                  <span
                     className="text-[9.5px] font-bold uppercase tracking-wider truncate"
                     style={{ color: activeNotification.color }}
                   >
@@ -359,7 +409,7 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
             {/* Right Controls */}
             <div className="flex items-center gap-1 shrink-0">
               <span className="text-[8px] font-mono text-white/40 pr-0.5">{activeNotification.time}</span>
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); HapticFeedback.selection(); dismissActive() }}
                 className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-colors"
                 title="Dismiss"
@@ -371,14 +421,13 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
         )}
 
         {/* Collapsed State */}
-        <div 
+        <div
           onClick={handleToggle}
-          className={`absolute inset-0 flex items-center justify-center cursor-pointer transition-all ${
-            expanded || isPoppingNotif ? 'opacity-0 scale-95 duration-200 pointer-events-none' : 'opacity-100 scale-100 duration-300 delay-200'
-          }`}
+          className={`absolute inset-0 flex items-center justify-center cursor-pointer transition-opacity duration-150 ${expanded || isPoppingNotif ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            }`}
           style={{ pointerEvents: expanded || isPoppingNotif ? 'none' : 'auto' }}
         >
-          <div className="px-3 flex items-center justify-between" style={{ width: `${activeWidth}px`, height: `${activeHeight}px` }}>
+          <div className="px-3 flex items-center justify-between shrink-0" style={{ width: `${collapsedWidth}px`, height: `${collapsedHeight}px` }}>
             {autoExpand ? (
               <div className="flex items-center gap-2 w-full justify-center">
                 <span className="material-symbols-outlined text-primary-fixed-dim animate-bounce" style={{ fontSize: 13 }}>notifications</span>
@@ -395,6 +444,21 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
                     <span className="material-symbols-outlined text-on-surface-variant/50" style={{ fontSize: 11 }}>{weatherIcon}</span>
                     <span className="font-mono-data text-[9px] text-on-surface-variant/50">{weatherTemp}</span>
                   </div>
+                  {degradedCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        HapticFeedback.light()
+                        window.dispatchEvent(new CustomEvent('iris:open-permission-modal'))
+                      }}
+                      className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25 transition-colors"
+                      title={`${degradedCount} degraded features`}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 10 }}>warning</span>
+                      <span className="font-mono-data text-[8.5px] font-bold">{degradedCount}</span>
+                    </button>
+                  )}
                   <div className="flex items-center gap-0.5">
                     <span className={`material-symbols-outlined ${isLowBattery ? 'text-error animate-pulse' : isCharging ? 'text-green-400' : 'text-on-surface-variant/50'}`} style={{ fontSize: 11 }}>
                       {battery.charging ? 'battery_charging_full' : 'battery_full'}
@@ -408,37 +472,34 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
         </div>
 
         {/* Expanded State */}
-        <div 
+        <div
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className={`absolute inset-0 flex items-center justify-center transition-all ${
-            expanded ? 'opacity-100 scale-100 duration-300 delay-150' : 'opacity-0 scale-95 duration-150 pointer-events-none'
-          }`}
+          className={`absolute inset-0 flex items-center justify-center transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
         >
-          <div className="w-[360px] h-full p-3.5 flex flex-col justify-between overflow-hidden">
+          <div className="w-[360px] shrink-0 p-3.5 flex flex-col justify-between overflow-hidden" style={{ height: `${expHeight}px` }}>
             {/* Top Row: Mode Switcher & Time */}
             <div className="flex items-center justify-between mb-2 shrink-0">
               <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/10">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpandedTab('telemetry'); HapticFeedback.light() }}
-                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors ${
-                    expandedTab === 'telemetry'
-                      ? 'bg-primary-fixed-dim/30 text-primary-fixed-dim border border-primary-fixed-dim/40 shadow-[0_0_8px_rgba(0,242,255,0.3)]'
-                      : 'text-white/40 hover:text-white/70'
-                  }`}
+                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors ${expandedTab === 'telemetry'
+                    ? 'bg-primary-fixed-dim/30 text-primary-fixed-dim border border-primary-fixed-dim/40 shadow-[0_0_8px_rgba(0,242,255,0.3)]'
+                    : 'text-white/40 hover:text-white/70'
+                    }`}
                 >
                   SYS TELEMETRY
                 </button>
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpandedTab('zero_screen'); HapticFeedback.light() }}
-                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center gap-1 ${
-                    expandedTab === 'zero_screen'
-                      ? 'bg-[#ff007f]/30 text-[#ff007f] border border-[#ff007f]/40 shadow-[0_0_10px_rgba(255,0,127,0.3)]'
-                      : 'text-white/40 hover:text-white/70'
-                  }`}
+                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center gap-1 ${expandedTab === 'zero_screen'
+                    ? 'bg-[#ff007f]/30 text-[#ff007f] border border-[#ff007f]/40 shadow-[0_0_10px_rgba(255,0,127,0.3)]'
+                    : 'text-white/40 hover:text-white/70'
+                    }`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-[#ff007f] animate-pulse" />
                   ZERO SCREEN
@@ -446,17 +507,32 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpandedTab('notif_log'); HapticFeedback.light() }}
-                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center gap-1 ${
-                    expandedTab === 'notif_log'
-                      ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
-                      : 'text-white/40 hover:text-white/70'
-                  }`}
+                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center gap-1 ${expandedTab === 'notif_log'
+                    ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                    : 'text-white/40 hover:text-white/70'
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[10px]">mark_email_unread</span>
                   ARCHIVE ({history.length})
                 </button>
               </div>
               <div className="flex items-center gap-1.5">
+                {degradedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setExpanded(false)
+                      HapticFeedback.light()
+                      window.dispatchEvent(new CustomEvent('iris:open-permission-modal'))
+                    }}
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:bg-amber-500/30 transition-colors"
+                    title="View permission status"
+                  >
+                    <span className="material-symbols-outlined text-[10px]">warning</span>
+                    <span className="font-mono-data text-[8.5px] font-bold">{degradedCount}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpanded(false); HapticFeedback.light() }}
@@ -470,14 +546,16 @@ export default function TopAppBar({ title = "IRIS-SYSTEM-OS", use24HourClock = t
 
             {/* Sliding Carousel of Tabs */}
             <div className="flex-1 w-full overflow-hidden relative min-h-0" onClick={(e) => e.stopPropagation()}>
-              <div 
-                className="flex w-[300%] h-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                style={{ 
-                  transform: expandedTab === 'zero_screen' 
-                    ? 'translateX(-33.333%)' 
-                    : expandedTab === 'notif_log' 
-                      ? 'translateX(-66.666%)' 
-                      : 'translateX(0%)' 
+              <div
+                className="flex w-[300%] h-full transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                style={{
+                  willChange: 'transform',
+                  backfaceVisibility: 'hidden',
+                  transform: expandedTab === 'zero_screen'
+                    ? 'translate3d(-33.333%, 0, 0)'
+                    : expandedTab === 'notif_log'
+                      ? 'translate3d(-66.666%, 0, 0)'
+                      : 'translate3d(0, 0, 0)'
                 }}
               >
                 <div className="w-1/3 h-full pr-2 flex flex-col justify-between">

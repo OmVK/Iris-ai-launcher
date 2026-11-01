@@ -1,5 +1,4 @@
 import { SecureStorage } from '../utils/secureStorage'
-import { useAIStore } from '../stores/aiStore'
 
 export default function LiveConfigModal({ liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey, onSave, onClose }) {
   const handleEngineChange = async (newEngine) => {

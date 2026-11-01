@@ -1,4 +1,4 @@
-export default function ChronoClockDial({ statusState, onBiometricTap, onCaptureThreat }) {
+export default function ChronoClockDial({ statusState, onBiometricTap, onCaptureThreat: _onCaptureThreat }) {
   return (
     <div className="relative w-64 h-36 flex flex-col items-center justify-center my-4 overflow-hidden border border-primary-fixed-dim/20 bg-black/45 rounded-xl">
       <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(var(--primary-rgb),0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(var(--primary-rgb),0.15)_1px,transparent_1px)] bg-[size:16px_16px]" />

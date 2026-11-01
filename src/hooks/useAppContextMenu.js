@@ -3,7 +3,7 @@ import { uninstallApp, openAppSettings } from '../components/LauncherPlugin'
 import { setContextMenuOpen } from './useAppGestures'
 import HapticFeedback from '../utils/HapticFeedback'
 
-export function useAppContextMenu({ setInstalledApps, onToggleAppLock }) {
+export function useAppContextMenu({ setInstalledApps: _setInstalledApps, onToggleAppLock }) {
   const [activeContextMenu, setActiveContextMenu] = useState(null)
   const [toastText, setToastText] = useState('')
 

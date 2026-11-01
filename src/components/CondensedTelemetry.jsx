@@ -76,13 +76,13 @@ export default function CondensedTelemetry({
   return (
     <div className="flex-1 flex flex-col justify-between h-full select-none">
       <div className="flex-1 grid grid-cols-3 gap-2">
-        <div className="glass-surface border border-white/5 rounded-lg p-2 flex flex-col justify-center items-center">
+        <div className="bg-white/[0.04] border border-white/10 rounded-lg p-2 flex flex-col justify-center items-center">
           <span className="material-symbols-outlined text-on-surface-variant/70 mb-1" style={{ fontSize: 16 }}>{weatherIcon}</span>
           <span className="font-mono-data text-[10px] text-primary-fixed-dim/90 font-bold">{weatherTemp}</span>
           <span className="font-label-caps text-[7px] tracking-wider text-on-surface-variant/50 mt-0.5">{weather ? weather.condition.replace(/_/g, ' ') : 'UNKNOWN'}</span>
         </div>
 
-        <div className="glass-surface border border-white/5 rounded-lg p-2 flex flex-col justify-center items-center">
+        <div className="bg-white/[0.04] border border-white/10 rounded-lg p-2 flex flex-col justify-center items-center">
           <span className={`material-symbols-outlined ${isLowBattery ? 'text-error animate-pulse' : isCharging ? 'text-green-400' : 'text-on-surface-variant/70'} mb-1`} style={{ fontSize: 16 }}>
             {battery.charging ? 'battery_charging_full' : 'battery_full'}
           </span>
@@ -92,7 +92,7 @@ export default function CondensedTelemetry({
           </span>
         </div>
 
-        <div className="glass-surface border border-white/5 rounded-lg p-2 flex flex-col justify-center items-center">
+        <div className="bg-white/[0.04] border border-white/10 rounded-lg p-2 flex flex-col justify-center items-center">
           <span className="material-symbols-outlined text-on-surface-variant/70 mb-1" style={{ fontSize: 16 }}>
             {networkType === 'OFFLINE' ? 'wifi_off' : 'wifi'}
           </span>

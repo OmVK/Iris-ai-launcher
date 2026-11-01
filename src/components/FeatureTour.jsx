@@ -12,7 +12,7 @@ const STEPS = [
   {
     title: 'HOME SCREEN',
     subtitle: 'YOUR COMMAND CENTER',
-    description: 'Your home screen features a live clock, telemetry, and the AI neural orb. Double-tap to search, swipe up for App Drawer, and swipe down for notifications.',
+    description: 'Your home screen features the Dynamic Island top bar, live telemetry, and quick dock. Double-tap to search, swipe up for App Drawer, and swipe down for notifications.',
     icon: 'home',
     color: '#00e5ff',
     highlight: 'home',

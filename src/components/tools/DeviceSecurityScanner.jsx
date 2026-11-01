@@ -61,7 +61,7 @@ export default function DeviceSecurityScanner({ glassBg }) {
       {/* Security Parameter Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {/* Screen Lock */}
-        <div className="p-3 rounded-lg border border-white/5 bg-black/40 flex items-center justify-between">
+        <div className="p-3 rounded-lg border border-white/5 flex items-center justify-between" style={{ backgroundColor: glassBg }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-sm text-white/50">fingerprint</span>
             <span className="text-[10px] text-white/80">Screen Lock Security</span>
@@ -74,7 +74,7 @@ export default function DeviceSecurityScanner({ glassBg }) {
         </div>
 
         {/* Hardware Encryption */}
-        <div className="p-3 rounded-lg border border-white/5 bg-black/40 flex items-center justify-between">
+        <div className="p-3 rounded-lg border border-white/5 flex items-center justify-between" style={{ backgroundColor: glassBg }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-sm text-white/50">lock</span>
             <span className="text-[10px] text-white/80">Storage Encryption</span>
@@ -87,7 +87,7 @@ export default function DeviceSecurityScanner({ glassBg }) {
         </div>
 
         {/* Root / SU Binary */}
-        <div className="p-3 rounded-lg border border-white/5 bg-black/40 flex items-center justify-between">
+        <div className="p-3 rounded-lg border border-white/5 flex items-center justify-between" style={{ backgroundColor: glassBg }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-sm text-white/50">admin_panel_settings</span>
             <span className="text-[10px] text-white/80">Root & SU Binary</span>
@@ -100,7 +100,7 @@ export default function DeviceSecurityScanner({ glassBg }) {
         </div>
 
         {/* USB Debugging (ADB) */}
-        <div className="p-3 rounded-lg border border-white/5 bg-black/40 flex items-center justify-between">
+        <div className="p-3 rounded-lg border border-white/5 flex items-center justify-between" style={{ backgroundColor: glassBg }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-sm text-white/50">usb</span>
             <span className="text-[10px] text-white/80">USB Debugging (ADB)</span>
@@ -113,7 +113,7 @@ export default function DeviceSecurityScanner({ glassBg }) {
         </div>
 
         {/* Developer Options */}
-        <div className="p-3 rounded-lg border border-white/5 bg-black/40 flex items-center justify-between">
+        <div className="p-3 rounded-lg border border-white/5 flex items-center justify-between" style={{ backgroundColor: glassBg }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-sm text-white/50">code</span>
             <span className="text-[10px] text-white/80">Developer Mode</span>
@@ -126,7 +126,7 @@ export default function DeviceSecurityScanner({ glassBg }) {
         </div>
 
         {/* Security Patch Level */}
-        <div className="p-3 rounded-lg border border-white/5 bg-black/40 flex items-center justify-between">
+        <div className="p-3 rounded-lg border border-white/5 flex items-center justify-between" style={{ backgroundColor: glassBg }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-sm text-white/50">verified_user</span>
             <span className="text-[10px] text-white/80">Security Patch</span>

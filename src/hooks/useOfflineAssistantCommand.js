@@ -3,12 +3,12 @@ import { registerPlugin } from '@capacitor/core'
 import { processCommand } from '../utils/OfflineCommandEngine'
 import { handleSideEffect } from '../utils/offlineSideEffects'
 import { queryIrisAI } from '../utils/aiQueryBridge'
+import { launchApp as nativeLaunch } from '../components/LauncherPlugin'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
 const launchApp = async (packageId, label) => {
   try {
-    const { launchApp: nativeLaunch } = await import('../components/LauncherPlugin')
     return await nativeLaunch(packageId, label)
   } catch (e) {
     console.warn('[IRIS] launchApp failed:', e)

@@ -2,8 +2,8 @@ import React from 'react'
 import LetterFilterBar from './LetterFilterBar'
 import useDrawerMeshEngine from '../../hooks/useDrawerMeshEngine'
 
-function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerTextSize = 100, activeLetter, setActiveLetter, onAppClick, onContextMenu }) {
-  const { canvasRef, handlers } = useDrawerMeshEngine({ filteredApps, showAppLabels, drawerIconSize, onAppClick, onContextMenu })
+function DrawerMesh({ filteredApps, showAppLabels, drawerIconSize = 100, drawerTextSize: _drawerTextSize = 100, activeLetter, setActiveLetter, onAppClick, onContextMenu, isActive = true }) {
+  const { canvasRef, handlers } = useDrawerMeshEngine({ filteredApps, showAppLabels, drawerIconSize, onAppClick, onContextMenu, isActive })
 
   return (
     <div

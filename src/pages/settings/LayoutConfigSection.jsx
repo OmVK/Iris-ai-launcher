@@ -74,6 +74,17 @@ export default function LayoutConfigSection({ expandedSections, toggleSection, d
       <SettingSlider label="Dock Icon Columns" value={dockColumns} onChange={setDockColumns} min="3" max="5" unit=" Icons" />
 
       <div className="space-y-2">
+        <label className="text-[9px] text-on-surface-variant block">HOME GRID POSITIONING</label>
+        <div className="grid grid-cols-2 gap-2">
+          {[{ id: 'CENTERED', label: 'Centered Grid' }, { id: 'CORE_BOTTOM', label: 'Bottom Anchored' }].map(pos => (
+            <button key={pos.id} onClick={() => setLayoutStyle(pos.id)} className={`py-1.5 px-2 rounded border text-[9px] truncate transition-all active:scale-95 ${layoutStyle === pos.id ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim' : 'bg-black/20 border-outline-variant/30 text-on-surface-variant/70 hover:text-white'}`}>
+              {pos.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
         <label className="text-[9px] text-on-surface-variant block">DRAWER_LAYOUT_MODE</label>
         <div className="grid grid-cols-4 gap-2">
           {[{ id: 'GRID', label: 'Grid', icon: 'grid_view' }, { id: 'MESH', label: 'Mesh', icon: 'hub' }, { id: 'LIST', label: 'List', icon: 'view_list' }, { id: 'CATEGORIES', label: 'Folders', icon: 'folder_open' }].map(layout => (

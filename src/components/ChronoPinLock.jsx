@@ -1,9 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { logNotification, authenticateBiometric, authorizeVaultSession, recordFailedVaultAttempt } from './LauncherPlugin'
 import PinKeypad from './PinKeypad'
 import ChronoClockDial from './ChronoClockDial'
 import ThreatPhotoCapture from './ThreatPhotoCapture'
 import HapticFeedback from '../utils/HapticFeedback'
+
+const LOG_LIST_TEMPLATE = [
+  "SYS: [0.0s] CHRONO-PASSKEY NETWORK SYNCHRONIZER ONLINE...",
+  "SYS: [0.3s] PAGING SYSTEM REALTIME CLOCK MODULE...",
+  "SYS: [0.6s] COGNITIVE CHRONO-ROTATOR ALGORITHM: [HHMM]",
+  "SYS: [0.9s] VAULT ENVELOPE ARMED. ENCRYPTED PASSCODE SYNCED.",
+  "SYS: [1.2s] AWAITING DYNAMIC CLOCK PIN ENTRY FOR SYSTEM VAULT..."
+]
 
 export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -14,14 +23,13 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
   const consoleEndRef = useRef(null)
   const biometricTimeoutRef = useRef(null)
   const mountedRef = useRef(true)
+  const onUnlockSuccessRef = useRef(onUnlockSuccess)
+  onUnlockSuccessRef.current = onUnlockSuccess
 
-  const logListTemplate = [
-    "SYS: [0.0s] CHRONO-PASSKEY NETWORK SYNCHRONIZER ONLINE...",
-    "SYS: [0.3s] PAGING SYSTEM REALTIME CLOCK MODULE...",
-    "SYS: [0.6s] COGNITIVE CHRONO-ROTATOR ALGORITHM: [HHMM]",
-    "SYS: [0.9s] VAULT ENVELOPE ARMED. ENCRYPTED PASSCODE SYNCED.",
-    "SYS: [1.2s] AWAITING DYNAMIC CLOCK PIN ENTRY FOR SYSTEM VAULT..."
-  ]
+  const addLog = useCallback((text) => {
+    const timestamp = new Date().toLocaleTimeString([], { hour12: false })
+    setLogs(prev => [...prev, `[${timestamp}] ${text}`])
+  }, [])
 
   useEffect(() => {
     mountedRef.current = true
@@ -40,8 +48,8 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     // Initial technical logging sequence
     let currentLogIndex = 0
     const logTimer = setInterval(() => {
-      if (currentLogIndex < logListTemplate.length) {
-        addLog(logListTemplate[currentLogIndex])
+      if (currentLogIndex < LOG_LIST_TEMPLATE.length) {
+        addLog(LOG_LIST_TEMPLATE[currentLogIndex])
         currentLogIndex++
       } else {
         clearInterval(logTimer)
@@ -52,10 +60,10 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
       clearInterval(clockTimer)
       clearInterval(logTimer)
     }
-  }, [])
+  }, [addLog])
 
   // Silent WebRTC Security Camera Capture
-  const captureThreatPhoto = async () => {
+  const captureThreatPhoto = useCallback(async () => {
     if (!mountedRef.current) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
@@ -76,9 +84,6 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
       
       stream.getTracks().forEach(t => t.stop())
 
-      // Save to External Storage via Capacitor
-      const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
-      
       // Ensure directory exists
       try {
         await Filesystem.mkdir({
@@ -104,7 +109,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     } catch(err) {
       addLog(`SYS: [WARNING] CAMERA SENSOR ACCESS DENIED OR FAILED.`)
     }
-  }
+  }, [source, addLog])
 
   // Biometric Auth Hook
   useEffect(() => {
@@ -123,7 +128,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
           logNotification('BIOMETRIC', 'Access Granted via Biometric Scan', 'success')
           HapticFeedback.success()
           await authorizeVaultSession()
-          if (mountedRef.current && onUnlockSuccess) onUnlockSuccess()
+          if (mountedRef.current && onUnlockSuccessRef.current) onUnlockSuccessRef.current()
         } else {
           addLog("SYS: BIOMETRIC HARDWARE UNAVAILABLE. FALLING BACK TO PIN.")
           // Don't capture threat if hardware is just unavailable
@@ -139,7 +144,7 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     // Delay slightly to let the UI render the lock screen first
     biometricTimeoutRef.current = setTimeout(runBiometric, 500)
     return () => { if (biometricTimeoutRef.current) clearTimeout(biometricTimeoutRef.current) }
-  }, [])
+  }, [addLog, captureThreatPhoto])
 
   // Auto-scroll the terminal logs console to bottom
   useEffect(() => {
@@ -148,13 +153,8 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     }
   }, [logs])
 
-  const addLog = (text) => {
-    const timestamp = new Date().toLocaleTimeString([], { hour12: false })
-    setLogs(prev => [...prev, `[${timestamp}] ${text}`])
-  }
-
   // Calculate dynamic active PINs based on clock + optional salt offset
-  const getCorrectPins = () => {
+  const getCorrectPins = useCallback(() => {
     const rawOffset = parseInt(localStorage.getItem('iris_chrono_pin_offset') || '0', 10)
     const offsetMinutes = isNaN(rawOffset) ? 0 : rawOffset
     const targetDate = new Date(currentTime.getTime() + offsetMinutes * 60 * 1000)
@@ -170,14 +170,61 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
       `${h24Str}${minutes}`,
       `${h12Str}${minutes}`
     ]
-  }
+  }, [currentTime])
+
+  const handleVerifyPin = useCallback((input) => {
+    setStatusState('VALIDATING')
+    addLog("SYS: RUNNING SECURE CHRONO-AUTHENTICATOR PIPELINE...")
+
+    const correctPins = getCorrectPins()
+
+    const validationTimeout = setTimeout(() => {
+      if (!mountedRef.current) return
+      if (correctPins.includes(input)) {
+        setStatusState('GRANTED')
+        addLog("SYS: COGNITIVE TIME SYNC CONFIRMED!")
+        addLog("SYS: ACCESS GRANTED. UNLOCKING VAULT MATRIX INDICES.")
+        logNotification('BIOMETRIC', 'Access Granted: Chrono-key validation succeeded.', 'success')
+        HapticFeedback.success()
+        authorizeVaultSession()
+        
+        const unlockTimeout = setTimeout(() => {
+          if (mountedRef.current && onUnlockSuccessRef.current) onUnlockSuccessRef.current()
+        }, 1200)
+        biometricTimeoutRef.current = unlockTimeout
+      } else {
+        setStatusState('DENIED')
+        setIsShaking(true)
+        addLog(`SYS: [WARNING] PASSKEY MISMATCH ENCOUNTERED: INPUT='${input}'`)
+        addLog(`SYS: [ERROR] SECURE SYNAPSE BLOCKED. ROTATING TIME-KEYS.`)
+        logNotification('SECURITY', `Access Denied: Unrecognized passcode node: '${input}'`, 'warning')
+        captureThreatPhoto()
+        HapticFeedback.error()
+        recordFailedVaultAttempt().then(res => {
+          if (res && res.lockedOut) {
+            addLog(`SYS: [LOCKOUT] 5 CONSECUTIVE FAILURES. RATE-LIMIT LOCKOUT ACTIVE (30s).`)
+            logNotification('SECURITY', 'Vault locked out for 30s due to repeated failures.', 'error')
+          }
+        }).catch(() => {})
+
+        const resetTimeout = setTimeout(() => {
+          if (!mountedRef.current) return
+          setPinInput('')
+          setStatusState('AWAITING_PASSKEY')
+          setIsShaking(false)
+        }, 1000)
+        biometricTimeoutRef.current = resetTimeout
+      }
+    }, 700)
+    biometricTimeoutRef.current = validationTimeout
+  }, [addLog, captureThreatPhoto, getCorrectPins])
 
   // Monitor PIN entry length to trigger fluid instant verification on 4th digit
   useEffect(() => {
     if (pinInput.length === 4) {
       handleVerifyPin(pinInput)
     }
-  }, [pinInput])
+  }, [pinInput, handleVerifyPin])
 
   const handleKeyPress = (num) => {
     if (statusState === 'VALIDATING' || statusState === 'GRANTED') return
@@ -210,53 +257,6 @@ export default function ChronoPinLock({ onUnlockSuccess, onClose, source }) {
     setPinInput('')
     addLog("KEYPAD: ENTIRE SECURE BUFFER CLEARED")
   }
-
-  const handleVerifyPin = useCallback((input) => {
-    setStatusState('VALIDATING')
-    addLog("SYS: RUNNING SECURE CHRONO-AUTHENTICATOR PIPELINE...")
-
-    const correctPins = getCorrectPins()
-
-    const validationTimeout = setTimeout(() => {
-      if (!mountedRef.current) return
-      if (correctPins.includes(input)) {
-        setStatusState('GRANTED')
-        addLog("SYS: COGNITIVE TIME SYNC CONFIRMED!")
-        addLog("SYS: ACCESS GRANTED. UNLOCKING VAULT MATRIX INDICES.")
-        logNotification('BIOMETRIC', 'Access Granted: Chrono-key validation succeeded.', 'success')
-        HapticFeedback.success()
-        authorizeVaultSession()
-        
-        const unlockTimeout = setTimeout(() => {
-          if (mountedRef.current && onUnlockSuccess) onUnlockSuccess()
-        }, 1200)
-        biometricTimeoutRef.current = unlockTimeout
-      } else {
-        setStatusState('DENIED')
-        setIsShaking(true)
-        addLog(`SYS: [WARNING] PASSKEY MISMATCH ENCOUNTERED: INPUT='${input}'`)
-        addLog(`SYS: [ERROR] SECURE SYNAPSE BLOCKED. ROTATING TIME-KEYS.`)
-        logNotification('SECURITY', `Access Denied: Unrecognized passcode node: '${input}'`, 'warning')
-        captureThreatPhoto()
-        HapticFeedback.error()
-        recordFailedVaultAttempt().then(res => {
-          if (res && res.lockedOut) {
-            addLog(`SYS: [LOCKOUT] 5 CONSECUTIVE FAILURES. RATE-LIMIT LOCKOUT ACTIVE (30s).`)
-            logNotification('SECURITY', 'Vault locked out for 30s due to repeated failures.', 'error')
-          }
-        }).catch(() => {})
-
-        const resetTimeout = setTimeout(() => {
-          if (!mountedRef.current) return
-          setPinInput('')
-          setStatusState('AWAITING_PASSKEY')
-          setIsShaking(false)
-        }, 1000)
-        biometricTimeoutRef.current = resetTimeout
-      }
-    }, 700)
-    biometricTimeoutRef.current = validationTimeout
-  }, [onUnlockSuccess])
 
   return (
     <div className="fixed inset-0 bg-[#020617]/95 backdrop-blur-xl z-50 flex items-center justify-center p-4">

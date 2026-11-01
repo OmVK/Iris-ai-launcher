@@ -4,7 +4,7 @@ import { useAIStore } from '../stores/aiStore'
 import { searchRAG } from '../components/RagEngine'
 import { SecureStorage } from '../utils/secureStorage'
 import { GenAI } from '../components/GenAIPlugin'
-import { checkBackend, getBackendPriorityChain, getBackendStatus, getSanitizedOllamaEndpoint } from '../utils/AIProviderManager'
+import { getBackendPriorityChain, getSanitizedOllamaEndpoint } from '../utils/AIProviderManager'
 
 const SEARCH_KEYWORDS = [
   'search', 'what is', 'who is', 'how to', 'latest', 'news', 'weather',
@@ -69,7 +69,7 @@ const cleanResponse = (responseText, systemInstruction, prompt) => {
 }
 
 export default function useAIBackend(speakTextFn) {
-  const { chatLog, setChatLog, setActiveUserTranscript, setActiveAiResponse } = useAssistantStore()
+  const { setChatLog, setActiveUserTranscript, setActiveAiResponse } = useAssistantStore()
   const { voiceEnabled } = useAIStore()
   const isGeneratingRef = useRef(false)
   const abortControllerRef = useRef(null)
@@ -81,7 +81,7 @@ export default function useAIBackend(speakTextFn) {
     return () => {
       mountedRef.current = false
       if (sseReaderRef.current) {
-        try { sseReaderRef.current.cancel() } catch {}
+        try { sseReaderRef.current.cancel() } catch { }
         sseReaderRef.current = null
       }
     }
@@ -126,11 +126,11 @@ export default function useAIBackend(speakTextFn) {
         const title = wikiData.query.search[0].title
         return `\n\n[Live Search for '${query}']: "${title} - ${snippet}" (Source: Wikipedia)\nUse this data to answer accurately.`
       }
-    } catch {}
+    } catch { }
     return ''
   }
 
-  const streamSSE = async (res, loadingId) => {
+  const streamSSE = useCallback(async (res, loadingId) => {
     const reader = res.body.getReader()
     sseReaderRef.current = reader
     const decoder = new TextDecoder("utf-8")
@@ -157,12 +157,12 @@ export default function useAIBackend(speakTextFn) {
               }
             }
           }
-        } catch {}
+        } catch { }
       }
     }
     sseReaderRef.current = null
     return partialText
-  }
+  }, [setChatLog])
 
   const callGemini = async (prompt, systemInstruction, signal, chatLogRef, apiKey) => {
     let chosenModel = (localStorage.getItem('gemini_model') || 'gemini-2.0-flash').trim().replace(/\s+/g, '-')
@@ -179,7 +179,7 @@ export default function useAIBackend(speakTextFn) {
       }),
       signal
     })
-    
+
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}))
       throw new Error(`[${chosenModel}] ${errData?.error?.message || `HTTP ${res.status}`}`)
@@ -256,7 +256,7 @@ export default function useAIBackend(speakTextFn) {
       .slice(-10)
       .map(msg => `${msg.type === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
       .join('\n');
-      
+
     const fullPrompt = `${systemInstruction}\n\n[Conversation History]\n${historyText}\n\nUser: ${prompt}\nAssistant:`;
 
     const genAIResult = await GenAI.generateText(fullPrompt, {
@@ -304,7 +304,7 @@ export default function useAIBackend(speakTextFn) {
       SEARCH_STRIP_PATTERNS.forEach(p => { query = query.replace(p, '') })
       query = query.trim()
       if (!query) query = prompt
-      try { searchContext = await fetchWebSearch(query) } catch {}
+      try { searchContext = await fetchWebSearch(query) } catch { }
     }
 
     const systemInstruction = SYSTEM_PROMPT_TEMPLATE(ragContext, searchContext)
@@ -394,7 +394,7 @@ export default function useAIBackend(speakTextFn) {
     if (isLiveVoice || voiceEnabled) {
       speakTextFn?.(cleanedResponse)
     }
-  }, [chatLog, voiceEnabled, speakTextFn])
+  }, [voiceEnabled, speakTextFn, setActiveAiResponse, setActiveUserTranscript, setChatLog, streamSSE])
 
   return { submitPrompt, isGeneratingRef, abortControllerRef }
 }

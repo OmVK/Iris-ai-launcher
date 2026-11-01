@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { getLS, getLSNum, getLSBool } from '../utils/storage'
+import { getSystemWallpaper, isNative } from '../components/LauncherPlugin'
 
 const shouldSyncWallpaper = (getLS('wallpaper', 'SYSTEM') === 'VOID' || getLS('wallpaper', 'SYSTEM') === 'SYSTEM') && !localStorage.getItem('custom_wallpaper')
 
@@ -43,7 +44,10 @@ export const useThemeStore = create((set, get) => ({
     } catch { return [{ id: 1, pinnedApps: [], pinnedFolders: [] }] }
   })(),
   activeHomePage: 1,
-  iconShape: getLS('icon_shape', 'HEXAGON'),
+  iconShape: (() => {
+    const s = getLS('icon_shape', 'squircle')
+    return s === 'HEXAGON' ? 'squircle' : s
+  })(),
   dockColumns: getLSNum('dock_columns', 5),
   dockBackground: getLS('dock_background', 'glass'),
   homeScreenFolders: (() => {
@@ -84,6 +88,7 @@ export const useThemeStore = create((set, get) => ({
   setFullscreenActive: (v) => { try { localStorage.setItem('fullscreen_active', v) } catch {} set({ fullscreenActive: v }) },
   setGlobalIconTheme: (v) => { try { localStorage.setItem('global_icon_theme', v) } catch {} set({ globalIconTheme: v }) },
   setActiveLiveWallpaper: (v) => { try { localStorage.setItem('active_live_wallpaper', v) } catch {} set({ activeLiveWallpaper: v }) },
+  setDarkGlassTheme: (v) => { try { localStorage.setItem('dark_glass_theme', v) } catch {} set({ darkGlassTheme: v }) },
   setPageTransitionEffect: (v) => { try { localStorage.setItem('page_transition_effect', v) } catch {} set({ pageTransitionEffect: v }) },
   setPageTransitionSpeed: (v) => { try { localStorage.setItem('iris_page_transition_speed', v) } catch {} set({ pageTransitionSpeed: v }) },
   setPageTransitionEasing: (v) => { try { localStorage.setItem('page_transition_easing', v) } catch {} set({ pageTransitionEasing: v }) },
@@ -114,7 +119,6 @@ export const useThemeStore = create((set, get) => ({
 
   syncSystemWallpaper: async () => {
     try {
-      const { getSystemWallpaper, isNative } = await import('../components/LauncherPlugin')
       if (!isNative) return
       const result = await getSystemWallpaper()
       if (result?.wallpaper) {

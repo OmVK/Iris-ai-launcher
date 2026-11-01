@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { lookupContactMultiple, makeCall, sendSMS, checkAndRequestPermission } from '../components/LauncherPlugin'
 import { Filesystem, Directory } from '@capacitor/filesystem'
+import { safeEvaluate } from './safeMath'
 
 const SEARCH_SOURCES = {
   apps: { label: 'Apps', icon: 'apps', enabled: true },
@@ -43,12 +44,14 @@ const UNIT_CONVERSIONS = {
 
 function tryEvaluateCalculator(expr) {
   try {
-    const sanitized = expr.replace(/[^0-9+\-*/().%\s^]/g, '')
-    if (!sanitized || /[a-zA-Z]/.test(sanitized)) return null
-    const replaced = sanitized.replace(/\^/g, '**')
-    const result = Function(`"use strict"; return (${replaced})`)()
-    if (typeof result === 'number' && isFinite(result)) {
-      return { value: result, display: Number.isInteger(result) ? result.toString() : result.toFixed(6).replace(/\.?0+$/, '') }
+    const trimmed = expr.trim()
+    if (!trimmed || !/[+\-*/%^()]/.test(trimmed) || /[a-zA-Z]/.test(trimmed)) return null
+    const sanitized = trimmed.replace(/[^0-9+\-*/().%\s^]/g, '')
+    if (!sanitized || !/\d/.test(sanitized)) return null
+    const result = safeEvaluate(sanitized)
+    if (typeof result === 'number' && Number.isFinite(result)) {
+      const display = Number.isInteger(result) ? result.toString() : result.toFixed(6).replace(/\.?0+$/, '')
+      return { expression: sanitized, result: display, value: result, display }
     }
     return null
   } catch {
@@ -66,35 +69,36 @@ function tryUnitConversion(query) {
 
   const from = fromUnit.toLowerCase()
   const to = toUnit.toLowerCase()
+  const fromTemp = fromUnit.toUpperCase()
+  const toTemp = toUnit.toUpperCase()
 
   for (const [, units] of Object.entries(UNIT_CONVERSIONS)) {
+    if (fromTemp in units && toTemp in units && (fromTemp === 'C' || fromTemp === 'F' || fromTemp === 'K')) {
+      let celsius
+      if (fromTemp === 'C') celsius = value
+      else if (fromTemp === 'F') celsius = (value - 32) * 5 / 9
+      else celsius = value - 273.15
+
+      let result
+      if (toTemp === 'C') result = celsius
+      else if (toTemp === 'F') result = celsius * 9 / 5 + 32
+      else result = celsius + 273.15
+
+      const formatted = result.toFixed(2).replace(/\.?0+$/, '')
+      return { value, fromUnit, toUnit, result: formatted, from: fromUnit, to: toUnit, display: `${value} ${fromUnit} = ${formatted} ${toUnit}` }
+    }
     if (from in units && to in units) {
-      if (from === 'C' || from === 'F' || from === 'K') {
-        let celsius
-        if (from === 'C') celsius = value
-        else if (from === 'F') celsius = (value - 32) * 5 / 9
-        else celsius = value - 273.15
-
-        let result
-        if (to === 'C') result = celsius
-        else if (to === 'F') result = celsius * 9 / 5 + 32
-        else result = celsius + 273.15
-
-        return { value: result, from: fromUnit, to: toUnit, display: `${value} ${fromUnit} = ${result.toFixed(2)} ${toUnit}` }
-      }
-
       const baseValue = value * units[from]
       const result = baseValue / units[to]
-      return { value: result, from: fromUnit, to: toUnit, display: `${value} ${fromUnit} = ${result.toFixed(4)} ${toUnit}` }
+      const formatted = result.toFixed(4).replace(/\.?0+$/, '')
+      return { value, fromUnit, toUnit, result: formatted, from: fromUnit, to: toUnit, display: `${value} ${fromUnit} = ${formatted} ${toUnit}` }
     }
   }
   return null
 }
 
-function fuzzyMatch(query, text) {
-  if (!query || !text) return 0
-  const q = query.toLowerCase()
-  const t = text.toLowerCase()
+function fuzzyMatchLower(q, t) {
+  if (!q || !t) return 0
   if (t.includes(q)) return 100
   let qi = 0
   let score = 0
@@ -109,6 +113,11 @@ function fuzzyMatch(query, text) {
     }
   }
   return qi === q.length ? score : 0
+}
+
+function fuzzyMatch(query, text) {
+  if (!query || !text) return 0
+  return fuzzyMatchLower(query.toLowerCase(), text.toLowerCase())
 }
 
 export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate }) {
@@ -150,26 +159,40 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     }
   }, [])
 
+  const indexedApps = useMemo(() => {
+    return (installedApps || []).map(app => ({
+      app,
+      labelLower: (app.label || '').toLowerCase(),
+      pkgLower: (app.packageId || '').toLowerCase(),
+    }))
+  }, [installedApps])
+
   const searchApps = useCallback((q) => {
     if (!q) return []
-    const scored = installedApps
-      .map(app => ({
-        id: app.packageId,
-        type: 'app',
-        label: app.label,
-        sublabel: app.packageId,
-        icon: app.icon,
-        score: Math.max(
-          fuzzyMatch(q, app.label),
-          fuzzyMatch(q, app.packageId) * 0.8,
-          app.label.toLowerCase().startsWith(q.toLowerCase()) ? 200 : 0
-        ),
-        action: () => onLaunchAppRef.current?.(app),
-      }))
-      .filter(r => r.score > 0)
-      .sort((a, b) => b.score - a.score)
+    const qLower = q.toLowerCase()
+    const scored = []
+    for (let i = 0; i < indexedApps.length; i++) {
+      const { app, labelLower, pkgLower } = indexedApps[i]
+      const score = Math.max(
+        fuzzyMatchLower(qLower, labelLower),
+        fuzzyMatchLower(qLower, pkgLower) * 0.8,
+        labelLower.startsWith(qLower) ? 200 : 0
+      )
+      if (score > 0) {
+        scored.push({
+          id: app.packageId,
+          type: 'app',
+          label: app.label,
+          sublabel: app.packageId,
+          icon: app.icon,
+          score,
+          action: () => onLaunchAppRef.current?.(app),
+        })
+      }
+    }
+    scored.sort((a, b) => b.score - a.score)
     return scored.slice(0, 6)
-  }, [installedApps])
+  }, [indexedApps])
 
   const searchSettings = useCallback((q) => {
     if (!q) return []
@@ -204,7 +227,6 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
   const searchContacts = useCallback(async (q, force = false) => {
     if (!q || (!isExpandedSearch && !force)) return []
     
-    // Auto-request permission if expanded search is used or forced by command
     const perm = await checkAndRequestPermission('READ_CONTACTS')
     if (!perm.granted) return []
 
@@ -215,8 +237,8 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
       label: c.name,
       sublabel: c.number,
       icon: 'contacts',
-      score: fuzzyMatch(q, c.name) + 50, // boost contacts slightly
-      action: () => {}, // Handled specially in UI
+      score: fuzzyMatch(q, c.name) + 50,
+      action: () => {},
       callAction: () => makeCall(c.number),
       messageAction: () => sendSMS(c.number)
     }))
@@ -238,8 +260,6 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
         directory: Directory.ExternalStorage
       }).catch(() => ({ files: [] }))
 
-      // This is a shallow search of root documents and external storage for simplicity and speed.
-      // A deep recursive search would require more native code or recursive calls.
       const allFiles = [...(result.files || []), ...(downloads.files || [])]
       
       return allFiles
@@ -251,7 +271,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
           sublabel: f.uri,
           icon: 'description',
           score: fuzzyMatch(q, f.name),
-          action: () => {} // File opener could be added here
+          action: () => {}
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 5)
@@ -261,7 +281,13 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     }
   }, [])
 
-  const performSearch = useCallback(async (q) => {
+  const performSearch = useCallback((q) => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+      searchTimeoutRef.current = null
+    }
+    if (abortRef.current) abortRef.current.abort()
+
     if (!q || q.trim().length === 0) {
       setResults([])
       setCalculatorResult(null)
@@ -271,116 +297,110 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
       return
     }
 
-    setIsSearching(true)
-    setCalculatorResult(null)
-    setUnitResult(null)
+    let command = null
+    let actualQuery = q
+    if (q.startsWith('/')) {
+      const parts = q.split(' ')
+      const potentialCommand = parts[0].toLowerCase()
+      const availableCommands = ['/contact', '/calculator', '/unit', '/files', '/search']
+      
+      const isDirectCommand = availableCommands.includes(potentialCommand) && (
+        parts.length > 1 || 
+        q.endsWith(' ') || 
+        potentialCommand === '/calculator' || 
+        potentialCommand === '/unit'
+      )
 
-    try {
-      if (abortRef.current) abortRef.current.abort()
-      abortRef.current = new AbortController()
-
-      let command = null
-      let actualQuery = q
-      if (q.startsWith('/')) {
-        const parts = q.split(' ')
-        const potentialCommand = parts[0].toLowerCase()
-        const availableCommands = ['/contact', '/calculator', '/unit', '/files', '/search']
-        
-        const isDirectCommand = availableCommands.includes(potentialCommand) && (
-          parts.length > 1 || 
-          q.endsWith(' ') || 
-          potentialCommand === '/calculator' || 
-          potentialCommand === '/unit'
-        )
-
-        if (isDirectCommand) {
-          command = potentialCommand.substring(1)
-          actualQuery = parts.slice(1).join(' ')
-          setActiveSource(command)
-        } else if (!availableCommands.includes(potentialCommand) || parts.length === 1) {
-          setActiveSource('all')
-          const suggestions = availableCommands
-            .filter(cmd => cmd.startsWith(potentialCommand))
-            .map(cmd => ({
-              id: `cmd_${cmd}`,
-              type: 'command',
-              label: cmd,
-              sublabel: 'ArcSearch Command',
-              icon: cmd === '/contact' ? 'contacts' : cmd === '/calculator' ? 'calculate' : cmd === '/unit' ? 'straighten' : cmd === '/files' ? 'folder' : 'search',
-              score: 1000,
-              action: () => {} // Handled specially in UI
-            }))
-          setResults(suggestions)
-          setIsSearching(false)
-          return
-        }
-      } else {
+      if (isDirectCommand) {
+        command = potentialCommand.substring(1)
+        actualQuery = parts.slice(1).join(' ')
+        setActiveSource(command)
+      } else if (!availableCommands.includes(potentialCommand) || parts.length === 1) {
         setActiveSource('all')
-      }
-
-      if (command === 'calculator') {
-        // Handled entirely by UI
-        setResults([])
+        const suggestions = availableCommands
+          .filter(cmd => cmd.startsWith(potentialCommand))
+          .map(cmd => ({
+            id: `cmd_${cmd}`,
+            type: 'command',
+            label: cmd,
+            sublabel: 'ArcSearch Command',
+            icon: cmd === '/contact' ? 'contacts' : cmd === '/calculator' ? 'calculate' : cmd === '/unit' ? 'straighten' : cmd === '/files' ? 'folder' : 'search',
+            score: 1000,
+            action: () => {}
+          }))
+        setResults(suggestions)
+        setCalculatorResult(null)
+        setUnitResult(null)
         setIsSearching(false)
         return
       }
-
-      if (command === 'unit') {
-        // Handled entirely by UI
-        setResults([])
-        setIsSearching(false)
-        return
-      }
-
-      const calcResult = tryEvaluateCalculator(actualQuery)
-      if (calcResult && (!command || command === 'all')) {
-        setCalculatorResult(calcResult)
-      }
-
-      const unitRes = tryUnitConversion(actualQuery)
-      if (unitRes && (!command || command === 'all')) {
-        setUnitResult(unitRes)
-      }
-
-      const allResults = []
-
-      if (!command || command === 'all' || command === 'search') {
-        const appResults = searchApps(actualQuery)
-        allResults.push(...appResults)
-
-        const settingResults = searchSettings(actualQuery)
-        allResults.push(...settingResults)
-
-        if (command === 'search' || isExpandedSearch) {
-          const webResults = searchWeb(actualQuery)
-          allResults.push(...webResults)
-        }
-      }
-
-      if (!command || command === 'all' || command === 'contact') {
-        // If /contact, force search Contacts even if isExpandedSearch is false
-        if (command === 'contact' || isExpandedSearch) {
-          const contactResults = await searchContacts(actualQuery, command === 'contact')
-          allResults.push(...contactResults)
-        }
-      }
-
-      if (command === 'files') {
-        const fileResults = await searchFiles(actualQuery)
-        allResults.push(...fileResults)
-      }
-
-      allResults.sort((a, b) => b.score - a.score)
-
-      setResults(allResults.slice(0, 8))
-    } catch (e) {
-      if (e.name !== 'AbortError') {
-        console.error('[SearchViewModel] Search error:', e)
-        setResults([])
-      }
-    } finally {
-      setIsSearching(false)
+    } else {
+      setActiveSource('all')
     }
+
+    if (command === 'calculator' || command === 'unit') {
+      setResults([])
+      setCalculatorResult(null)
+      setUnitResult(null)
+      setIsSearching(false)
+      return
+    }
+
+    const calcResult = (!command || command === 'all') ? tryEvaluateCalculator(actualQuery) : null
+    setCalculatorResult(calcResult)
+
+    const unitRes = (!command || command === 'all') ? tryUnitConversion(actualQuery) : null
+    setUnitResult(unitRes)
+
+    const syncResults = []
+    if (!command || command === 'all' || command === 'search') {
+      syncResults.push(...searchApps(actualQuery))
+      syncResults.push(...searchSettings(actualQuery))
+      if (command === 'search' || isExpandedSearch) {
+        syncResults.push(...searchWeb(actualQuery))
+      }
+    }
+    syncResults.sort((a, b) => b.score - a.score)
+    setResults(syncResults.slice(0, 8))
+
+    const needsContacts = (command === 'contact' || ((!command || command === 'all') && isExpandedSearch)) && actualQuery.trim().length > 0
+    const needsFiles = command === 'files' && actualQuery.trim().length > 0
+
+    if (!needsContacts && !needsFiles) {
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const asyncItems = []
+        if (needsContacts) {
+          const contactResults = await searchContacts(actualQuery, command === 'contact')
+          if (controller.signal.aborted) return
+          asyncItems.push(...contactResults)
+        }
+        if (needsFiles) {
+          const fileResults = await searchFiles(actualQuery)
+          if (controller.signal.aborted) return
+          asyncItems.push(...fileResults)
+        }
+        if (controller.signal.aborted) return
+        const combined = [...syncResults, ...asyncItems].sort((a, b) => b.score - a.score)
+        setResults(combined.slice(0, 8))
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          console.error('[SearchViewModel] Search error:', e)
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearching(false)
+        }
+      }
+    }, 100)
   }, [searchApps, searchSettings, searchWeb, searchContacts, isExpandedSearch, searchFiles])
 
   performSearchRef.current = performSearch
@@ -397,14 +417,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
 
   const handleQueryChange = useCallback((newQuery) => {
     setQuery(newQuery)
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
-    if (!newQuery || newQuery.trim().length === 0) {
-      performSearch('')
-      return
-    }
-    searchTimeoutRef.current = setTimeout(() => {
-      performSearch(newQuery)
-    }, 150)
+    performSearch(newQuery)
   }, [performSearch])
 
   const clearSearch = useCallback(() => {
@@ -412,8 +425,10 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     setResults([])
     setCalculatorResult(null)
     setUnitResult(null)
+    setIsSearching(false)
     setActiveSource('all')
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    if (abortRef.current) abortRef.current.abort()
   }, [])
 
   const executeResult = useCallback((result) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 
 export default function QrSecretStudio({ glassBg }) {
   const [activeTab, setActiveTab] = useState('QR_GEN') // 'QR_GEN' | 'ENCRYPT' | 'DECRYPT'
@@ -8,7 +8,7 @@ export default function QrSecretStudio({ glassBg }) {
   const [qrType, setQrType] = useState('TEXT') // 'TEXT' | 'WIFI' | 'SECRET'
   const [wifiSsid, setWifiSsid] = useState('')
   const [wifiPass, setWifiPass] = useState('')
-  const [wifiType, setWifiType] = useState('WPA')
+  const [wifiType, _setWifiType] = useState('WPA')
   const qrImageRef = useRef(null)
 
   // Secret Text State

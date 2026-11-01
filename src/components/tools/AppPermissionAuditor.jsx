@@ -12,14 +12,16 @@ const SENSITIVE_PERMISSIONS = [
   { key: 'sms', label: 'SMS', icon: 'sms', risk: 20 },
 ]
 
+const EMPTY_APPS = []
+
 export default function AppPermissionAuditor({ glassBg }) {
-  const installedApps = useAppsStore(s => s.installedApps) || []
+  const installedApps = useAppsStore(s => s.installedApps) || EMPTY_APPS
   const [filter, setFilter] = useState('ALL')
   const [search, setSearch] = useState('')
 
   const auditedApps = useMemo(() => {
     return installedApps.map(app => {
-      const nameLower = (app.name || '').toLowerCase()
+      const _nameLower = (app.name || '').toLowerCase()
       const pkgLower = (app.packageId || '').toLowerCase()
 
       // Infer sensitive permissions based on package keywords or flags
@@ -103,7 +105,7 @@ export default function AppPermissionAuditor({ glassBg }) {
   return (
     <div className="flex flex-col gap-4 font-mono-data">
       {/* Header Metrics */}
-      <div className="grid grid-cols-4 gap-2 text-center p-3 rounded-xl border border-sky-500/20 bg-sky-950/10 backdrop-blur-md">
+      <div className="grid grid-cols-4 gap-2 text-center p-3 rounded-xl border border-sky-500/20" style={{ backgroundColor: glassBg }}>
         <div>
           <span className="text-[8px] text-on-surface-variant/40 uppercase block">Total Apps</span>
           <span className="text-sm font-bold text-sky-400">{stats.total}</span>
@@ -159,7 +161,8 @@ export default function AppPermissionAuditor({ glassBg }) {
           filteredApps.map(app => (
             <div
               key={app.packageId}
-              className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-black/30 hover:border-sky-500/30 transition-all group"
+              style={{ backgroundColor: glassBg }}
+              className="flex items-center justify-between p-3 rounded-xl border border-white/5 hover:border-sky-500/30 transition-all group"
             >
               <div className="flex items-center gap-3 min-w-0">
                 {app.icon ? (

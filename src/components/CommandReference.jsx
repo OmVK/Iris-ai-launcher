@@ -121,7 +121,7 @@ const CATEGORIES = [
 export default function CommandReference({ glassBg, onClose }) {
   const [expandedCat, setExpandedCat] = useState(null)
   const [search, setSearch] = useState('')
-  const glassOpacity = useThemeStore(s => s.glassOpacity)
+  const _glassOpacity = useThemeStore(s => s.glassOpacity)
 
   const filtered = useMemo(() => {
     if (!search.trim()) return CATEGORIES

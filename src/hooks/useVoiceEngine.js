@@ -7,6 +7,7 @@ import { speakPiper } from '../utils/piperTTS'
 import {
   speakTextNative,
   stopSpeakingNative,
+  setVoiceSettingsNative,
   stopAudio,
   checkAndRequestPermission,
   isNative
@@ -36,7 +37,7 @@ export default function useVoiceEngine() {
     liveSetupKey, setLiveSetupKey,
   } = useAssistantStore()
 
-  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre, voiceEngineProvider } = useAIStore()
+  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre, voiceEngineProvider: _voiceEngineProvider } = useAIStore()
 
   const lastTtsTextRef = useRef('')
   const isListeningRef = useRef(false)
@@ -71,20 +72,20 @@ export default function useVoiceEngine() {
       try {
         const perm = await checkAndRequestPermission('RECORD_AUDIO')
         if (perm && !perm.granted) return
-      } catch (_) {}
+      } catch (_) { }
       window.speechSynthesis?.cancel()
-      stopSpeakingNative().catch(() => {})
+      stopSpeakingNative().catch(() => { })
       setIsSpeaking(false)
       lastTtsTextRef.current = ''
       try { recognition.start() } catch (e) { console.error(e) }
     }
-  }, [isListening])
+  }, [isListening, setIsSpeaking])
 
   const stopVoiceInput = useCallback(() => {
     isListeningRef.current = false
     setIsListening(false)
     if (recognition) recognition.stop()
-  }, [])
+  }, [setIsListening])
 
   const finishSpeaking = useCallback(() => {
     if (finishSpeakingTimerRef.current) clearTimeout(finishSpeakingTimerRef.current)
@@ -94,7 +95,7 @@ export default function useVoiceEngine() {
       finishSpeakingTimerRef.current = setTimeout(() => {
         if (!mountedRef.current) return
         if (isLiveVoiceRef.current && !isSpeakingRef.current && !isListeningRef.current && recognition) {
-          try { recognition.start() } catch {}
+          try { recognition.start() } catch { }
         }
       }, 300)
     }
@@ -104,9 +105,9 @@ export default function useVoiceEngine() {
     lastTtsTextRef.current = ''
     window.speechSynthesis?.cancel()
     stopCartesiaAudio()
-    stopSpeakingNative().catch(() => {})
+    stopSpeakingNative().catch(() => { })
     if (window._isNativeCartesiaAudioPlaying) {
-      stopAudio().catch(() => {})
+      stopAudio().catch(() => { })
       window._isNativeCartesiaAudioPlaying = false
     }
     setIsSpeaking(false)
@@ -126,7 +127,7 @@ export default function useVoiceEngine() {
     setIsSpeaking(true)
 
     if (recognition && isListeningRef.current) {
-      try { recognition.stop() } catch {}
+      try { recognition.stop() } catch { }
       setIsListening(false)
     }
 
@@ -169,11 +170,10 @@ export default function useVoiceEngine() {
     // 3. PROVIDER: NATIVE (Android Google TTS)
     if (currentProvider === 'NATIVE' || (isNative && currentProvider !== 'WEB')) {
       try {
-        const m = await import('../components/LauncherPlugin')
-        if (m.setVoiceSettingsNative) m.setVoiceSettingsNative(voicePitch, voiceRate, voiceTimbre)
+        if (setVoiceSettingsNative) setVoiceSettingsNative(voicePitch, voiceRate, voiceTimbre)
         await speakTextNative(text)
         finishSpeaking()
-      } catch (e) { 
+      } catch (e) {
         console.warn('[IRIS] Native TTS speak failed, falling back:', e)
       }
       return
@@ -185,22 +185,22 @@ export default function useVoiceEngine() {
       window.speechSynthesis.cancel()
       const utterance = new SpeechSynthesisUtterance(text)
       const voices = window.speechSynthesis.getVoices()
-      
+
       let selectedVoice = null
       if (voiceTimbre === 'british_female') {
         selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('victoria') || v.name.toLowerCase().includes('emma'))) ||
-                        voices.find(v => v.lang.startsWith('en-GB'))
+          voices.find(v => v.lang.startsWith('en-GB'))
       } else if (voiceTimbre === 'british_male') {
         selectedVoice = voices.find(v => v.lang.startsWith('en-GB') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('george') || v.name.toLowerCase().includes('oliver'))) ||
-                        voices.find(v => v.lang.startsWith('en-GB'))
+          voices.find(v => v.lang.startsWith('en-GB'))
       } else if (voiceTimbre === 'natural_male' || voiceTimbre === 'narrator') {
         selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('guy') || v.name.toLowerCase().includes('george')))
       } else {
         selectedVoice = voices.find(v => v.name.includes("Google US English") && v.name.includes("Natural")) ||
-                        voices.find(v => v.name.includes("Natural") || v.name.includes("Aria") || v.name.includes("Samantha")) ||
-                        voices.find(v => v.lang.startsWith("en-US")) ||
-                        voices.find(v => v.lang.startsWith("en")) ||
-                        voices[0]
+          voices.find(v => v.name.includes("Natural") || v.name.includes("Aria") || v.name.includes("Samantha")) ||
+          voices.find(v => v.lang.startsWith("en-US")) ||
+          voices.find(v => v.lang.startsWith("en")) ||
+          voices[0]
       }
 
       if (selectedVoice) utterance.voice = selectedVoice
@@ -213,7 +213,7 @@ export default function useVoiceEngine() {
       console.warn('[IRIS] SpeechSynthesis error:', err)
       finishSpeaking()
     }
-  }, [voicePitch, voiceRate, voiceTimbre])
+  }, [voicePitch, voiceRate, voiceTimbre, voiceEnabled, finishSpeaking, setIsListening, setIsSpeaking, stopSpeaking])
 
   const requestMicrophonePermission = useCallback(async () => {
     try {
@@ -230,7 +230,7 @@ export default function useVoiceEngine() {
     if (!hasPermission) return
     setIsLiveVoice(true)
     speakText("Engaging live conversation mode. I am listening.")
-  }, [speakText])
+  }, [speakText, requestMicrophonePermission, setIsLiveVoice])
 
   const handleExitLiveModeOnly = useCallback(() => {
     stopSpeaking()
@@ -239,8 +239,8 @@ export default function useVoiceEngine() {
     isListeningRef.current = false
     setIsListening(false)
     isSpeakingRef.current = false
-    if (recognition) try { recognition.stop() } catch {}
-  }, [stopSpeaking])
+    if (recognition) try { recognition.stop() } catch { }
+  }, [stopSpeaking, setIsListening, setIsLiveVoice])
 
   const handleStopLiveModeCompletely = useCallback(() => {
     stopSpeaking()
@@ -249,9 +249,9 @@ export default function useVoiceEngine() {
     isListeningRef.current = false
     setIsListening(false)
     isSpeakingRef.current = false
-    if (recognition) try { recognition.stop() } catch {}
+    if (recognition) try { recognition.stop() } catch { }
     setChatLog(prev => prev.filter(item => !item.loading))
-  }, [stopSpeaking])
+  }, [stopSpeaking, setChatLog, setIsListening, setIsLiveVoice])
 
   const isLiveConfigured = useCallback(() => {
     const { llmBackend, geminiKey, groqKey } = useAIStore.getState()
@@ -273,7 +273,7 @@ export default function useVoiceEngine() {
       setLiveSetupKey(storedKey || '')
       setShowLiveConfigModal(true)
     }
-  }, [isLiveConfigured, handleOpenLiveMode])
+  }, [isLiveConfigured, handleOpenLiveMode, setLiveSetupEngine, setLiveSetupKey, setShowLiveConfigModal])
 
   const handleSaveLiveConfig = useCallback(async () => {
     localStorage.setItem('system_llm_backend', liveSetupEngine)
@@ -285,7 +285,7 @@ export default function useVoiceEngine() {
     else if (liveSetupEngine === 'GROQ') useAIStore.getState().setGroqKey(liveSetupKey.trim())
     setShowLiveConfigModal(false)
     setTimeout(() => handleOpenLiveMode(), 200)
-  }, [liveSetupEngine, liveSetupKey])
+  }, [liveSetupEngine, liveSetupKey, handleOpenLiveMode, setLlmBackend, setShowLiveConfigModal])
 
   // Bridge to useAIBackend — receives submitPrompt, isGeneratingRef, abortControllerRef
   const submitPromptRef = useRef(null)

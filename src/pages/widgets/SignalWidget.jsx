@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, memo } from 'react'
 import { Device } from '@capacitor/device'
 import { getSystemStats } from '../../components/LauncherPlugin'
 import PowerSaveManager from '../../utils/PowerSaveManager'
 import { usePowerStore } from '../../stores/powerStore'
 
-export default function SignalWidget() {
+const SignalWidget = memo(function SignalWidget() {
   const powerSaveMode = usePowerStore((s) => s.powerSaveMode)
   const [battery, setBattery] = useState(100)
   const [isCharging, setIsCharging] = useState(false)
@@ -15,7 +15,14 @@ export default function SignalWidget() {
   useEffect(() => {
     let cancelled = false
 
-    const fetchBattery = async () => {
+    const fetchBatteryAndRam = async () => {
+      try {
+        const stats = await getSystemStats()
+        if (!cancelled && stats?.memTotal) {
+          setRam({ used: stats.memUsed, total: stats.memTotal })
+        }
+      } catch {}
+
       try {
         const info = await Device.getBatteryInfo()
         if (!cancelled && info.batteryLevel !== undefined) {
@@ -60,7 +67,7 @@ export default function SignalWidget() {
     }
 
     updateNetwork()
-    fetchBattery()
+    fetchBatteryAndRam()
 
     window.addEventListener('online', updateNetwork)
     window.addEventListener('offline', updateNetwork)
@@ -68,8 +75,8 @@ export default function SignalWidget() {
       navigator.connection.addEventListener('change', updateNetwork)
     }
 
-    const pollMs = PowerSaveManager.getPollingInterval('batteryPollMs') || 10000
-    const timer = setInterval(fetchBattery, pollMs)
+    const pollMs = PowerSaveManager.getPollingInterval('batteryPollMs') || 15000
+    const timer = setInterval(fetchBatteryAndRam, pollMs)
 
     return () => {
       cancelled = true
@@ -82,25 +89,11 @@ export default function SignalWidget() {
     }
   }, [powerSaveMode])
 
-  useEffect(() => {
-    let cancelled = false
-    const fetchRam = async () => {
-      try {
-        const stats = await getSystemStats()
-        if (!cancelled && stats?.memTotal) setRam({ used: stats.memUsed, total: stats.memTotal })
-      } catch {}
-    }
-    fetchRam()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   const batteryColor = isCharging ? '#22c55e' : battery > 50 ? '#00dbe7' : battery > 20 ? '#facc15' : '#f43f5e'
   const ramPercent = ram.total > 0 ? Math.round((ram.used / ram.total) * 100) : 0
 
   return (
-    <section className="glass-surface border border-white/10 rounded-2xl p-3.5 flex justify-between items-center group relative w-full h-full hover:border-primary-fixed-dim/40 transition-all bg-[#080d16]/85 backdrop-blur-xl">
+    <section className="iris-card border border-white/10 rounded-2xl p-3.5 flex justify-between items-center group relative w-full h-full hover:border-primary-fixed-dim/40 transition-colors shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
       <div className="flex items-center gap-4">
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-1">
@@ -108,14 +101,14 @@ export default function SignalWidget() {
               Battery Line
             </span>
             {isCharging && (
-              <span className="material-symbols-outlined text-green-400 text-[10px] leading-none animate-pulse">
+              <span className="material-symbols-outlined text-green-400 text-[10px] leading-none">
                 bolt
               </span>
             )}
           </div>
           <div className="w-24 bg-white/10 h-1.5 rounded-full overflow-hidden mt-0.5 border border-white/5">
             <div
-              className="h-full rounded-full transition-all duration-500 shadow-[0_0_6px_rgba(0,219,231,0.4)]"
+              className="h-full rounded-full transition-[width] duration-500"
               style={{ width: `${battery}%`, backgroundColor: batteryColor }}
             />
           </div>
@@ -132,10 +125,8 @@ export default function SignalWidget() {
               return (
                 <div
                   key={barNum}
-                  className={`w-1.5 rounded-t transition-all duration-300 ${
-                    isActive
-                      ? 'bg-primary-fixed-dim shadow-[0_0_6px_rgba(var(--primary-rgb),0.5)]'
-                      : 'bg-white/15'
+                  className={`w-1.5 rounded-t transition-colors duration-300 ${
+                    isActive ? 'bg-primary-fixed-dim' : 'bg-white/15'
                   }`}
                   style={{ height: `${barHeight}px` }}
                 />
@@ -155,4 +146,6 @@ export default function SignalWidget() {
       </div>
     </section>
   )
-}
+})
+
+export default SignalWidget

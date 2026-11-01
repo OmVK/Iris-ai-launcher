@@ -44,7 +44,7 @@ async function initApp() {
 
 function setupStorageBridge() {
   const originalSetItem = localStorage.setItem
-  localStorage.setItem = function(key, value) {
+  localStorage.setItem = function (key, value) {
     if (key.startsWith('CapacitorStorage')) {
       try { originalSetItem.apply(this, arguments) } catch (e) { if (e.name !== 'QuotaExceededError' && e.code !== 22 && e.code !== 1014) console.warn('CapacitorStorage setItem error:', e) }
       return
@@ -56,19 +56,19 @@ function setupStorageBridge() {
   }
 
   const originalRemoveItem = localStorage.removeItem
-  localStorage.removeItem = function(key) {
+  localStorage.removeItem = function (key) {
     originalRemoveItem.apply(this, arguments)
     Preferences.remove({ key }).catch(console.error)
   }
 
   const originalClear = localStorage.clear
-  localStorage.clear = function() {
+  localStorage.clear = function () {
     originalClear.apply(this, arguments)
     Preferences.clear().catch(console.error)
   }
 }
 
-async function deferBackgroundSync(allKeys) {
+async function deferBackgroundSync(_allKeys) {
   try {
     const keysResult = await Preferences.keys()
     const skipPrefixes = ['CapacitorStorage', 'iris_ds_']

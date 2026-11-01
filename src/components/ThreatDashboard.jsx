@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
-import { launchApp } from './LauncherPlugin'
+import { useState, useCallback } from 'react'
 import { useAppStore } from '../stores/appStore'
 
 const STORAGE_KEY = 'iris_security_log'

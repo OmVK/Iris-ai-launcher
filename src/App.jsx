@@ -47,39 +47,57 @@ export default function App() {
   const { powerSaveMode, setPowerSaveMode } = usePowerStore()
   const [showFeatureTour, setShowFeatureTour] = useState(false)
   const drawerSheetRef = useRef(null)
+  const mainRef = useRef(null)
 
   const voiceEngine = useVoiceEngine()
   const aiBackend = useAIBackend(voiceEngine.speakText)
   voiceEngine.setSubmitPrompt(aiBackend.submitPrompt, aiBackend.isGeneratingRef, aiBackend.abortControllerRef)
 
-  useThemeVars({ themeColor, glassOpacity })
+  useThemeVars({ themeColor, glassOpacity, darkGlassTheme })
   useAppEffects({ isAppActive, setIsAppActive, setShowChronoLock, setShowVaultExplorer, setIsVaultUnlocked, setShowLiveConfigModal, setActivePage, loadNativeApps, lockedApps, fullscreenActive, isVaultUnlocked, powerSaveMode })
   const { handleLaunchApp, handleTriggerVault, handleTriggerChronoLock } = usePageRouter({ setActivePage, setChronoTarget, setShowChronoLock, isVaultUnlocked, setShowVaultExplorer })
 
-  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp: handleLaunchApp, drawerSheetRef })
+  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp: handleLaunchApp, drawerSheetRef, mainRef })
 
-  useEffect(() => { loadNativeApps() }, [])
+  useEffect(() => { loadNativeApps() }, [loadNativeApps])
 
   useEffect(() => {
     WallpaperManager.checkDailyRotation()
+    const preloadTimer = setTimeout(() => {
+      import('./pages/Widgets')
+      import('./pages/Assistant')
+      import('./pages/Settings')
+      import('./pages/IrisTools')
+      import('./pages/PrivateVault')
+      import('./components/ZeroScreen')
+    }, 150)
+    return () => clearTimeout(preloadTimer)
   }, [])
 
   useEffect(() => {
-    if (!drawerSheetRef.current) return
-    const mainEl = document.querySelector('main')
+    const sheetEl = drawerSheetRef.current
+    const mainEl = mainRef.current
+    if (!sheetEl) return
+    const curve = 'cubic-bezier(0.22, 1, 0.36, 1)'
     if (activePage === 'drawer') {
-      drawerSheetRef.current.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
-      drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
-      drawerSheetRef.current.style.pointerEvents = 'auto'
+      if (sheetEl.style.transform !== 'translate3d(0, 0, 0)' && sheetEl.style.transform !== 'translate3d(0px, 0px, 0px)') {
+        sheetEl.style.transition = `transform 200ms ${curve}`
+        sheetEl.style.transform = 'translate3d(0, 0, 0)'
+      }
+      sheetEl.style.pointerEvents = 'auto'
       if (mainEl) {
+        mainEl.style.transition = `opacity 180ms ${curve}`
         mainEl.style.opacity = '0'
         mainEl.style.pointerEvents = 'none'
       }
     } else {
-      drawerSheetRef.current.style.transition = 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)'
-      drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
-      drawerSheetRef.current.style.pointerEvents = 'none'
+      if (!sheetEl.style.transform.includes('100%')) {
+        sheetEl.style.transition = `transform 200ms ${curve}`
+        sheetEl.style.transform = 'translate3d(0, 100%, 0)'
+      }
+      sheetEl.style.pointerEvents = 'none'
       if (mainEl) {
+        mainEl.style.transition = `opacity 180ms ${curve}`
         mainEl.style.opacity = '1'
         mainEl.style.pointerEvents = 'auto'
       }
@@ -98,24 +116,6 @@ export default function App() {
     setChronoTarget(null)
   }
 
-  const getGradient = (type) => {
-    const hasBg = hasCustomWallpaper
-    const o = (bg, fg) => hasBg ? fg : bg
-    const g = {
-      VOID: '#020617',
-      CYBER: `radial-gradient(circle at center, rgba(15, 23, 42, ${o('1', '0.4')}) 0%, rgba(2, 6, 23, ${o('1', '0.85')}) 100%)`,
-      GRID: `linear-gradient(to bottom, rgba(2, 6, 23, ${o('1', '0.4')}), rgba(15, 23, 42, ${o('1', '0.85')}))`,
-      NEBULA: `radial-gradient(ellipse at top, rgba(30, 27, 75, ${o('1', '0.5')}) 0%, rgba(2, 6, 23, ${o('1', '0.85')}) 100%)`,
-      AURORA: `linear-gradient(135deg, rgba(2, 6, 23, ${o('1', '0.8')}) 0%, rgba(6, 78, 59, ${o('1', '0.45')}) 50%, rgba(2, 6, 23, ${o('1', '0.8')}) 100%)`,
-      FIBER: `linear-gradient(180deg, rgba(10, 14, 23, ${o('1', '0.6')}) 0%, rgba(20, 25, 35, ${o('1', '0.4')}) 50%, rgba(10, 14, 23, ${o('1', '0.7')}) 100%)`,
-      OCEAN: `linear-gradient(180deg, rgba(0, 20, 40, ${o('1', '0.8')}) 0%, rgba(0, 10, 20, ${o('1', '0.9')}) 100%)`,
-      SUNSET: `linear-gradient(180deg, rgba(40, 10, 20, ${o('1', '0.8')}) 0%, rgba(20, 5, 10, ${o('1', '0.9')}) 100%)`,
-      FOREST: `linear-gradient(180deg, rgba(5, 20, 10, ${o('1', '0.8')}) 0%, rgba(2, 10, 5, ${o('1', '0.9')}) 100%)`,
-      CUSTOM: 'transparent',
-    }
-    return g[type] || '#020617'
-  }
-
   const renderActivePage = () => {
     switch (activePage) {
       case 'home':
@@ -123,7 +123,7 @@ export default function App() {
         return <Home onNavigate={setActivePage} onTriggerVault={handleTriggerVault}
           onTriggerChronoLock={handleTriggerChronoLock} isVaultUnlocked={isVaultUnlocked}
           installedApps={installedApps} setInstalledApps={setInstalledApps} lockedApps={lockedApps} onToggleAppLock={toggleAppLock}
-          use24HourClock={use24HourClock} showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} isAppActive={isAppActive} powerSaveMode={powerSaveMode} />
+          use24HourClock={use24HourClock} showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} isAppActive={isAppActive && activePage === 'home'} powerSaveMode={powerSaveMode} />
       case 'widgets':
         return <Widgets isAppActive={isAppActive} activePage={activePage} powerSaveMode={powerSaveMode} />
       case 'assistant':
@@ -192,6 +192,8 @@ export default function App() {
   const scale = (dpiScale || 100) / 100
 
   const customWallpaperData = useMemo(() => {
+    void wallpaper
+    void hasCustomWallpaper
     try {
       let raw = localStorage.getItem('custom_wallpaper') || ''
       if (!raw) return null
@@ -203,6 +205,21 @@ export default function App() {
   }, [wallpaper, hasCustomWallpaper])
 
   const rootBgStyle = useMemo(() => {
+    const o = (bg, fg) => hasCustomWallpaper ? fg : bg
+    const g = {
+      VOID: '#020617',
+      CYBER: `radial-gradient(circle at center, rgba(15, 23, 42, ${o('1', '0.4')}) 0%, rgba(2, 6, 23, ${o('1', '0.85')}) 100%)`,
+      GRID: `linear-gradient(to bottom, rgba(2, 6, 23, ${o('1', '0.4')}), rgba(15, 23, 42, ${o('1', '0.85')}))`,
+      NEBULA: `radial-gradient(ellipse at top, rgba(30, 27, 75, ${o('1', '0.5')}) 0%, rgba(2, 6, 23, ${o('1', '0.85')}) 100%)`,
+      AURORA: `linear-gradient(135deg, rgba(2, 6, 23, ${o('1', '0.8')}) 0%, rgba(6, 78, 59, ${o('1', '0.45')}) 50%, rgba(2, 6, 23, ${o('1', '0.8')}) 100%)`,
+      FIBER: `linear-gradient(180deg, rgba(10, 14, 23, ${o('1', '0.6')}) 0%, rgba(20, 25, 35, ${o('1', '0.4')}) 50%, rgba(10, 14, 23, ${o('1', '0.7')}) 100%)`,
+      OCEAN: `linear-gradient(180deg, rgba(0, 20, 40, ${o('1', '0.8')}) 0%, rgba(0, 10, 20, ${o('1', '0.9')}) 100%)`,
+      SUNSET: `linear-gradient(180deg, rgba(40, 10, 20, ${o('1', '0.8')}) 0%, rgba(20, 5, 10, ${o('1', '0.9')}) 100%)`,
+      FOREST: `linear-gradient(180deg, rgba(5, 20, 10, ${o('1', '0.8')}) 0%, rgba(2, 10, 5, ${o('1', '0.9')}) 100%)`,
+      CUSTOM: 'transparent',
+    }
+    const getGrad = (type) => g[type] || '#020617'
+
     const bg = {}
     if ((wallpaper === 'CUSTOM' || wallpaper === 'SYSTEM') && customWallpaperData) {
       bg.backgroundImage = `url("${customWallpaperData}")`
@@ -212,9 +229,9 @@ export default function App() {
     } else if (wallpaper === 'SYSTEM') {
       bg.background = 'transparent'
     } else if (wallpaper !== 'VOID') {
-      bg.background = getGradient(wallpaper)
+      bg.background = getGrad(wallpaper)
     } else {
-      bg.background = getGradient('VOID')
+      bg.background = getGrad('VOID')
     }
     return bg
   }, [wallpaper, hasCustomWallpaper, customWallpaperData])
@@ -233,23 +250,23 @@ export default function App() {
       onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
     >
       <div style={wallpaperOverlayStyle} />
-      {!PowerSaveManager.shouldDisable('wallpaper') && (
+      {!PowerSaveManager.shouldDisable('useWallpaper') && (
         <InteractiveWallpaper mode={activeLiveWallpaper} activePage={activePage} isAppActive={isAppActive} />
       )}
       <ArcSearch isOpen={showArcSearch} onClose={() => setShowArcSearch(false)} installedApps={installedApps} launchApp={handleLaunchApp} activePage={activePage} setActivePage={setActivePage} globalIconTheme={globalIconTheme} />
       <TaskAlarmOverlay setActivePage={setActivePage} />
-      <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} onNavigate={setActivePage} />
-      <main className={`flex-1 flex flex-col overflow-hidden min-h-0 relative z-10 transition-opacity duration-260 ${activePage === 'drawer' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <div key={activePage === 'drawer' ? 'home' : activePage} className={`page-transition-container effect-${pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.16, 1, 0.3, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.56, 0.64, 1)' : 'cubic-bezier(0.16, 1, 0.3, 1)' }}>
-          <Suspense fallback={<div className="flex items-center justify-center h-full"><span className="material-symbols-outlined text-primary-fixed-dim animate-pulse text-3xl">hourglass_empty</span></div>}>
+      <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} activePage={activePage} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} onNavigate={setActivePage} />
+      <main ref={mainRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative z-10" style={{ backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
+        <div key={activePage === 'drawer' ? 'home' : activePage} className={`page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.22, 1, 0.36, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.56, 0.64, 1)' : 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+          <Suspense fallback={null}>
             {renderActivePage()}
           </Suspense>
         </div>
       </main>
       <div
         ref={drawerSheetRef}
-        className="fixed inset-0 z-30 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] translate-y-full pointer-events-none bg-transparent"
-        style={{ willChange: 'transform' }}
+        className="fixed inset-0 z-30 translate-y-full pointer-events-none"
+        style={{ willChange: 'transform', backfaceVisibility: 'hidden', contain: 'strict', transform: 'translate3d(0, 100%, 0)' }}
       >
         <Drawer
           onNavigate={setActivePage}
@@ -263,6 +280,9 @@ export default function App() {
           lockedApps={lockedApps}
           globalIconTheme={globalIconTheme}
           drawerSheetRef={drawerSheetRef}
+          mainRef={mainRef}
+          isDrawerOpen={activePage === 'drawer'}
+          isAppActive={isAppActive}
         />
       </div>
       <BottomNavBar activePage={activePage} setActivePage={setActivePage} showAppLabels={showAppLabels} />

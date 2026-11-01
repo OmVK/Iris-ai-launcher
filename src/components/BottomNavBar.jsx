@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useThemeStore } from '../stores/themeStore'
 import { useAssistantStore } from '../stores/assistantStore'
 import { useNotificationStore } from '../stores/notificationStore'
@@ -15,13 +15,13 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
 
   const isAiActive = isListening || isSpeaking
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: 'home', label: 'Home', icon: 'home_app_logo', filled: true },
     { id: 'widgets', label: 'Widgets', icon: 'widgets', filled: false },
     { id: 'assistant', label: 'Iris AI', icon: 'smart_toy', filled: true, center: true },
     { id: 'iris_tools', label: 'IRIS', icon: 'deployed_code', filled: false },
     { id: 'settings', label: 'Settings', icon: 'settings', filled: true }
-  ]
+  ], [])
 
   const startCollapseTimer = useCallback(() => {
     if (collapseTimer.current) clearTimeout(collapseTimer.current)
@@ -49,9 +49,10 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   }, [collapsed])
 
   const handleNavClick = useCallback((id) => {
+    HapticFeedback.light()
     setActivePage(id)
-    setCollapsed(true)
-  }, [setActivePage])
+    startCollapseTimer()
+  }, [setActivePage, startCollapseTimer])
 
   const handleExpand = useCallback(() => {
     setCollapsed(false)
@@ -68,17 +69,15 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   const getDockBgStyle = () => {
     if (isAiActive) {
       return {
-        background: 'rgba(12, 16, 28, 0.95)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)'
+        background: 'rgba(10, 14, 26, 0.96)'
       }
     }
     switch(dockBackground) {
-      case 'none': return { background: 'transparent', backdropFilter: 'none', WebkitBackdropFilter: 'none' }
-      case 'solid': return { background: 'rgba(12, 16, 28, 1)', backdropFilter: 'none', WebkitBackdropFilter: 'none' }
-      case 'gradient': return { background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.15), rgba(12, 16, 28, 0.95))', backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }
+      case 'none': return { background: 'transparent' }
+      case 'solid': return { background: 'rgba(12, 16, 28, 1)' }
+      case 'gradient': return { background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.15), rgba(10, 14, 26, 0.96))' }
       case 'blur':
-      default: return { background: 'rgba(12, 16, 28, 0.82)', backdropFilter: 'blur(40px) saturate(180%)', WebkitBackdropFilter: 'blur(40px) saturate(180%)' }
+      default: return { background: 'rgba(10, 14, 26, 0.94)' }
     }
   }
 
@@ -156,7 +155,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-2 pointer-events-none">
         <div
           ref={navRef}
-          className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
+          className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-[width,height,border-radius] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
         style={{
           ...getDockBgStyle(),
           border: isAiActive
@@ -174,6 +173,10 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
           width: collapsed ? colWidth : expWidth,
           height: collapsed ? colHeight : expHeight,
           borderRadius: collapsed ? 20 : 34,
+          transform: 'translate3d(0, 0, 0)',
+          backfaceVisibility: 'hidden',
+          contain: 'layout paint style',
+          willChange: 'width, height, border-radius',
         }}
       >
         {activeGlow && (
@@ -190,8 +193,8 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
         )}
         {/* Collapsed State */}
         <div 
-          className={`absolute inset-0 flex items-center justify-center transition-all ${
-            collapsed ? 'opacity-100 scale-100 duration-300 delay-200' : 'opacity-0 scale-95 duration-200 pointer-events-none'
+          className={`absolute inset-0 flex items-center justify-center transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            collapsed ? 'opacity-100 scale-100 duration-200 delay-75' : 'opacity-0 scale-95 duration-150 pointer-events-none'
           }`}
         >
           <div 
@@ -205,7 +208,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
             {tabsToRender.map((tab) => (
               <span
                 key={tab.id}
-                className="material-symbols-outlined transition-all duration-200"
+                className="material-symbols-outlined transition-[color,font-size] duration-200"
                 style={{
                   fontSize: activePage === tab.id ? 16 : 13,
                   fontVariationSettings: (activePage === tab.id && tab.filled) ? "'FILL' 1" : "'FILL' 0",
@@ -225,8 +228,8 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
 
         {/* Expanded State */}
         <div 
-          className={`absolute inset-0 flex items-center justify-center transition-all ${
-            collapsed ? 'opacity-0 scale-95 duration-150 pointer-events-none' : 'opacity-100 scale-100 duration-300 delay-150'
+          className={`absolute inset-0 flex items-center justify-center transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            collapsed ? 'opacity-0 scale-95 duration-150 pointer-events-none' : 'opacity-100 scale-100 duration-200 delay-75'
           }`}
         >
           <div className="w-[360px] h-[68px] px-3 flex justify-around items-center">

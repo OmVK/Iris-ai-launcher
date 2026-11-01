@@ -54,6 +54,9 @@ export default function Drawer({
   lockedApps = [],
   onToggleAppLock,
   drawerSheetRef,
+  mainRef,
+  isDrawerOpen = false,
+  isAppActive = true,
 }) {
   const { gridColumns, gridRows, showAppLabels, showDrawerSearch, globalIconTheme, drawerIconSize, drawerTextSize, drawerLayout, setDrawerLayout, iconShape } = useThemeStore()
   const { hiddenApps, appFrequency, recordAppLaunch } = useAppsStore()
@@ -119,10 +122,15 @@ export default function Drawer({
 
   useEffect(() => { activeContextMenuRef.current = activeContextMenu }, [activeContextMenu])
 
-  const swipeStartPos = useRef({ x: 0, y: 0, scrollTop: 0 })
+  const swipeStartPos = useRef(null)
   const activeContextMenuRef = useRef(null)
+  const drawerRootRef = useRef(null)
   const scrollRef = useRef(null)
   const scrollTimerRef = useRef(null)
+  const drawerLayoutRef = useRef(drawerLayout)
+  drawerLayoutRef.current = drawerLayout
+  const onNavigateRef = useRef(onNavigate)
+  onNavigateRef.current = onNavigate
 
   useEffect(() => { localStorage.setItem('iris_custom_folders', JSON.stringify(customFolders)) }, [customFolders])
 
@@ -161,72 +169,95 @@ export default function Drawer({
     ].filter(f => f.apps && f.apps.length > 0)
   }, [categorizedApps, categoriesItems, drawerLayout])
 
-  const handleDrawerTouchStart = (e) => {
-    const touch = e.touches ? e.touches[0] : e
-    swipeStartPos.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-      scrollTop: e.currentTarget.scrollTop,
-      time: Date.now()
-    }
-  }
+  useEffect(() => {
+    const rootEl = drawerRootRef.current
+    if (!rootEl) return
 
-  const handleDrawerTouchMove = (e) => {
-    if (!swipeStartPos.current || !drawerSheetRef?.current) return
-    const touch = e.touches ? e.touches[0] : e
-    if (!touch) return
-    const dx = Math.abs(touch.clientX - swipeStartPos.current.x)
-    const dy = touch.clientY - swipeStartPos.current.y
-    if (dy > 12 && dx < dy * 1.5 && swipeStartPos.current.scrollTop <= 5) {
-      drawerSheetRef.current.style.transition = 'none'
-      drawerSheetRef.current.style.transform = `translate3d(0, ${Math.max(0, dy)}px, 0)`
-      const mainEl = document.querySelector('main')
-      if (mainEl) {
-        const vh = window.innerHeight || 800
-        const progress = Math.min(1, Math.max(0, dy / (vh * 0.4)))
-        mainEl.style.opacity = `${progress.toFixed(2)}`
+    const triggerSmoothClose = () => {
+      swipeStartPos.current = null
+      const curve = 'cubic-bezier(0.22, 1, 0.36, 1)'
+      if (drawerSheetRef?.current) {
+        drawerSheetRef.current.style.transition = `transform 200ms ${curve}`
+        drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
+        drawerSheetRef.current.style.pointerEvents = 'none'
+      }
+      if (mainRef?.current) {
+        mainRef.current.style.transition = `opacity 180ms ${curve}`
+        mainRef.current.style.opacity = '1'
+        mainRef.current.style.pointerEvents = 'auto'
+      }
+      setTimeout(() => {
+        onNavigateRef.current('home')
+      }, 200)
+    }
+
+    const onTouchStart = (e) => {
+      if (
+        drawerLayoutRef.current === 'MESH' ||
+        e.target.closest('canvas') ||
+        e.target.closest('[data-category-bar]') ||
+        e.target.closest('input') ||
+        e.target.closest('select')
+      ) {
+        swipeStartPos.current = null
+        return
+      }
+      const touch = e.touches ? e.touches[0] : e
+      swipeStartPos.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now()
       }
     }
-  }
 
-  const handleDrawerTouchEnd = (e) => {
-    if (!swipeStartPos.current) return
-    const touch = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : e)
-    if (!touch || !touch.clientX) return
-    const dx = Math.abs(touch.clientX - swipeStartPos.current.x)
-    const dy = touch.clientY - swipeStartPos.current.y
-    const duration = Date.now() - (swipeStartPos.current.time || Date.now())
-    const velocity = Math.abs(dy) / Math.max(1, duration)
+    const onTouchMove = (e) => {
+      if (!swipeStartPos.current) return
+      const touch = e.touches ? e.touches[0] : e
+      if (!touch) return
+      const dx = touch.clientX - swipeStartPos.current.x
+      const dy = Math.abs(touch.clientY - swipeStartPos.current.y)
 
-    if (dy > 12 && dx < dy * 1.5 && swipeStartPos.current.scrollTop <= 5) {
-      if (dy > 80 || (velocity > 0.35 && dy > 30)) {
-        if (drawerSheetRef?.current) {
-          drawerSheetRef.current.style.transition = 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)'
-          drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
-          drawerSheetRef.current.style.pointerEvents = 'none'
-        }
-        const mainEl = document.querySelector('main')
-        if (mainEl) {
-          mainEl.style.transition = 'opacity 240ms cubic-bezier(0.16, 1, 0.3, 1)'
-          mainEl.style.opacity = '1'
-          mainEl.style.pointerEvents = 'auto'
-        }
-        onNavigate('home')
-      } else {
-        if (drawerSheetRef?.current) {
-          drawerSheetRef.current.style.transition = 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)'
-          drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
-        }
-        const mainEl = document.querySelector('main')
-        if (mainEl) {
-          mainEl.style.transition = 'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1)'
-          mainEl.style.opacity = '0'
-          mainEl.style.pointerEvents = 'none'
-        }
+      if (dy > 14 && dy > Math.abs(dx)) {
+        swipeStartPos.current = null
+        return
+      }
+
+      if (dx > 50 && dx > dy * 1.5) {
+        e.stopPropagation()
+        triggerSmoothClose()
       }
     }
-    swipeStartPos.current = null
-  }
+
+    const onTouchEnd = (e) => {
+      if (!swipeStartPos.current) return
+      const touch = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : e)
+      if (!touch) {
+        swipeStartPos.current = null
+        return
+      }
+      const dx = touch.clientX - swipeStartPos.current.x
+      const dy = Math.abs(touch.clientY - swipeStartPos.current.y)
+      const duration = Date.now() - (swipeStartPos.current.time || Date.now())
+      const velocity = Math.abs(dx) / Math.max(1, duration)
+      swipeStartPos.current = null
+
+      if ((dx > 36 || (dx > 24 && velocity > 0.25)) && dx > dy * 1.4) {
+        e.stopPropagation()
+        triggerSmoothClose()
+      }
+    }
+
+    rootEl.addEventListener('touchstart', onTouchStart, { passive: true })
+    rootEl.addEventListener('touchmove', onTouchMove, { passive: true })
+    rootEl.addEventListener('touchend', onTouchEnd, { passive: true })
+    rootEl.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    return () => {
+      rootEl.removeEventListener('touchstart', onTouchStart)
+      rootEl.removeEventListener('touchmove', onTouchMove)
+      rootEl.removeEventListener('touchend', onTouchEnd)
+      rootEl.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [drawerSheetRef, mainRef])
 
   const handleCreateFolder = () => {
     setActiveFolder({ id: Date.now().toString(), name: 'New Folder', apps: [], isFolder: true })
@@ -278,16 +309,7 @@ export default function Drawer({
   }, [setInstalledApps, setToastText])
 
   return (
-    <div className="relative flex-1 flex flex-col h-[100lvh] min-h-0 overflow-hidden bg-transparent">
-
-      <div
-        ref={scrollRef}
-        data-no-arc
-        onTouchStart={handleDrawerTouchStart}
-        onTouchMove={handleDrawerTouchMove}
-        onTouchEnd={handleDrawerTouchEnd}
-        className="flex-grow pt-12 px-margin overflow-y-auto pb-20 scroll-container select-none"
-      >
+    <div ref={drawerRootRef} data-no-arc className="relative flex-1 flex flex-col h-[100lvh] min-h-0 overflow-hidden bg-transparent select-none">
       {toastText && (
         <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
           <div className="glass-surface border border-primary-fixed-dim/40 px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(var(--primary-rgb),0.4)] animate-bounce bg-[#020617]/95">
@@ -297,7 +319,7 @@ export default function Drawer({
         </div>
       )}
 
-      <div className="sticky top-0 z-40 bg-background/0 pb-4">
+      <div className="shrink-0 pt-12 pb-3 px-margin z-40">
         <div className="max-w-xl mx-auto space-y-4">
           {showDrawerSearch && (
             <div className="glass-chip glass-border rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_15px_rgba(var(--primary-rgb),0.15)]">
@@ -315,7 +337,7 @@ export default function Drawer({
             </div>
           )}
 
-          <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[8px] font-label-caps tracking-wider">
+          <div data-category-bar className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[8px] font-label-caps tracking-wider">
             {['ALL', 'COMMUNICATION', 'MEDIA', 'GAMES', 'SYSTEM', 'PRODUCTIVITY', 'FINANCE'].map(cat => (
               <button
                 key={cat}
@@ -390,6 +412,12 @@ export default function Drawer({
         </div>
       </div>
 
+      <div
+        ref={scrollRef}
+        data-no-arc
+        className="flex-1 min-h-0 px-margin overflow-y-auto pb-20 scroll-container select-none"
+      >
+
       {drawerLayout === 'GRID' && (
         <DrawerGrid
           filteredApps={filteredApps} gridColumns={gridColumns} gridRows={gridRows}
@@ -425,6 +453,7 @@ export default function Drawer({
           drawerTextSize={drawerTextSize}
           activeLetter={activeLetter} setActiveLetter={setActiveLetter}
           onAppClick={handleAppClick} onContextMenu={handleContextMenu}
+          isActive={isDrawerOpen && isAppActive}
         />
       )}
       </div>

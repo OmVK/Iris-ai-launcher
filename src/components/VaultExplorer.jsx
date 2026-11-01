@@ -1,6 +1,5 @@
 import FileExplorer from './FileExplorer'
 import ThreatLogs from './ThreatLogs'
-import { launchApp } from './LauncherPlugin'
 
 export default function VaultExplorer({
   vaultTab, setVaultTab, lockedApps, installedApps, isVaultUnlocked,

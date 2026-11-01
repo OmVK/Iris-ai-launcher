@@ -1,5 +1,4 @@
-import { Preferences } from '@capacitor/preferences'
-import { isNative } from '../components/LauncherPlugin'
+import { isNative, NativeLauncher } from '../components/LauncherPlugin'
 
 const PERMISSION_RATIONALES = {
   SET_WALLPAPER: 'IRIS needs wallpaper permission to set and manage your home screen background.',
@@ -51,7 +50,7 @@ const OPTIONAL_PERMISSIONS = [
 const DENIED_PERMISSIONS_KEY = 'iris_denied_permissions'
 const PERMISSION_ASKED_KEY = 'iris_permissions_asked'
 
-let cachedSummary = null
+let _cachedSummary = null
 let cacheTimeout = null
 
 function getDeniedPermissions() {
@@ -96,7 +95,7 @@ function markAsAsked(permission) {
   }
 }
 
-function isCorePermission(permission) {
+export function isCorePermission(permission) {
   return CORE_PERMISSIONS.includes(permission)
 }
 
@@ -111,11 +110,11 @@ function getRationale(permission) {
   return PERMISSION_RATIONALES[permission] || 'This permission is required for IRIS functionality.'
 }
 
-function getCorePermissions() {
+export function getCorePermissions() {
   return [...CORE_PERMISSIONS]
 }
 
-function getOptionalPermissions() {
+export function getOptionalPermissions() {
   return [...OPTIONAL_PERMISSIONS]
 }
 
@@ -123,13 +122,12 @@ function getAllPermissions() {
   return [...CORE_PERMISSIONS, ...OPTIONAL_PERMISSIONS]
 }
 
-async function checkPermission(permission) {
+export async function checkPermission(permission) {
   if (!isNative) {
     return { granted: true, sdkRequired: false, message: 'Web simulation' }
   }
 
   try {
-    const { NativeLauncher } = await import('../components/LauncherPlugin')
     const result = await NativeLauncher.checkAndRequestPermission({ permission })
     return result || { granted: false, sdkRequired: false, message: 'Unknown' }
   } catch (e) {
@@ -138,16 +136,17 @@ async function checkPermission(permission) {
   }
 }
 
-async function requestPermission(permission) {
+export async function requestPermission(permission) {
   if (!isNative) {
     return { granted: true, sdkRequired: false, message: 'Web simulation' }
   }
 
   if (wasAlreadyAsked(permission) && isPermanentlyDenied(permission)) {
+    await openPermissionSettings(permission)
     return {
       granted: false,
       sdkRequired: false,
-      message: `Permission previously denied. Tap to open settings.`,
+      message: `Permission previously denied. Opening settings.`,
       permanentlyDenied: true,
     }
   }
@@ -155,7 +154,6 @@ async function requestPermission(permission) {
   markAsAsked(permission)
 
   try {
-    const { NativeLauncher } = await import('../components/LauncherPlugin')
     const result = await NativeLauncher.checkAndRequestPermission({ permission })
 
     if (result && result.granted) {
@@ -171,7 +169,7 @@ async function requestPermission(permission) {
   }
 }
 
-async function batchCheckPermissions(permissions) {
+export async function batchCheckPermissions(permissions) {
   if (!isNative) {
     return permissions.map(p => ({
       permission: p,
@@ -182,7 +180,6 @@ async function batchCheckPermissions(permissions) {
   }
 
   try {
-    const { NativeLauncher } = await import('../components/LauncherPlugin')
     const result = await NativeLauncher.batchCheckPermissions({ permissions })
     return result?.results || []
   } catch (e) {
@@ -202,7 +199,6 @@ async function batchRequestPermissions(permissions) {
   }
 
   try {
-    const { NativeLauncher } = await import('../components/LauncherPlugin')
     const result = await NativeLauncher.batchRequestPermissions({ permissions })
     return result || { results: [], requested: 0 }
   } catch (e) {
@@ -211,11 +207,10 @@ async function batchRequestPermissions(permissions) {
   }
 }
 
-async function openPermissionSettings(permission) {
+export async function openPermissionSettings(permission) {
   if (!isNative) return
 
   try {
-    const { NativeLauncher } = await import('../components/LauncherPlugin')
     await NativeLauncher.openPermissionSettings({ permission })
   } catch (e) {
     console.error('Failed to open permission settings:', e)
@@ -229,11 +224,10 @@ export async function getPermissionSummary() {
   }
 
   try {
-    const { NativeLauncher } = await import('../components/LauncherPlugin')
     const result = await NativeLauncher.getPermissionStatusSummary()
-    cachedSummary = result
+    _cachedSummary = result
     if (cacheTimeout) clearTimeout(cacheTimeout)
-    cacheTimeout = setTimeout(() => { cachedSummary = null }, 30000)
+    cacheTimeout = setTimeout(() => { _cachedSummary = null }, 30000)
     return result
   } catch (e) {
     console.error('Failed to get permission summary:', e)
@@ -242,11 +236,11 @@ export async function getPermissionSummary() {
 }
 
 export async function requestCorePermissions() {
-  const toRequest = CORE_PERMISSIONS.filter(p => !wasAlreadyAsked(p) || !isPermanentlyDenied(p))
-
-  if (toRequest.length === 0) return { granted: 0, total: CORE_PERMISSIONS.length }
-
-  const result = await batchRequestPermissions(toRequest)
+  const result = await batchRequestPermissions(CORE_PERMISSIONS)
+  const stillDenied = result.results?.filter(r => !r.granted).map(r => r.permission) || []
+  if (result.requested === 0 && stillDenied.length > 0) {
+    await openPermissionSettings(stillDenied[0])
+  }
   return {
     granted: result.results?.filter(r => r.granted).length || 0,
     total: CORE_PERMISSIONS.length,
@@ -254,18 +248,19 @@ export async function requestCorePermissions() {
 }
 
 export async function requestOptionalPermissions() {
-  const toRequest = OPTIONAL_PERMISSIONS.filter(p => !wasAlreadyAsked(p) || !isPermanentlyDenied(p))
-
-  if (toRequest.length === 0) return { granted: 0, total: OPTIONAL_PERMISSIONS.length }
-
-  const result = await batchRequestPermissions(toRequest)
+  const allPerms = getAllPermissions()
+  const result = await batchRequestPermissions(allPerms)
+  const stillDenied = result.results?.filter(r => !r.granted).map(r => r.permission) || []
+  if (result.requested === 0 && stillDenied.length > 0) {
+    await openPermissionSettings(stillDenied[0])
+  }
   return {
     granted: result.results?.filter(r => r.granted).length || 0,
-    total: OPTIONAL_PERMISSIONS.length,
+    total: allPerms.length,
   }
 }
 
-function shouldShowRationale(permission) {
+export function shouldShowRationale(permission) {
   return wasAlreadyAsked(permission) && !isPermanentlyDenied(permission)
 }
 
@@ -286,6 +281,7 @@ export function getDegradedFeatures(deniedPermissions) {
     BIND_ACCESSIBILITY_SERVICE: 'Gesture navigation and screen capture',
     SET_WALLPAPER: 'Programmatic wallpaper changes',
     QUERY_ALL_PACKAGES: 'App drawer population',
+    REQUEST_INSTALL_PACKAGES: 'Sideload APK updates',
   }
 
   for (const perm of deniedPermissions) {

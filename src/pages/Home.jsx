@@ -13,13 +13,14 @@ import { useAppContextMenu } from '../hooks/useAppContextMenu'
 import AppContextMenu from '../components/AppContextMenu'
 import { routeAppClick } from '../utils/appClickRouter'
 import { useThemeStore } from '../stores/themeStore'
+import PowerSaveManager from '../utils/PowerSaveManager'
 
-export default function Home({ 
-  onNavigate, 
-  onTriggerChronoLock, 
+export default function Home({
+  onNavigate,
+  onTriggerChronoLock,
   onTriggerVault,
   isVaultUnlocked,
-  
+
   // Elevated apps state from App.jsx
   installedApps = [],
   setInstalledApps,
@@ -38,10 +39,10 @@ export default function Home({
   isAppActive = true,
 
   // Power Save Mode (reactive)
-  powerSaveMode
+  powerSaveMode: _powerSaveMode
 }) {
   const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, homePages, activeHomePage, setActiveHomePage, homeScreenFolders, setHomeScreenFolders, iconShape } = useThemeStore()
-  
+
   const [showOfflineAssistant, setShowOfflineAssistant] = useState(false)
   const [, setAssistantState] = useState({ isListening: false, isProcessing: false })
 
@@ -64,10 +65,22 @@ export default function Home({
 
 
   useEffect(() => {
-    if (!isAppActive) return
+    if (!isAppActive || PowerSaveManager.shouldDisable('gridAnimations')) {
+      document.documentElement.style.setProperty('--home-tilt-x', '0deg')
+      document.documentElement.style.setProperty('--home-tilt-y', '0deg')
+      return
+    }
 
     let rafId = null
+    let lastTime = 0
+    let lastX = 0
+    let lastY = 0
+
     const handleOrientation = (event) => {
+      if (document.hidden) return
+      const now = performance.now()
+      if (now - lastTime < 50) return
+
       let x = event.gamma || 0
       let y = (event.beta || 45) - 45
       if (x > 25) x = 25
@@ -75,24 +88,39 @@ export default function Home({
       if (y > 25) y = 25
       if (y < -25) y = -25
 
+      if (Math.abs(x - lastX) < 0.8 && Math.abs(y - lastY) < 0.8) return
+      lastTime = now
+      lastX = x
+      lastY = y
+
       if (rafId) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => {
-        document.documentElement.style.setProperty('--home-tilt-x', `${(x / 1.5).toFixed(2)}deg`)
-        document.documentElement.style.setProperty('--home-tilt-y', `${(-y / 1.5).toFixed(2)}deg`)
+        document.documentElement.style.setProperty('--home-tilt-x', `${(x / 1.5).toFixed(1)}deg`)
+        document.documentElement.style.setProperty('--home-tilt-y', `${(-y / 1.5).toFixed(1)}deg`)
       })
     }
 
-    if (window.DeviceOrientationEvent) {
-      window.addEventListener('deviceorientation', handleOrientation)
+    const onVisChange = () => {
+      if (document.hidden) {
+        window.removeEventListener('deviceorientation', handleOrientation)
+      } else if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', handleOrientation, { passive: true })
+      }
     }
+
+    if (window.DeviceOrientationEvent && !document.hidden) {
+      window.addEventListener('deviceorientation', handleOrientation, { passive: true })
+    }
+    document.addEventListener('visibilitychange', onVisChange)
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
       window.removeEventListener('deviceorientation', handleOrientation)
+      document.removeEventListener('visibilitychange', onVisChange)
       document.documentElement.style.setProperty('--home-tilt-x', '0deg')
       document.documentElement.style.setProperty('--home-tilt-y', '0deg')
     }
-  }, [isAppActive])
+  }, [isAppActive, _powerSaveMode])
 
   const handleAppClick = useCallback((e, app) => {
     if (activeContextMenu) {
@@ -129,15 +157,18 @@ export default function Home({
     HudFallbackIcon
   }), [installedApps, lockedApps, isVaultUnlocked, globalIconTheme, showAppLabels, homeIconSize, homeTextSize, gridColumns, gridRows, iconShape, handleAppClick, handleContextMenu])
 
+  const pageCount = Array.isArray(homePages) ? Math.max(1, homePages.length) : Math.max(1, Number(homePages) || 1)
+  const glassOpacity = useThemeStore(s => s.glassOpacity)
+
   const homeApps = useMemo(() => {
-    return installedApps.filter(app => app.isHome !== false).slice(0, gridColumns * gridRows * homePages)
-  }, [installedApps, gridColumns, gridRows, homePages])
+    return installedApps.filter(app => app.isHome !== false).slice(0, gridColumns * gridRows * pageCount)
+  }, [installedApps, gridColumns, gridRows, pageCount])
 
   return (
-    <div 
+    <div
       className="relative flex-1 flex flex-col pt-4 pb-28 px-margin z-10 select-none overflow-y-auto no-scrollbar"
     >
-      
+
       {toastText && (
         <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
           <div className="glass-surface border border-primary-fixed-dim/40 px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(var(--primary-rgb),0.4)] animate-bounce bg-[#020617]/95">
@@ -149,13 +180,13 @@ export default function Home({
         </div>
       )}
 
-      {homePages > 1 ? (
+      {pageCount > 1 ? (
         <HomePager
-          pages={Array.from({ length: homePages })}
+          pages={Array.from({ length: pageCount })}
           activePage={activeHomePage}
           onPageChange={setActiveHomePage}
         >
-          {Array.from({ length: homePages }).map((_, pageIndex) => {
+          {Array.from({ length: pageCount }).map((_, pageIndex) => {
             const pageApps = homeApps.slice(
               pageIndex * gridColumns * gridRows,
               (pageIndex + 1) * gridColumns * gridRows
@@ -170,23 +201,14 @@ export default function Home({
           })}
         </HomePager>
       ) : (
-        <>
-          {layoutStyle === 'CENTERED' && (
-            <>
-              <HomeGrid {...homeGridProps} />
-            </>
-          )}
-          {layoutStyle === 'CORE_BOTTOM' && (
-            <>
-              <HomeGrid {...homeGridProps} />
-            </>
-          )}
-        </>
+        <div className={layoutStyle === 'CORE_BOTTOM' ? 'mt-auto' : 'my-auto'}>
+          <HomeGrid {...homeGridProps} installedApps={homeApps} />
+        </div>
       )}
 
       <PinnedContacts
         onLaunchApp={(app) => launchApp(app.packageId, app.label)}
-        glassOpacity={75}
+        glassOpacity={glassOpacity}
       />
 
       {homeScreenFolders.length > 0 && (
@@ -215,9 +237,9 @@ export default function Home({
       />
 
       <Suspense fallback={null}>
-        <OfflineAssistantOverlay 
-          isVisible={showOfflineAssistant} 
-          onClose={() => setShowOfflineAssistant(false)} 
+        <OfflineAssistantOverlay
+          isVisible={showOfflineAssistant}
+          onClose={() => setShowOfflineAssistant(false)}
           onOpen={() => setShowOfflineAssistant(true)}
           appsList={installedApps}
           onStateChange={setAssistantState}

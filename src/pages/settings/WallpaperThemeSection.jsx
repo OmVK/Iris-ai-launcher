@@ -24,12 +24,16 @@ const LIVE_WALLPAPERS = [
   { id: 'NEON_PARTICLES', label: 'Constellations', desc: 'Pointer gravity networks', icon: 'star' }
 ]
 
-export default function WallpaperThemeSection({ expandedSections, toggleSection, themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setHasCustomWallpaper, activeLiveWallpaper, setActiveLiveWallpaper, glassOpacity, setGlassOpacity, iconShape, setIconShape }) {
+export default function WallpaperThemeSection({ expandedSections, toggleSection, themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setHasCustomWallpaper, activeLiveWallpaper, setActiveLiveWallpaper, glassOpacity: _glassOpacity, setGlassOpacity, iconShape, setIconShape }) {
   const [dailyRotation, setDailyRotation] = useState(WallpaperManager.shouldRotateDaily())
   const [dynamicColor, setDynamicColor] = useState(MaterialYou.isDynamicColorEnabled())
-  const [showPresets, setShowPresets] = useState(false)
+  const [_showPresets, setShowPresets] = useState(false)
   const presets = ThemePresets.getAllPresets()
-  const { wallpaperBlur, wallpaperVignette, setWallpaperBlur, setWallpaperVignette } = useThemeStore()
+  const {
+    wallpaperBlur, wallpaperVignette, setWallpaperBlur, setWallpaperVignette,
+    setGlobalIconTheme, setShowAppLabels, setUse24HourClock,
+    setPageTransitionEffect, setPageTransitionSpeed, setPageTransitionEasing
+  } = useThemeStore()
 
   const handleCustomWallpaperUpload = async (e) => {
     try {
@@ -109,9 +113,9 @@ export default function WallpaperThemeSection({ expandedSections, toggleSection,
   const handleApplyPreset = (preset) => {
     ThemePresets.applyPreset(preset, {
       setThemeColor, setGlassOpacity, setWallpaper, setActiveLiveWallpaper,
-      setIconShape, setGlobalIconTheme: () => {}, setShowAppLabels: () => {},
-      setUse24HourClock: () => {}, setPageTransitionEffect: () => {},
-      setPageTransitionSpeed: () => {}, setPageTransitionEasing: () => {},
+      setIconShape, setGlobalIconTheme, setShowAppLabels,
+      setUse24HourClock, setPageTransitionEffect,
+      setPageTransitionSpeed, setPageTransitionEasing,
     })
     setShowPresets(false)
   }

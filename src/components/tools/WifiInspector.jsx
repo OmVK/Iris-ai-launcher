@@ -59,7 +59,7 @@ export default function WifiInspector({ glassBg }) {
   return (
     <div className="flex flex-col gap-4 font-mono-data text-xs">
       {/* Action Header */}
-      <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-500/20 bg-emerald-950/10 backdrop-blur-md">
+      <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-500/20" style={{ backgroundColor: glassBg }}>
         <div>
           <h3 className="font-bold text-emerald-400 text-xs tracking-wider uppercase">WI-FI ROGUE AP & MITM INSPECTOR</h3>
           <p className="text-[8.5px] text-on-surface-variant/40 mt-0.5">Real-time ARP cache, encryption protocol & gateway audit</p>
@@ -104,7 +104,7 @@ export default function WifiInspector({ glassBg }) {
       {scanResult && !scanning && (
         <div className="space-y-3">
           {/* Security Score Badge */}
-          <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5">
+          <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-500/30" style={{ backgroundColor: glassBg }}>
             <div className="flex items-center gap-2.5">
               <span className="material-symbols-outlined text-2xl text-emerald-400">verified</span>
               <div>
@@ -121,26 +121,26 @@ export default function WifiInspector({ glassBg }) {
 
           {/* Network Attributes Grid */}
           <div className="grid grid-cols-2 gap-2 text-[9.5px]">
-            <div className="p-2.5 rounded-lg border border-white/5 bg-black/30">
+            <div className="p-2.5 rounded-lg border border-white/5" style={{ backgroundColor: glassBg }}>
               <span className="text-[8px] text-on-surface-variant/40 uppercase block">Connected SSID</span>
               <span className="font-bold text-white truncate block">{scanResult.ssid}</span>
             </div>
-            <div className="p-2.5 rounded-lg border border-white/5 bg-black/30">
+            <div className="p-2.5 rounded-lg border border-white/5" style={{ backgroundColor: glassBg }}>
               <span className="text-[8px] text-on-surface-variant/40 uppercase block">Encryption</span>
               <span className="font-bold text-emerald-400 truncate block">{scanResult.encryption}</span>
             </div>
-            <div className="p-2.5 rounded-lg border border-white/5 bg-black/30">
+            <div className="p-2.5 rounded-lg border border-white/5" style={{ backgroundColor: glassBg }}>
               <span className="text-[8px] text-on-surface-variant/40 uppercase block">Local IPv4</span>
               <span className="font-mono text-on-surface-variant/80">{scanResult.ip}</span>
             </div>
-            <div className="p-2.5 rounded-lg border border-white/5 bg-black/30">
+            <div className="p-2.5 rounded-lg border border-white/5" style={{ backgroundColor: glassBg }}>
               <span className="text-[8px] text-on-surface-variant/40 uppercase block">Router Gateway</span>
               <span className="font-mono text-on-surface-variant/80">{scanResult.gateway}</span>
             </div>
           </div>
 
           {/* Security Inspections */}
-          <div className="p-3 rounded-xl border border-white/5 bg-black/30 space-y-2">
+          <div className="p-3 rounded-xl border border-white/5 space-y-2" style={{ backgroundColor: glassBg }}>
             <span className="text-[9px] text-on-surface-variant/50 font-bold tracking-widest uppercase block border-b border-white/5 pb-1">
               INSPECTION CHECKS
             </span>
@@ -160,7 +160,7 @@ export default function WifiInspector({ glassBg }) {
           </div>
 
           {/* Router Management Ports Audit */}
-          <div className="p-3 rounded-xl border border-white/5 bg-black/30 space-y-2">
+          <div className="p-3 rounded-xl border border-white/5 space-y-2" style={{ backgroundColor: glassBg }}>
             <span className="text-[9px] text-on-surface-variant/50 font-bold tracking-widest uppercase block border-b border-white/5 pb-1">
               ROUTER PORT SCAN
             </span>

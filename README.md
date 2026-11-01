@@ -28,10 +28,27 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.4.0
+- **Version**: 5.5.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
+
+## ⚡ v5.5.0 Native Message Archive, 60fps Dashboard & Deep Battery Optimization
+
+IRIS v5.5.0 delivers native background message archiving (including deleted WhatsApp/social messages), a 60fps Widget Dashboard with third-party media session integration, deep battery & RAM optimizations, and unified glass/theme controls:
+- **Native Background Notification Archive & Deleted-Message Preservation**:
+  - `IrisNotificationListenerService` captures `MessagingStyle` (`EXTRA_MESSAGES`, `EXTRA_BIG_TEXT`, `EXTRA_TEXT_LINES`) messages in real time to native persistent storage (`SharedPreferences`), even when the screen is off or another app is open.
+  - Intercepts `"This message was deleted"` / unsent events and `REASON_APP_CANCEL` revocations, preserving the original message text with a `DELETED BY SENDER` badge.
+  - Added live Notification Access permission check and 1-tap enable banner in the Top Bar Notch Archive and Settings -> Advanced.
+- **60fps Widget Dashboard & Third-Party Media Session Bridge**:
+  - Replaced heavy per-card `backdrop-filter: blur` layers with GPU-friendly CSS-variable glass surfaces (`.iris-card`) and isolated `SignalWidget` / `BuiltInWidgets` ticks so scrolling stays locked at 60fps.
+  - `MediaWidget` connects to Android `MediaSessionManager` to detect active third-party music players (Spotify, YouTube Music, VLC, Poweramp, etc.), display live track/artist metadata, and control playback.
+- **Battery, RAM & ArcSearch Optimizations**:
+  - Pauses the 60fps 3D `DrawerMesh` loop when the drawer is closed, aligns the Top Bar clock to the 60s minute boundary, skips background weather polling when inactive, and auto-sleeps the Home 3D tilt gyroscope when stationary.
+  - Removed unused `HomeOrb` and `CyberSynth` (`SONIC`) engines, freeing WebGL/WebAudio memory.
+  - Instant GPU-composited `ArcSearch` transition with pre-warmed search index and right-swipe-to-close across all Drawer layouts.
+- **Complete Settings & Optical Glass Audit**:
+  - Connected `Card Glass Opacity` and `Dark Glass Theme` across all Settings, Widgets, and IRIS Tools cards; wired all 6 page transition animations, multi-page Home Screen pager (`1–5` pages), Teardrop icon mask, Theme Presets, and Power Save feature toggles.
 
 ## ⚡ v5.4.0 Dynamic Notification Notch, Quick Search & Transparent Drawer Edition
 

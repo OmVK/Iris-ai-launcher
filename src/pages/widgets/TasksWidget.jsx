@@ -1,7 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, memo } from 'react'
 import HapticFeedback from '../../utils/HapticFeedback'
 
-export default function TasksWidget({
+function toLocalDateTimeIso(date) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const TasksWidget = memo(function TasksWidget({
   tasks,
   newTaskText,
   _newTaskTime,
@@ -22,19 +27,19 @@ export default function TasksWidget({
       onSetNewTaskTime('')
     } else if (label === '+1 HR') {
       now.setHours(now.getHours() + 1)
-      onSetNewTaskTime(now.toISOString().slice(0, 16))
+      onSetNewTaskTime(toLocalDateTimeIso(now))
     } else if (label === 'TODAY 18:00') {
       now.setHours(18, 0, 0, 0)
-      onSetNewTaskTime(now.toISOString().slice(0, 16))
+      onSetNewTaskTime(toLocalDateTimeIso(now))
     } else if (label === 'TOMORROW') {
       now.setDate(now.getDate() + 1)
       now.setHours(9, 0, 0, 0)
-      onSetNewTaskTime(now.toISOString().slice(0, 16))
+      onSetNewTaskTime(toLocalDateTimeIso(now))
     }
   }
 
   return (
-    <section className="glass-surface border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full min-h-[250px] overflow-hidden hover:border-primary-fixed-dim/40 transition-all bg-[#080d16]/85 backdrop-blur-xl">
+    <section className="iris-card border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full min-h-[250px] overflow-hidden hover:border-primary-fixed-dim/40 transition-colors shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
       <div className="flex flex-col gap-2 flex-1">
         <div className="flex justify-between items-center border-b border-white/10 pb-2">
           <div>
@@ -52,7 +57,7 @@ export default function TasksWidget({
                 HapticFeedback.light()
                 onClearAll()
               }}
-              className="text-[8px] font-bold text-error border border-error/25 bg-error/10 hover:bg-error/20 px-2 py-0.5 rounded-lg transition-all"
+              className="text-[8px] font-bold text-error border border-error/25 bg-error/10 hover:bg-error/20 px-2 py-0.5 rounded-lg transition-colors"
             >
               CLEAR ALL
             </button>
@@ -67,10 +72,10 @@ export default function TasksWidget({
                 HapticFeedback.light()
                 onToggleTask(task.id)
               }}
-              className={`p-2 rounded-xl border-l-2 cursor-pointer transition-all active:scale-[0.98] flex items-center justify-between ${
+              className={`p-2 rounded-xl border-l-2 cursor-pointer transition-colors active:scale-[0.98] flex items-center justify-between ${
                 task.done
                   ? 'bg-black/50 border-outline-variant/30 opacity-40 line-through'
-                  : 'bg-black/40 border-primary-fixed-dim/50 hover:bg-white/5'
+                  : 'bg-black/45 border-primary-fixed-dim/50 hover:bg-white/5'
               }`}
             >
               <div className="min-w-0 flex-1 pr-2">
@@ -109,7 +114,7 @@ export default function TasksWidget({
           ))}
 
           {tasks.length === 0 && (
-            <div className="py-5 text-center text-on-surface-variant/40 font-mono-data text-[8.5px] uppercase border border-dashed border-white/10 rounded-xl bg-black/20">
+            <div className="py-5 text-center text-on-surface-variant/40 font-mono-data text-[8.5px] uppercase border border-dashed border-white/10 rounded-xl bg-black/25">
               ALL PROTOCOLS SATISFIED // 0 DIRECTIVES
             </div>
           )}
@@ -130,7 +135,7 @@ export default function TasksWidget({
                 key={p}
                 type="button"
                 onClick={() => applyQuickTime(p)}
-                className={`px-1.5 py-0.5 text-[7.5px] font-mono rounded border transition-all whitespace-nowrap ${
+                className={`px-1.5 py-0.5 text-[7.5px] font-mono rounded border transition-colors whitespace-nowrap ${
                   selectedQuickTime === p
                     ? 'border-primary-fixed-dim/50 bg-primary-fixed-dim/20 text-primary-fixed-dim font-bold'
                     : 'border-white/10 bg-white/5 text-white/50 hover:text-white'
@@ -143,7 +148,7 @@ export default function TasksWidget({
 
           <button
             type="submit"
-            className="w-full py-1.5 bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim text-[9px] font-bold rounded-lg hover:bg-primary-fixed-dim/30 transition-all active:scale-[0.98] uppercase tracking-wider"
+            className="w-full py-1.5 bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim text-[9px] font-bold rounded-lg hover:bg-primary-fixed-dim/30 transition-colors active:scale-[0.98] uppercase tracking-wider"
           >
             ESTABLISH TASK DIRECTIVE
           </button>
@@ -151,4 +156,6 @@ export default function TasksWidget({
       </div>
     </section>
   )
-}
+})
+
+export default TasksWidget

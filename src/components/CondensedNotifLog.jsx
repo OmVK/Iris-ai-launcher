@@ -1,10 +1,45 @@
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNotificationStore } from '../stores/notificationStore'
-import { launchApp } from './LauncherPlugin'
+import { useAppsStore } from '../stores/appsStore'
+import {
+  launchApp,
+  isNotificationAccessGranted,
+  requestNotificationAccess,
+  getArchivedNotifications,
+} from './LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
 
 export default function CondensedNotifLog({ onClose }) {
-  const { history, clearHistory, deleteHistoryItem } = useNotificationStore()
+  const { history, clearHistory, deleteHistoryItem, syncNativeArchive } = useNotificationStore()
+  const [hasPermission, setHasPermission] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    const verifyAndSync = async () => {
+      const granted = await isNotificationAccessGranted()
+      if (!cancelled) setHasPermission(granted)
+      const archived = await getArchivedNotifications()
+      if (!cancelled && Array.isArray(archived) && archived.length > 0) {
+        const installed = useAppsStore.getState().installedApps || []
+        syncNativeArchive(archived, installed)
+      }
+    }
+    verifyAndSync()
+    const onFocus = () => verifyAndSync()
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
+  }, [syncNativeArchive])
+
+  const handleGrantAccess = async (e) => {
+    e.stopPropagation()
+    HapticFeedback.light()
+    await requestNotificationAccess()
+  }
 
   const handleLaunch = (pkg) => {
     if (pkg) {
@@ -46,6 +81,29 @@ export default function CondensedNotifLog({ onClose }) {
         )}
       </div>
 
+      {!hasPermission && (
+        <div className="mt-2 p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="material-symbols-outlined text-amber-400 text-base shrink-0">notifications_off</span>
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold text-amber-300 uppercase tracking-wider truncate">
+                NOTIFICATION ACCESS REQUIRED
+              </p>
+              <p className="text-[7.5px] text-white/60 leading-tight">
+                Enable listener to capture WhatsApp & deleted messages
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleGrantAccess}
+            className="px-2.5 py-1 rounded-lg bg-amber-400 text-black text-[8px] font-bold uppercase tracking-wider shrink-0 active:scale-95 transition-transform"
+          >
+            ENABLE
+          </button>
+        </div>
+      )}
+
       {/* List */}
       <div className="flex-1 overflow-y-auto space-y-2 pt-2 scroll-container pr-1 min-h-0">
         {history.length === 0 ? (
@@ -53,7 +111,7 @@ export default function CondensedNotifLog({ onClose }) {
             <span className="material-symbols-outlined text-white/20 text-3xl">notifications_paused</span>
             <div className="text-[10px] text-white/40 tracking-wider uppercase font-semibold">NO MESSAGES RECORDED</div>
             <p className="text-[8px] text-white/25 max-w-[240px] leading-relaxed">
-              System notifications are preserved here in real-time, even after being cleared from Android.
+              Messages from WhatsApp, Instagram, Telegram & SMS are preserved here in real-time — even if deleted by the sender.
             </p>
           </div>
         ) : (
@@ -98,14 +156,25 @@ export default function CondensedNotifLog({ onClose }) {
                   </span>
                 </div>
 
-                <p className="text-[9px] text-white/70 line-clamp-2 leading-relaxed break-words font-sans">
+                <p className="text-[9px] text-white/85 line-clamp-2 leading-relaxed break-words font-sans">
                   {item.text}
                 </p>
 
                 <div className="flex items-center justify-between mt-1 pt-1 border-t border-white/5">
-                  <span className="text-[7.5px] text-primary-fixed/60 font-mono tracking-wider">
-                    PRESERVED • {item.date}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {item.deletedBySender ? (
+                      <span className="text-[7px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 border border-red-500/40 text-red-300 tracking-wider uppercase">
+                        DELETED BY SENDER
+                      </span>
+                    ) : item.dismissedFromSystem ? (
+                      <span className="text-[7px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 tracking-wider uppercase">
+                        CLEARED FROM BAR
+                      </span>
+                    ) : null}
+                    <span className="text-[7.5px] text-primary-fixed/60 font-mono tracking-wider">
+                      PRESERVED • {item.date}
+                    </span>
+                  </div>
                   <button
                     onClick={(e) => handleDelete(e, item.id)}
                     className="text-white/30 hover:text-red-400 p-0.5 transition-colors"

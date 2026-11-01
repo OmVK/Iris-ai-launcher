@@ -49,7 +49,7 @@ export default function IrisVaultHub({ glassBg, onNavigate, onTriggerChronoLock,
 
   return (
     <div className="space-y-4 font-mono-data text-xs">
-      <div className="p-3 rounded-xl border border-yellow-500/20 bg-yellow-950/10 flex items-center justify-between">
+      <div className="p-3 rounded-xl border border-yellow-500/20 flex items-center justify-between" style={{ backgroundColor: glassBg }}>
         <div className="flex items-center gap-2.5">
           <span className="material-symbols-outlined text-yellow-400 text-lg">admin_panel_settings</span>
           <div>
@@ -67,7 +67,8 @@ export default function IrisVaultHub({ glassBg, onNavigate, onTriggerChronoLock,
           <button
             key={tile.id}
             onClick={tile.action}
-            className="p-4 rounded-xl border border-white/10 bg-slate-900/60 hover:bg-slate-800/80 hover:border-cyan-400/40 transition-all text-left flex items-center justify-between gap-3 group active:scale-98 shadow-lg"
+            style={{ backgroundColor: glassBg }}
+            className="p-4 rounded-xl border border-white/10 hover:border-cyan-400/40 transition-all text-left flex items-center justify-between gap-3 group active:scale-98 shadow-lg"
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div

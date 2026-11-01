@@ -101,6 +101,9 @@ public class PermissionManager {
 
         // Biometric
         put("USE_BIOMETRIC", "IRIS uses biometric authentication for app lock and vault.", 9122, true);
+
+        // Notification Listener
+        put("BIND_NOTIFICATION_LISTENER_SERVICE", "IRIS uses notification access to archive messages (including deleted messages) and control media playback.", 9123, false);
     }
 
     private void put(String permission, String rationale, int requestCode, boolean isRuntime) {
@@ -111,6 +114,9 @@ public class PermissionManager {
         // Special cases
         if ("BIND_ACCESSIBILITY_SERVICE".equals(permission)) {
             return isAccessibilityServiceEnabled();
+        }
+        if ("BIND_NOTIFICATION_LISTENER_SERVICE".equals(permission)) {
+            return isNotificationListenerEnabled();
         }
         if ("PACKAGE_USAGE_STATS".equals(permission)) {
             return isUsageStatsEnabled();
@@ -137,11 +143,13 @@ public class PermissionManager {
             }
         }
 
-        if (!info.isRuntime) {
-            return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED;
+        if ("POST_NOTIFICATIONS".equals(permission) && Build.VERSION.SDK_INT < 33) {
+            return true;
         }
 
-        String androidPermission = "android.permission." + permission;
+        String androidPermission = permission.startsWith("android.permission.")
+                ? permission
+                : "android.permission." + permission;
         return ContextCompat.checkSelfPermission(context, androidPermission) == PackageManager.PERMISSION_GRANTED;
     }
 
@@ -149,16 +157,31 @@ public class PermissionManager {
         String serviceName = context.getPackageName() + "/" + IrisAccessibilityService.class.getCanonicalName();
         String enabledServices = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (enabledServices != null) {
-            return enabledServices.contains(serviceName);
+            return enabledServices.contains(serviceName) || enabledServices.contains(IrisAccessibilityService.class.getSimpleName());
         }
         return false;
     }
 
+    public boolean isNotificationListenerEnabled() {
+        if (IrisNotificationListenerService.getInstance() != null) return true;
+        String flat = Settings.Secure.getString(context.getContentResolver(), "enabled_notification_listeners");
+        return flat != null && flat.contains(context.getPackageName());
+    }
+
     public boolean isUsageStatsEnabled() {
+        try {
+            android.app.AppOpsManager appOps = (android.app.AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+            if (appOps != null) {
+                int mode = appOps.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.getPackageName());
+                if (mode == android.app.AppOpsManager.MODE_ALLOWED) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {}
         android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm != null) {
             long now = System.currentTimeMillis();
-            List<android.app.usage.UsageStats> stats = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_BEST, now - 1000 * 60, now);
+            List<android.app.usage.UsageStats> stats = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_BEST, now - 1000L * 60 * 60 * 24, now);
             return stats != null && !stats.isEmpty();
         }
         return false;
@@ -238,6 +261,11 @@ public class PermissionManager {
             switch (permission) {
                 case "BIND_ACCESSIBILITY_SERVICE":
                     intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                    break;
+                case "BIND_NOTIFICATION_LISTENER_SERVICE":
+                    intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     context.startActivity(intent);
                     break;

@@ -3,11 +3,10 @@ import HapticFeedback from '../utils/HapticFeedback'
 import { HUD_SVG_PATHS, HUD_COLOR } from '../components/drawer/drawerMeshData'
 import { buildClusters, getColor, LONG_PRESS_MS } from '../components/drawer/drawerMeshUtils'
 
-export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawerIconSize = 100, onAppClick, onContextMenu }) {
+export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawerIconSize = 100, onAppClick, onContextMenu, isActive = true }) {
   const canvasRef = useRef(null)
   const nodesRef = useRef([])
   const edgesRef = useRef([])
-  const orbRef = useRef({ pulse: 0 })
   const dragRef = useRef({ active: false, nodeIdx: -1 })
   const pinchRef = useRef({ active: false, lastDist: 0 })
   const cameraRef = useRef({ x: 0, y: 0, zoom: 1, targetX: 0, targetY: 0, targetZoom: 1, velX: 0, velY: 0 })
@@ -92,10 +91,12 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
   }, [filteredApps])
 
   useEffect(() => {
+    if (!isActive) return
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true })
     let running = true
+    lastInteractRef.current = Date.now()
     let w, h
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -131,7 +132,6 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
       const nodes = nodesRef.current
       const edgeList = edgesRef.current
       const cam = cameraRef.current
-      const orb = orbRef.current
       const isDragging = dragRef.current.active
 
       const camMoving = Math.abs(cam.velX) > 0.05 || Math.abs(cam.velY) > 0.05 || Math.abs(cam.targetX - cam.x) > 0.05 || Math.abs(cam.targetY - cam.y) > 0.05 || Math.abs(cam.targetZoom - cam.zoom) > 0.001
@@ -198,8 +198,6 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
       }
       dirtyRef.current = true
 
-      orb.pulse += 0.04
-
       if (!dirtyRef.current) return
       dirtyRef.current = false
 
@@ -212,16 +210,6 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
       ctx.save()
       ctx.translate(halfW, halfH)
       ctx.scale(zoom, zoom)
-
-      const orbR = 30 * (1 + Math.sin(orb.pulse) * 0.08)
-      ctx.fillStyle = 'rgba(0,242,255,0.15)'
-      ctx.beginPath()
-      ctx.arc(0, 0, orbR * 2, 0, 6.283)
-      ctx.fill()
-      ctx.fillStyle = 'rgba(0,242,255,0.8)'
-      ctx.beginPath()
-      ctx.arc(0, 0, orbR * 0.35, 0, 6.283)
-      ctx.fill()
 
       const viewL = (-halfW * invZoom) - 60
       const viewR = ((w - halfW) * invZoom) + 60
@@ -311,7 +299,7 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
     }
     rafRef.current = requestAnimationFrame(render)
     return () => { running = false; if (rafRef.current) { cancelAnimationFrame(rafRef.current); clearTimeout(rafRef.current) } ro.disconnect() }
-  }, [filteredApps, showAppLabels, drawerIconSize])
+  }, [filteredApps, showAppLabels, drawerIconSize, isActive])
 
   const markDirty = useCallback(() => { dirtyRef.current = true; lastInteractRef.current = Date.now() }, [])
 

@@ -8,8 +8,8 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
   }, [installedApps])
   const resolveApp = (id) => appLookup.get(id)
 
-  const scale = drawerIconSize / 100
-  const catTextPx = Math.round(11 * (drawerTextSize / 100))
+  const _scale = drawerIconSize / 100
+  const _catTextPx = Math.round(11 * (drawerTextSize / 100))
   const catNamePx = Math.round(13 * (drawerTextSize / 100))
 
   return (

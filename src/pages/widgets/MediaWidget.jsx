@@ -1,196 +1,226 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useEffect, useRef, memo } from 'react'
 import HapticFeedback from '../../utils/HapticFeedback'
 
-const TRACKS = [
-  { title: 'NEURAL_DRIFT', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', time: 'LOFI_AMBIENT_CORE' },
-  { title: 'CYBER_RESONANCE', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3', time: 'NEON_BEAT_SYNTH' },
-  { title: 'VOID_ECHO', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3', time: 'DEEP_COGNITIVE_PADS' },
-]
-
-export default function MediaWidget({
+const MediaWidget = memo(function MediaWidget({
+  audioMode,
   isPlaying,
   trackIndex,
-  playerMode,
-  selectedSystemPlayer,
-  onSetPlayerMode,
-  onPlayToggle,
-  onSkip,
+  tracks,
+  systemPlayer,
+  installedPlayers = [],
+  activeMedia = {},
+  onSwitchAudioMode,
   onSetSystemPlayer,
+  onPrevTrack,
+  onTogglePlay,
+  onNextTrack,
   onLaunchSystemPlayer,
-  isAppActive,
 }) {
   const canvasRef = useRef(null)
-  const currentTrack = TRACKS[trackIndex] || TRACKS[0]
-  const phaseRef = useRef(0)
 
   useEffect(() => {
-    let animationId
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const cw = 150
-    const ch = 30
-    canvas.width = cw * dpr
-    canvas.height = ch * dpr
-    canvas.style.width = cw + 'px'
-    canvas.style.height = ch + 'px'
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    if (!ctx) return
 
-    const draw = () => {
-      ctx.clearRect(0, 0, cw, ch)
-      phaseRef.current += 0.05
+    const rawRgb =
+      getComputedStyle(document.documentElement).getPropertyValue('--primary-rgb').trim() || '0, 219, 231'
+    const numBars = 24
+    const barWidth = (canvas.width - (numBars - 1) * 3) / numBars
 
-      if (isPlaying) {
-        // Equalizer spectrum bars
-        const barCount = 15
-        const barWidth = 6
-        const gap = 4
-        for (let i = 0; i < barCount; i++) {
-          const wave = Math.sin(phaseRef.current * 1.5 + i * 0.4) * 0.3 + 0.7
-          const rand = Math.random() * 0.4 + 0.6
-          const height = Math.max(4, Math.floor(wave * rand * (ch - 4)))
-          ctx.fillStyle = 'rgba(var(--primary-rgb, 0, 219, 231), 0.8)'
-          ctx.fillRect(i * (barWidth + gap), ch - height, barWidth, height)
-        }
-      } else {
-        // Idle ambient sine wave
-        ctx.beginPath()
-        ctx.strokeStyle = 'rgba(var(--primary-rgb, 0, 219, 231), 0.35)'
-        ctx.lineWidth = 1.5
-        for (let x = 0; x < cw; x += 3) {
-          const y = ch / 2 + Math.sin(x * 0.06 + phaseRef.current * 0.8) * 4
-          if (x === 0) ctx.moveTo(x, y)
-          else ctx.lineTo(x, y)
-        }
-        ctx.stroke()
-      }
-
-      if (isAppActive) {
-        animationId = requestAnimationFrame(draw)
+    const drawStaticIdle = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.fillStyle = `rgba(${rawRgb}, 0.25)`
+      for (let i = 0; i < numBars; i++) {
+        const x = i * (barWidth + 3)
+        ctx.fillRect(x, canvas.height - 3, barWidth, 3)
       }
     }
 
-    if (isAppActive) draw()
+    if (!isPlaying) {
+      drawStaticIdle()
+      return
+    }
+
+    let animId
+    let phase = 0
+    let lastDraw = 0
+
+    const drawActive = (now) => {
+      animId = requestAnimationFrame(drawActive)
+      if (now - lastDraw < 50) return
+      lastDraw = now
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      phase += 0.22
+      ctx.fillStyle = `rgba(${rawRgb}, 0.85)`
+
+      for (let i = 0; i < numBars; i++) {
+        const wave1 = Math.sin(phase + i * 0.35) * 0.4 + 0.5
+        const wave2 = Math.cos(phase * 1.6 - i * 0.5) * 0.3 + 0.3
+        const barHeight = Math.max(4, (wave1 * 0.65 + wave2 * 0.35) * canvas.height * 0.88)
+        const x = i * (barWidth + 3)
+        const y = canvas.height - barHeight
+        ctx.fillRect(x, y, barWidth, barHeight)
+      }
+    }
+
+    animId = requestAnimationFrame(drawActive)
     return () => {
-      if (animationId) cancelAnimationFrame(animationId)
+      if (animId) cancelAnimationFrame(animId)
     }
-  }, [isPlaying, isAppActive])
+  }, [isPlaying])
+
+  const selectedPlayerObj =
+    installedPlayers.find((p) => p.packageId === systemPlayer) ||
+    installedPlayers.find((p) => p.packageId === activeMedia?.packageId) ||
+    null
+
+  const activePlayerLabel = selectedPlayerObj
+    ? selectedPlayerObj.label
+    : activeMedia?.playerName || 'System Music Player'
+
+  const hasLiveMetadata = Boolean(activeMedia?.title)
+  const displayTitle =
+    audioMode === 'SYSTEM'
+      ? hasLiveMetadata
+        ? activeMedia.title
+        : isPlaying
+          ? `${activePlayerLabel.toUpperCase()} // PLAYING`
+          : `${activePlayerLabel.toUpperCase()} // READY`
+      : tracks[trackIndex]?.title || 'STREAM NODE'
+
+  const displaySubtitle =
+    audioMode === 'SYSTEM'
+      ? activeMedia?.artist
+        ? `${activeMedia.artist}${activeMedia.album ? ` • ${activeMedia.album}` : ''}`
+        : installedPlayers.length > 0
+          ? `${installedPlayers.length} PLAYER${installedPlayers.length > 1 ? 'S' : ''} DETECTED ON DEVICE`
+          : 'ANDROID MEDIA SESSION BRIDGE'
+      : `${tracks[trackIndex]?.freq || '432Hz'} // STREAM LOOP`
 
   return (
-    <section className="glass-surface border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full overflow-hidden hover:border-primary-fixed-dim/40 transition-all bg-[#080d16]/85 backdrop-blur-xl">
-      <div className="flex justify-between items-center pb-2 border-b border-white/10">
-        <div>
-          <h3 className="font-label-caps text-[10px] text-primary-fixed-dim tracking-widest uppercase font-bold">
-            MEDIA CORE
-          </h3>
-          <p className="text-[8px] font-mono-data text-on-surface-variant/70 uppercase">
-            {playerMode === 'SONIC' ? 'SYNTH ENGINE' : playerMode === 'EXTERNAL' ? 'ANDROID SYSTEM DISPATCH' : 'STREAM STREAM'}
-          </p>
-        </div>
-
-        <div className="flex border border-white/10 rounded-lg bg-black/50 text-[8px] p-0.5">
-          {['SONIC', 'EXTERNAL', 'SYSTEM'].map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => {
-                HapticFeedback.light()
-                onSetPlayerMode(mode)
-              }}
-              className={`px-2 py-0.5 rounded transition-all font-mono font-bold ${
-                playerMode === mode
-                  ? 'bg-primary-fixed-dim text-black shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]'
-                  : 'text-on-surface-variant/70 hover:text-white'
+    <section className="iris-card border border-white/10 rounded-2xl p-4 relative flex flex-col justify-between w-full h-full overflow-hidden hover:border-primary-fixed-dim/40 transition-colors shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+      <div className="flex flex-col gap-3">
+        <div className="flex justify-between items-center border-b border-white/10 pb-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={`material-symbols-outlined text-primary-fixed-dim text-sm shrink-0 ${
+                isPlaying ? 'animate-spin' : ''
               }`}
             >
-              {mode}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="py-2.5 flex items-center justify-between">
-        <div className="min-w-0 pr-2 flex-1">
-          <p className="text-xs font-mono font-bold uppercase truncate text-white">
-            {playerMode === 'EXTERNAL' ? 'SYSTEM AUDIO GATEWAY' : currentTrack.title}
-          </p>
-          <p className="text-[8.5px] font-mono text-primary-fixed-dim/80 uppercase tracking-wider mt-0.5 truncate">
-            {playerMode === 'EXTERNAL' ? 'SPOTIFY // YT MUSIC // AUDIBLE' : currentTrack.time}
-          </p>
-        </div>
-        <canvas ref={canvasRef} className="shrink-0" />
-      </div>
-
-      <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              HapticFeedback.light()
-              onSkip(-1)
-            }}
-            className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center text-white hover:border-primary-fixed-dim/40 active:scale-95 transition-all"
-            title="Previous"
-          >
-            <span className="material-symbols-outlined text-base">skip_previous</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              HapticFeedback.light()
-              onPlayToggle()
-            }}
-            className="w-10 h-8 rounded-lg bg-primary-fixed-dim/20 border border-primary-fixed-dim/50 text-primary-fixed-dim flex items-center justify-center hover:bg-primary-fixed-dim/30 active:scale-95 transition-all shadow-[0_0_12px_rgba(var(--primary-rgb),0.2)]"
-            title={isPlaying ? 'Pause' : 'Play'}
-          >
-            <span className="material-symbols-outlined text-lg">
-              {isPlaying ? 'pause' : 'play_arrow'}
+              album
             </span>
-          </button>
+            <h3 className="font-label-caps text-[10px] text-primary-fixed-dim tracking-widest uppercase font-bold truncate">
+              MEDIA CORE
+            </h3>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              HapticFeedback.light()
-              onSkip(1)
-            }}
-            className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center text-white hover:border-primary-fixed-dim/40 active:scale-95 transition-all"
-            title="Next"
-          >
-            <span className="material-symbols-outlined text-base">skip_next</span>
-          </button>
+          <div className="flex border border-white/10 rounded-lg overflow-hidden bg-black/50 p-0.5 text-[7.5px] font-mono shrink-0">
+            {[
+              { id: 'SYSTEM', label: 'PLAYER' },
+              { id: 'STREAM', label: 'STREAM' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => {
+                  HapticFeedback.light()
+                  onSwitchAudioMode(mode.id)
+                }}
+                className={`px-2 py-0.5 rounded transition-colors ${
+                  audioMode === mode.id
+                    ? 'bg-primary-fixed-dim text-black font-bold'
+                    : 'text-white/50 hover:text-white'
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {playerMode === 'SYSTEM' ? (
+        <div className="bg-black/50 rounded-xl p-2.5 border border-white/5 flex flex-col items-center">
+          <canvas ref={canvasRef} width={220} height={38} className="w-full h-9 mb-1.5" />
+
+          <div className="text-center w-full px-1">
+            <p className="font-mono-data text-xs font-bold text-white truncate">{displayTitle}</p>
+            <p className="text-[8px] font-mono-data text-primary-fixed-dim/75 uppercase tracking-wider mt-0.5 truncate">
+              {displaySubtitle}
+            </p>
+          </div>
+        </div>
+
+        {audioMode === 'SYSTEM' && (
           <div className="flex items-center gap-1.5">
             <select
-              value={selectedSystemPlayer}
+              value={systemPlayer}
               onChange={(e) => onSetSystemPlayer(e.target.value)}
-              className="bg-black/60 border border-white/10 text-white rounded px-1.5 py-1 text-[8.5px] font-mono"
+              className="flex-1 min-w-0 bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-[9px] font-mono-data text-primary-fixed-dim focus:outline-none cursor-pointer truncate"
             >
-              <option value="spotify">Spotify</option>
-              <option value="ytmusic">YT Music</option>
-              <option value="apple">Apple</option>
-              <option value="samsung">Samsung</option>
-              <option value="default">Default</option>
+              {installedPlayers.map((player) => (
+                <option key={player.packageId} value={player.packageId}>
+                  {player.label}
+                  {activeMedia?.packageId === player.packageId ? ' (Active)' : ''}
+                </option>
+              ))}
+              <option value="default">System Default Music App</option>
             </select>
             <button
               type="button"
-              onClick={onLaunchSystemPlayer}
-              className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-primary-fixed-dim hover:bg-primary-fixed-dim/20"
-              title="Launch App"
+              onClick={() => {
+                HapticFeedback.light()
+                onLaunchSystemPlayer()
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-primary-fixed-dim/15 border border-primary-fixed-dim/30 text-primary-fixed-dim text-[8.5px] font-mono font-bold hover:bg-primary-fixed-dim/25 transition-colors shrink-0 flex items-center gap-1 active:scale-95"
             >
-              <span className="material-symbols-outlined text-xs">launch</span>
+              <span className="material-symbols-outlined text-[11px]">open_in_new</span>
+              OPEN
             </button>
           </div>
-        ) : (
-          <span className="text-[7.5px] font-mono text-white/40 uppercase tracking-widest">
-            {isPlaying ? 'AUDIO ACTIVE' : 'IDLE // READY'}
-          </span>
         )}
+
+        <div className="flex justify-center items-center gap-5 pt-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              HapticFeedback.light()
+              onPrevTrack()
+            }}
+            className="text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 p-1"
+            aria-label="Previous Track"
+          >
+            <span className="material-symbols-outlined text-xl">skip_previous</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              HapticFeedback.light()
+              onTogglePlay()
+            }}
+            className="w-10 h-10 rounded-full bg-primary-fixed-dim/20 border border-primary-fixed-dim text-primary-fixed-dim flex items-center justify-center hover:bg-primary-fixed-dim hover:text-black transition-colors active:scale-95 shadow-[0_0_12px_rgba(var(--primary-rgb),0.3)]"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            <span className="material-symbols-outlined text-xl">{isPlaying ? 'pause' : 'play_arrow'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              HapticFeedback.light()
+              onNextTrack()
+            }}
+            className="text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 p-1"
+            aria-label="Next Track"
+          >
+            <span className="material-symbols-outlined text-xl">skip_next</span>
+          </button>
+        </div>
       </div>
     </section>
   )
-}
+})
+
+export default MediaWidget

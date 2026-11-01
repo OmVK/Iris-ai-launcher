@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 
 export default function ThreatLogs() {
   const [threats, setThreats] = useState([])
@@ -8,7 +9,6 @@ export default function ThreatLogs() {
   useEffect(() => {
     const fetchThreats = async () => {
       try {
-        const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
         const res = await Filesystem.readdir({ path: 'Iris_Threats', directory: Directory.Data })
         const files = res.files.filter(f => (f.name.startsWith('Threat_') || f.name.startsWith('Private_Threat_')) && f.name.endsWith('.txt'))
         
@@ -40,7 +40,6 @@ export default function ThreatLogs() {
 
   const deleteThreat = async (name) => {
     try {
-      const { Filesystem, Directory } = await import('@capacitor/filesystem')
       await Filesystem.deleteFile({
         path: `Iris_Threats/${name}`,
         directory: Directory.Data
@@ -53,7 +52,6 @@ export default function ThreatLogs() {
 
   const purgeAll = async () => {
     try {
-      const { Filesystem, Directory } = await import('@capacitor/filesystem')
       for (const t of threats) {
         await Filesystem.deleteFile({
           path: `Iris_Threats/${t.id}`,

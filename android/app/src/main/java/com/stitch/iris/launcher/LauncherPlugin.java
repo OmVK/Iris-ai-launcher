@@ -224,6 +224,19 @@ public class LauncherPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    public static void onNotificationPostedEvent(org.json.JSONObject posted) {
+        if (instance != null && posted != null) {
+            try {
+                JSObject data = new JSObject(posted.toString());
+                org.json.JSONArray archive = IrisNotificationListenerService.getArchivedNotificationsJson(instance.getContext());
+                data.put("archivedNotifications", new com.getcapacitor.JSArray(archive.toString()));
+                instance.notifyListeners("onNotificationPosted", data);
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to emit onNotificationPosted", e);
+            }
+        }
+    }
+
     public static void onNotificationChanged() {
         if (instance != null) {
             try {
@@ -247,6 +260,8 @@ public class LauncherPlugin extends Plugin {
                     data.put("totalUnread", totalUnread);
                     data.put("notifications", new com.getcapacitor.JSArray(notifications.toString()));
                 }
+                org.json.JSONArray archive = IrisNotificationListenerService.getArchivedNotificationsJson(instance.getContext());
+                data.put("archivedNotifications", new com.getcapacitor.JSArray(archive.toString()));
                 instance.notifyListeners("onNotificationUpdated", data);
             } catch (Exception e) {
                 instance.notifyListeners("onNotificationUpdated", new JSObject());
@@ -1239,6 +1254,25 @@ public class LauncherPlugin extends Plugin {
     @PluginMethod
     public void dispatchMediaKey(PluginCall call) {
         String key = call.getString("key", "play_pause");
+        if ("launch_default".equals(key)) {
+            try {
+                Intent intent = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MUSIC);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(intent);
+                call.resolve();
+                return;
+            } catch (Exception e) {
+                call.reject("No default music player found: " + e.getMessage());
+                return;
+            }
+        }
+
+        IrisNotificationListenerService service = IrisNotificationListenerService.getInstance();
+        if (service != null && service.dispatchActiveMediaTransport(key)) {
+            call.resolve();
+            return;
+        }
+
         android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
         if (audioManager != null) {
             int keyCode = android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
@@ -1254,6 +1288,41 @@ public class LauncherPlugin extends Plugin {
         } else {
             call.reject("AudioManager not found");
         }
+    }
+
+    @PluginMethod
+    public void getActiveMediaSession(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean musicActive = false;
+        try {
+            android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
+            if (audioManager != null) {
+                musicActive = audioManager.isMusicActive();
+            }
+        } catch (Exception ignored) {}
+        ret.put("isMusicActive", musicActive);
+
+        IrisNotificationListenerService service = IrisNotificationListenerService.getInstance();
+        if (service != null) {
+            try {
+                org.json.JSONObject mediaInfo = service.getActiveMediaInfo();
+                if (mediaInfo != null) {
+                    String pkg = mediaInfo.optString("packageId", "");
+                    String title = mediaInfo.optString("title", "");
+                    String artist = mediaInfo.optString("artist", "");
+                    String album = mediaInfo.optString("album", "");
+                    boolean isPlaying = mediaInfo.optBoolean("isPlaying", musicActive);
+                    if (!pkg.isEmpty()) ret.put("packageId", pkg);
+                    if (!title.isEmpty()) ret.put("title", title);
+                    if (!artist.isEmpty()) ret.put("artist", artist);
+                    if (!album.isEmpty()) ret.put("album", album);
+                    ret.put("isPlaying", isPlaying || musicActive);
+                }
+            } catch (Exception ignored) {}
+        } else {
+            ret.put("isPlaying", musicActive);
+        }
+        call.resolve(ret);
     }
 
     @PluginMethod
@@ -1543,6 +1612,35 @@ public class LauncherPlugin extends Plugin {
         } else {
             call.reject("NotificationListenerService is not running or lacks permission");
         }
+    }
+
+    @PluginMethod
+    public void getArchivedNotifications(PluginCall call) {
+        try {
+            org.json.JSONArray archive = IrisNotificationListenerService.getArchivedNotificationsJson(getContext());
+            JSObject result = new JSObject();
+            result.put("notifications", new com.getcapacitor.JSArray(archive.toString()));
+            call.resolve(result);
+        } catch (Exception e) {
+            JSObject result = new JSObject();
+            result.put("notifications", new com.getcapacitor.JSArray());
+            call.resolve(result);
+        }
+    }
+
+    @PluginMethod
+    public void clearArchivedNotifications(PluginCall call) {
+        IrisNotificationListenerService.clearNativeArchive(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void deleteArchivedNotification(PluginCall call) {
+        String id = call.getString("id", "");
+        if (!id.isEmpty()) {
+            IrisNotificationListenerService.deleteFromNativeArchive(getContext(), id);
+        }
+        call.resolve();
     }
 
     @PluginMethod
@@ -2191,6 +2289,7 @@ public class LauncherPlugin extends Plugin {
         PermissionManager permManager = PermissionManager.getInstance(getContext());
         JSArray results = new JSArray();
         java.util.List<String> toRequest = new java.util.ArrayList<>();
+        String firstSpecialToOpen = null;
 
         for (int i = 0; i < permissionsArray.length(); i++) {
             try {
@@ -2202,8 +2301,12 @@ public class LauncherPlugin extends Plugin {
                 obj.put("granted", granted);
                 results.put(obj);
 
-                if (!granted && isRuntimePermission(perm)) {
-                    toRequest.add(getPermissionString(perm));
+                if (!granted) {
+                    if (isRuntimePermission(perm)) {
+                        toRequest.add(getPermissionString(perm));
+                    } else if (firstSpecialToOpen == null) {
+                        firstSpecialToOpen = perm;
+                    }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error reading permission at index " + i, e);
@@ -2213,11 +2316,13 @@ public class LauncherPlugin extends Plugin {
         if (!toRequest.isEmpty() && getActivity() != null) {
             String[] perms = toRequest.toArray(new String[0]);
             androidx.core.app.ActivityCompat.requestPermissions(getActivity(), perms, 9000);
+        } else if (firstSpecialToOpen != null) {
+            permManager.openPermissionSettings(firstSpecialToOpen);
         }
 
         JSObject ret = new JSObject();
         ret.put("results", results);
-        ret.put("requested", toRequest.size());
+        ret.put("requested", toRequest.size() + (firstSpecialToOpen != null ? 1 : 0));
         call.resolve(ret);
     }
 
@@ -2270,14 +2375,15 @@ public class LauncherPlugin extends Plugin {
             case "READ_CONTACTS": return android.Manifest.permission.READ_CONTACTS;
             case "POST_NOTIFICATIONS":
                 if (android.os.Build.VERSION.SDK_INT >= 33) return android.Manifest.permission.POST_NOTIFICATIONS;
-                return "POST_NOTIFICATIONS";
+                return "android.permission.POST_NOTIFICATIONS";
             case "READ_EXTERNAL_STORAGE": return android.Manifest.permission.READ_EXTERNAL_STORAGE;
             case "READ_MEDIA_IMAGES":
                 if (android.os.Build.VERSION.SDK_INT >= 33) return android.Manifest.permission.READ_MEDIA_IMAGES;
                 return android.Manifest.permission.READ_EXTERNAL_STORAGE;
             case "VIBRATE": return android.Manifest.permission.VIBRATE;
             case "SET_WALLPAPER": return android.Manifest.permission.SET_WALLPAPER;
-            default: return permission;
+            default:
+                return permission.startsWith("android.permission.") ? permission : "android.permission." + permission;
         }
     }
 
@@ -2291,9 +2397,6 @@ public class LauncherPlugin extends Plugin {
             case "POST_NOTIFICATIONS":
             case "READ_EXTERNAL_STORAGE":
             case "READ_MEDIA_IMAGES":
-            case "WRITE_SETTINGS":
-            case "SYSTEM_ALERT_WINDOW":
-            case "USE_BIOMETRIC":
                 return true;
             default:
                 return false;

@@ -14,6 +14,24 @@ export default defineConfig(({ mode }) => ({
   build: {
     sourcemap: false,
     minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'zustand'],
+          'vendor-capacitor': [
+            '@capacitor/core',
+            '@capacitor/app',
+            '@capacitor/camera',
+            '@capacitor/device',
+            '@capacitor/filesystem',
+            '@capacitor/geolocation',
+            '@capacitor/local-notifications',
+            '@capacitor/preferences',
+            '@capgo/capacitor-native-biometric'
+          ]
+        }
+      }
+    }
   },
   esbuild: {
     drop: mode === 'production' ? ['debugger'] : [],

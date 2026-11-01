@@ -4,7 +4,7 @@ const DEFAULT_WIDGETS = [
   { id: 'performance', label: 'Kernel Performance Metrics', icon: 'memory' },
   { id: 'weather', label: 'Weather Forecast Node', icon: 'cloud' },
   { id: 'stocks', label: 'Stock & Crypto Candlestick Cores', icon: 'show_chart' },
-  { id: 'media', label: 'Sonic & System Media Player', icon: 'graphic_eq' },
+  { id: 'media', label: 'Third-Party & Stream Media Core', icon: 'graphic_eq' },
   { id: 'tasks', label: 'Day Tasks Manager', icon: 'checklist' },
   { id: 'clock', label: 'Digital Clock', icon: 'schedule' },
   { id: 'analog_clock', label: 'Analog Clock', icon: 'watch' },
@@ -56,15 +56,9 @@ export default function WidgetConfig({
         {/* Customize / Workshop Toggle */}
         <button
           onClick={() => setIsConfigOpen(!isConfigOpen)}
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/[0.08] transition-all duration-300 cursor-pointer active:scale-95 text-primary-fixed-dim"
-          style={{
-            background: isConfigOpen ? 'rgba(12, 16, 28, 0.85)' : 'rgba(12, 16, 28, 0.6)',
-            backdropFilter: 'blur(30px)',
-            WebkitBackdropFilter: 'blur(30px)',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
-          }}
+          className="iris-card flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/10 transition-colors cursor-pointer active:scale-95 text-primary-fixed-dim shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
         >
-          <span className="material-symbols-outlined text-xs animate-pulse">space_dashboard</span>
+          <span className="material-symbols-outlined text-xs">space_dashboard</span>
           <span className="font-label-caps text-[9px] tracking-[0.1em] font-semibold">
             {isConfigOpen ? 'CLOSE WORKSHOP' : 'WIDGET WORKSHOP'}
           </span>
@@ -100,15 +94,7 @@ export default function WidgetConfig({
 
       {/* Workshop Drawer */}
       {isConfigOpen && (
-        <div
-          className="w-full glass-surface rounded-2xl p-4 text-xs font-mono-data space-y-4 border border-white/[0.06] animate-in fade-in zoom-in-95 duration-200"
-          style={{
-            background: 'rgba(12, 16, 28, 0.75)',
-            backdropFilter: 'blur(40px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)',
-          }}
-        >
+        <div className="iris-card w-full rounded-2xl p-4 text-xs font-mono-data space-y-4 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
           <div className="flex items-center justify-between border-b border-white/10 pb-2">
             <p className="text-[8px] font-bold text-primary-fixed-dim uppercase tracking-wider">MOUNT / UNMOUNT DASHBOARD NODES</p>
             <button

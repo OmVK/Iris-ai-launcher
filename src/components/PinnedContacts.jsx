@@ -1,12 +1,6 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
-import { launchApp } from '../components/LauncherPlugin'
-import HudIcon from '../components/HudIcon'
-import HudFallbackIcon from '../components/HudFallbackIcon'
-import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
+import { useCallback } from 'react'
 
-export default function PinnedContacts({ contacts = [], onCall, onMessage, onContextMenu, globalIconTheme = 'DEFAULT' }) {
-  const [scrollPosition, setScrollPosition] = useState(0)
-
+export default function PinnedContacts({ contacts = [], onCall, onMessage: _onMessage, onContextMenu, globalIconTheme: _globalIconTheme = 'DEFAULT' }) {
   const handleContactClick = useCallback((contact) => {
     if (contact.phone) {
       onCall?.(contact)

@@ -6,6 +6,16 @@ import SetupOemStep from './setup/SetupOemStep'
 import SetupNodeStep from './setup/SetupNodeStep'
 import SetupVaultStep from './setup/SetupVaultStep'
 import SetupReadyStep from './setup/SetupReadyStep'
+import {
+  getDeviceOemInfo,
+  batchCheckPermissions,
+  isStorageAccessGranted,
+  checkAndRequestPermission,
+  requestStorageAccess,
+  requestDefaultLauncher,
+  requestIgnoreBatteryOptimizations,
+  openOemBatterySettings
+} from './LauncherPlugin'
 
 export default function SetupWizard({ onComplete }) {
   const [step, setStep] = useState(0)
@@ -25,7 +35,6 @@ export default function SetupWizard({ onComplete }) {
   useEffect(() => {
     (async () => {
       try {
-        const { getDeviceOemInfo, batchCheckPermissions, isStorageAccessGranted } = await import('./LauncherPlugin')
         const info = await getDeviceOemInfo()
         setOemInfo(info)
 
@@ -92,7 +101,6 @@ export default function SetupWizard({ onComplete }) {
     async (type) => {
       if (type === 'mic') {
         try {
-          const { checkAndRequestPermission } = await import('./LauncherPlugin')
           const res = await checkAndRequestPermission('RECORD_AUDIO')
           if (res?.granted) {
             setPermissionsGranted((p) => ({ ...p, mic: true }))
@@ -108,7 +116,6 @@ export default function SetupWizard({ onComplete }) {
         }
       } else if (type === 'camera') {
         try {
-          const { checkAndRequestPermission } = await import('./LauncherPlugin')
           const res = await checkAndRequestPermission('CAMERA')
           if (res?.granted) {
             setPermissionsGranted((p) => ({ ...p, camera: true }))
@@ -124,9 +131,6 @@ export default function SetupWizard({ onComplete }) {
         }
       } else if (type === 'storage') {
         try {
-          const { checkAndRequestPermission, requestStorageAccess, isStorageAccessGranted } = await import(
-            './LauncherPlugin'
-          )
           await checkAndRequestPermission('READ_MEDIA_IMAGES')
           await requestStorageAccess()
           const granted = await isStorageAccessGranted()
@@ -151,13 +155,11 @@ export default function SetupWizard({ onComplete }) {
         }
       } else if (type === 'defaultLauncher') {
         try {
-          const { requestDefaultLauncher } = await import('./LauncherPlugin')
           await requestDefaultLauncher()
         } catch {}
         setTimeout(() => setPermissionsGranted((p) => ({ ...p, defaultLauncher: true })), 1500)
       } else if (type === 'notifications') {
         try {
-          const { checkAndRequestPermission } = await import('./LauncherPlugin')
           await checkAndRequestPermission('POST_NOTIFICATIONS')
         } catch {}
         setPermissionsGranted((p) => ({ ...p, notifications: true }))
@@ -177,14 +179,12 @@ export default function SetupWizard({ onComplete }) {
 
   const handleBatteryOptimization = useCallback(async () => {
     try {
-      const { requestIgnoreBatteryOptimizations } = await import('./LauncherPlugin')
       await requestIgnoreBatteryOptimizations()
     } catch {}
   }, [])
 
   const handleOpenOemSettings = useCallback(async () => {
     try {
-      const { openOemBatterySettings } = await import('./LauncherPlugin')
       await openOemBatterySettings(oemInfo.manufacturer)
       setOemBatteryDone(true)
     } catch {

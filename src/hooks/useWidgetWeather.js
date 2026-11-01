@@ -23,23 +23,28 @@ export default function useWidgetWeather({ isAppActive, activePage, powerSaveMod
   const [weatherLocalTime, setWeatherLocalTime] = useState('')
 
   useEffect(() => {
-    let timer
+    let timeoutId
+    let intervalId
     if (isAppActive && activePage === 'widgets') {
-      const updateClock = () => setWeatherLocalTime(new Date().toLocaleTimeString([], { hour12: false }))
+      const updateClock = () =>
+        setWeatherLocalTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }))
       updateClock()
-      const pollMs = PowerSaveManager.getPollingInterval('clockPollMs') || 1000
-      timer = setInterval(updateClock, pollMs)
+      const msUntilNextMinute = 60000 - (Date.now() % 60000)
+      timeoutId = setTimeout(() => {
+        updateClock()
+        intervalId = setInterval(updateClock, 60000)
+      }, msUntilNextMinute)
     }
     return () => {
-      if (timer) clearInterval(timer)
+      if (timeoutId) clearTimeout(timeoutId)
+      if (intervalId) clearInterval(intervalId)
     }
   }, [isAppActive, activePage, powerSaveMode])
 
   const fetchWeather = useCallback(async () => {
     setIsWeatherLoading(true)
     try {
-      const posPromise = Geolocation.getCurrentPosition({ timeout: 6000, enableHighAccuracy: false })
-      const pos = await posPromise
+      const pos = await Geolocation.getCurrentPosition({ timeout: 6000, enableHighAccuracy: false })
       if (pos?.coords) {
         localStorage.setItem('iris_weather_lat', pos.coords.latitude)
         localStorage.setItem('iris_weather_lon', pos.coords.longitude)

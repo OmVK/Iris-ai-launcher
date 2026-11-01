@@ -113,6 +113,16 @@ body.dark-glass-theme .glass-icon-container {
   transition: border-color 0.3s ease;
 }
 
+.iris-card {
+  background-color: rgba(12, 19, 34, var(--glass-opacity, 0.75));
+  transition: background-color 0.15s ease, border-color 0.2s ease;
+}
+
+body.dark-glass-theme .iris-card,
+.dark-glass-theme .iris-card {
+  background-color: rgba(4, 6, 12, var(--glass-opacity, 0.75));
+}
+
 /* Scroll performance & hardware acceleration optimizations */
 .scroll-container {
   -webkit-overflow-scrolling: touch;
@@ -121,7 +131,9 @@ body.dark-glass-theme .glass-icon-container {
 
 /* Drawer performance: isolate each app item's layout */
 .drawer-app-item {
-  contain: layout style;
+  contain: layout style paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* Suppress transitions during fast scroll */
@@ -400,7 +412,7 @@ body.dark-glass-theme .glass-icon-container {
 @keyframes page-slide-up-enter {
   from {
     opacity: 0;
-    transform: translate3d(0, 15px, 0);
+    transform: translate3d(0, 10px, 0);
   }
   to {
     opacity: 1;
@@ -411,7 +423,7 @@ body.dark-glass-theme .glass-icon-container {
 @keyframes page-slide-horizontal-enter {
   from {
     opacity: 0;
-    transform: translate3d(20px, 0, 0);
+    transform: translate3d(12px, 0, 0);
   }
   to {
     opacity: 1;
@@ -422,7 +434,7 @@ body.dark-glass-theme .glass-icon-container {
 @keyframes page-zoom-enter {
   from {
     opacity: 0;
-    transform: scale(0.95) translate3d(0, 0, 0);
+    transform: scale(0.97) translate3d(0, 0, 0);
   }
   to {
     opacity: 1;
@@ -433,7 +445,7 @@ body.dark-glass-theme .glass-icon-container {
 @keyframes page-flip-enter {
   from {
     opacity: 0;
-    transform: perspective(1000px) rotateY(-8deg);
+    transform: perspective(1000px) rotateY(-5deg);
   }
   to {
     opacity: 1;
@@ -443,8 +455,8 @@ body.dark-glass-theme .glass-icon-container {
 
 .page-transition-container {
   animation-name: var(--page-transition-animation, page-slide-up-enter);
-  animation-duration: var(--page-transition-duration, 300ms);
-  animation-timing-function: var(--page-transition-easing, cubic-bezier(0.16, 1, 0.3, 1));
+  animation-duration: var(--page-transition-duration, 220ms);
+  animation-timing-function: var(--page-transition-easing, cubic-bezier(0.22, 1, 0.36, 1));
   animation-fill-mode: forwards;
   width: 100%;
   height: 100%;
@@ -453,9 +465,34 @@ body.dark-glass-theme .glass-icon-container {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  contain: layout style paint;
   will-change: transform, opacity;
   backface-visibility: hidden;
   transform: translateZ(0);
+}
+
+.page-transition-container.effect-slide_up {
+  --page-transition-animation: page-slide-up-enter;
+}
+
+.page-transition-container.effect-slide_horizontal {
+  --page-transition-animation: page-slide-horizontal-enter;
+}
+
+.page-transition-container.effect-fade {
+  --page-transition-animation: page-fade-enter;
+}
+
+.page-transition-container.effect-zoom {
+  --page-transition-animation: page-zoom-enter;
+}
+
+.page-transition-container.effect-flip {
+  --page-transition-animation: page-flip-enter;
+}
+
+.page-transition-container.effect-none {
+  animation: none !important;
 }
 
 

@@ -22,7 +22,10 @@ export default function IrisTools({ onNavigate, onTriggerChronoLock, onTriggerVa
   const [showVaultLock, setShowVaultLock] = useState(false)
   const [vaultUnlockedForTool, setVaultUnlockedForTool] = useState(false)
   const glassOpacity = useThemeStore(s => s.glassOpacity)
-  const glassBg = `rgba(24, 27, 37, ${glassOpacity / 100})`
+  const darkGlassTheme = useThemeStore(s => s.darkGlassTheme)
+  const glassBg = darkGlassTheme
+    ? `rgba(4, 6, 12, ${glassOpacity / 100})`
+    : `rgba(12, 19, 34, ${glassOpacity / 100})`
 
   const tool = TOOLS.find(t => t.id === activeTool)
 

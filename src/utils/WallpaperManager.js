@@ -4,7 +4,7 @@ const WALLPAPER_BLUR_KEY = 'wallpaper_blur'
 const WALLPAPER_VIGNETTE_KEY = 'wallpaper_vignette'
 const DAILY_ROTATION_KEY = 'daily_wallpaper_rotation'
 const DAILY_ROTATION_LAST_KEY = 'daily_wallpaper_last_date'
-const WALLPAPER_CACHE_KEY = 'wallpaper_cache'
+const _WALLPAPER_CACHE_KEY = 'wallpaper_cache'
 
 const WALLPAPERS = [
   { id: 'SYSTEM', label: 'Phone Wallpaper', desc: 'Android native wallpaper', type: 'system', css: (o) => `radial-gradient(ellipse at 50% 0%, rgba(10,14,23,${o}) 0%, rgba(2,6,23,${o}) 100%)` },

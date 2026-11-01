@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, memo } from 'react'
 import { useThemeStore } from '../../stores/themeStore'
 
-export function ClockWidget({ size = 'medium' }) {
+export const ClockWidget = memo(function ClockWidget({ size = 'medium' }) {
   const [time, setTime] = useState(new Date())
-  const { use24HourClock } = useThemeStore()
+  const use24HourClock = useThemeStore((s) => s.use24HourClock)
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000)
@@ -31,9 +31,9 @@ export function ClockWidget({ size = 'medium' }) {
       </span>
     </div>
   )
-}
+})
 
-export function AnalogClockWidget({ size = 120 }) {
+export const AnalogClockWidget = memo(function AnalogClockWidget({ size = 120 }) {
   const [time, setTime] = useState(new Date())
 
   useEffect(() => {
@@ -68,10 +68,9 @@ export function AnalogClockWidget({ size = 120 }) {
       </svg>
     </div>
   )
-}
+})
 
-
-export function BatteryWidget({ level = 100 }) {
+export const BatteryWidget = memo(function BatteryWidget({ level = 100 }) {
   const getColor = () => {
     if (level > 60) return 'text-green-400'
     if (level > 30) return 'text-amber-400'
@@ -87,10 +86,9 @@ export function BatteryWidget({ level = 100 }) {
       <span className="text-[8px] text-white/40 font-mono-data">BATTERY</span>
     </div>
   )
-}
+})
 
-
-export function CalendarWidget() {
+export const CalendarWidget = memo(function CalendarWidget() {
   const today = new Date()
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).getDay()
@@ -119,40 +117,82 @@ export function CalendarWidget() {
       </div>
     </div>
   )
-}
+})
 
-export function NotesWidget({ notes = [], onAdd }) {
+export const NotesWidget = memo(function NotesWidget({ notes: externalNotes, onAdd }) {
+  const [localNotes, setLocalNotes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('iris_quick_notes')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [text, setText] = useState('')
 
+  const activeNotes = externalNotes ?? localNotes
+
   const handleAdd = () => {
-    if (text.trim()) {
-      onAdd?.(text.trim())
-      setText('')
+    const trimmed = text.trim()
+    if (!trimmed) return
+    if (onAdd) {
+      onAdd(trimmed)
+    } else {
+      const next = [trimmed, ...localNotes].slice(0, 12)
+      setLocalNotes(next)
+      try {
+        localStorage.setItem('iris_quick_notes', JSON.stringify(next))
+      } catch {}
     }
+    setText('')
+  }
+
+  const handleDelete = (idx) => {
+    if (onAdd) return
+    const next = localNotes.filter((_, i) => i !== idx)
+    setLocalNotes(next)
+    try {
+      localStorage.setItem('iris_quick_notes', JSON.stringify(next))
+    } catch {}
   }
 
   return (
     <div className="p-3">
-      <div className="space-y-1.5 mb-2 max-h-20 overflow-y-auto">
-        {notes.length === 0 && (
+      <div className="space-y-1.5 mb-2 max-h-24 overflow-y-auto scroll-container">
+        {activeNotes.length === 0 && (
           <p className="text-[8px] text-white/30 font-mono-data text-center py-2">No notes yet</p>
         )}
-        {notes.slice(0, 3).map((note, i) => (
-          <p key={i} className="text-[9px] text-white/60 font-mono-data truncate">{note}</p>
+        {activeNotes.map((note, i) => (
+          <div key={i} className="flex items-center justify-between gap-2 bg-black/35 px-2 py-1 rounded border border-white/5">
+            <p className="text-[9px] text-white/80 font-mono-data truncate">{note}</p>
+            {!onAdd && (
+              <button
+                type="button"
+                onClick={() => handleDelete(i)}
+                className="text-white/30 hover:text-error text-[10px] leading-none shrink-0"
+              >
+                ×
+              </button>
+            )}
+          </div>
         ))}
       </div>
       <div className="flex gap-1.5">
         <input
           value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAdd()}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           placeholder="Quick note..."
-          className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-[9px] text-white/80 font-mono-data placeholder:text-white/20 focus:outline-none focus:border-primary-fixed-dim/40"
+          className="flex-1 bg-black/50 border border-white/10 rounded px-2 py-1 text-[9px] text-white/80 font-mono-data placeholder:text-white/25 focus:outline-none focus:border-primary-fixed-dim/40"
         />
-        <button onClick={handleAdd} className="px-2 py-1 rounded bg-primary-fixed-dim/20 text-primary-fixed-dim text-[9px] font-mono-data">
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="px-2.5 py-1 rounded bg-primary-fixed-dim/20 border border-primary-fixed-dim/30 text-primary-fixed-dim text-[9px] font-mono-data font-bold active:scale-95"
+        >
           ADD
         </button>
       </div>
     </div>
   )
-}
+})

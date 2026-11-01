@@ -1,7 +1,13 @@
-import React from 'react'
+import React, { memo } from 'react'
 import HapticFeedback from '../../utils/HapticFeedback'
 
-export default function PingWidget({ pingResult, pingHistory = [], pingFailed = [], isPingTesting, onTriggerPingTest }) {
+const PingWidget = memo(function PingWidget({
+  pingResult,
+  pingHistory = [],
+  pingFailed = [],
+  isPingTesting,
+  onTriggerPingTest,
+}) {
   const maxLat = Math.max(50, ...pingHistory)
   const failedCount = pingFailed.filter(Boolean).length
   const lossRate = pingHistory.length > 0 ? ((failedCount / pingHistory.length) * 100).toFixed(1) : '0.0'
@@ -20,7 +26,7 @@ export default function PingWidget({ pingResult, pingHistory = [], pingFailed = 
         HapticFeedback.light()
         onTriggerPingTest()
       }}
-      className="glass-surface border border-white/10 rounded-2xl p-4 relative flex flex-col items-center justify-between text-center cursor-pointer hover:border-primary-fixed-dim/40 transition-all active:scale-[0.98] w-full h-full overflow-hidden bg-[#080d16]/85 backdrop-blur-xl group"
+      className="iris-card border border-white/10 rounded-2xl p-4 relative flex flex-col items-center justify-between text-center cursor-pointer hover:border-primary-fixed-dim/40 transition-transform active:scale-[0.98] w-full h-full overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.45)] group"
     >
       <div className="flex items-center justify-between w-full pb-1 border-b border-white/5">
         <span className="text-on-surface-variant/70 text-[8.5px] font-mono-data uppercase tracking-wider font-bold">
@@ -40,7 +46,7 @@ export default function PingWidget({ pingResult, pingHistory = [], pingFailed = 
 
       <div className="flex items-center justify-between font-mono-data w-full my-2">
         <span className="text-on-surface-variant/80 text-[9px] uppercase tracking-wide">GATEWAY RELAY</span>
-        <span className="text-primary-fixed-dim text-xl font-bold drop-shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]">
+        <span className="text-primary-fixed-dim text-xl font-bold">
           {pingResult} <span className="text-xs font-normal text-white/70">ms</span>
         </span>
       </div>
@@ -54,7 +60,7 @@ export default function PingWidget({ pingResult, pingHistory = [], pingFailed = 
             <div
               key={i}
               style={{ height: `${height}%`, backgroundColor: barColor }}
-              className="flex-1 rounded-t transition-all duration-300 shadow-[0_0_6px_rgba(var(--primary-rgb),0.25)]"
+              className="flex-1 rounded-t transition-[height] duration-300"
               title={`${val} ms`}
             />
           )
@@ -66,4 +72,6 @@ export default function PingWidget({ pingResult, pingHistory = [], pingFailed = 
       </span>
     </section>
   )
-}
+})
+
+export default PingWidget

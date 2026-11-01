@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { memo } from 'react'
 
-export default function PerformanceWidget({
+const PerformanceWidget = memo(function PerformanceWidget({
   batteryLevel,
   isCharging,
   osVersion,
@@ -15,10 +15,8 @@ export default function PerformanceWidget({
   return (
     <section
       onClick={onCpuClick}
-      className="glass-surface border border-white/10 rounded-2xl p-4 relative overflow-hidden group cursor-pointer hover:border-primary-fixed-dim/40 active:scale-[0.99] transition-all w-full h-full flex flex-col justify-between bg-[#080d16]/85 backdrop-blur-xl"
+      className="iris-card border border-white/10 rounded-2xl p-4 relative overflow-hidden group cursor-pointer hover:border-primary-fixed-dim/40 active:scale-[0.99] transition-transform w-full h-full flex flex-col justify-between shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
     >
-      <div className="scan-line opacity-20 pointer-events-none" />
-
       <div className="flex justify-between items-start mb-3">
         <div>
           <h2 className="font-label-caps text-[10px] text-primary-fixed-dim tracking-widest uppercase font-bold">
@@ -30,7 +28,7 @@ export default function PerformanceWidget({
         </div>
         <span
           className={`material-symbols-outlined text-primary-fixed-dim text-lg ${
-            isDiagnosticRunning ? 'animate-spin' : 'animate-pulse'
+            isDiagnosticRunning ? 'animate-spin' : ''
           }`}
         >
           {isDiagnosticRunning ? 'settings_backup_restore' : 'memory'}
@@ -51,7 +49,7 @@ export default function PerformanceWidget({
                 strokeWidth="5"
                 strokeDasharray={2 * Math.PI * 40}
                 strokeDashoffset={2 * Math.PI * 40 * (1 - batteryLevel / 100)}
-                className="transition-all duration-700 drop-shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]"
+                className="transition-[stroke-dashoffset] duration-500"
               />
             </svg>
             <div className="flex flex-col items-center">
@@ -69,7 +67,7 @@ export default function PerformanceWidget({
           </div>
         </div>
 
-        <div className="sm:col-span-2 font-mono-data space-y-2 bg-black/40 p-3 rounded-xl border border-white/5">
+        <div className="sm:col-span-2 font-mono-data space-y-2 bg-black/45 p-3 rounded-xl border border-white/5">
           <div className="flex justify-between text-[10px]">
             <span className="text-on-surface-variant/70">HOST ARCH:</span>
             <span className="text-primary-fixed-dim font-bold truncate max-w-[140px]">{osVersion}</span>
@@ -82,7 +80,7 @@ export default function PerformanceWidget({
             </div>
             <div className="w-full bg-white/10 h-1 rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary-fixed-dim shadow-[0_0_6px_rgba(var(--primary-rgb),0.5)] transition-all duration-500"
+                className="h-full bg-primary-fixed-dim transition-[width] duration-500"
                 style={{ width: `${memPct}%` }}
               />
             </div>
@@ -103,4 +101,6 @@ export default function PerformanceWidget({
       </div>
     </section>
   )
-}
+})
+
+export default PerformanceWidget

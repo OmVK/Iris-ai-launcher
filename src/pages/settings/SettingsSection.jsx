@@ -1,7 +1,7 @@
 export default function SettingsSection({ title, icon, sectionKey, expandedSections, toggleSection, children, badge }) {
   const isExpanded = expandedSections[sectionKey]
   return (
-    <section className="bg-[#0a0e17]/80 border border-outline-variant/30 glass-border rounded-xl p-4 font-mono-data text-xs">
+    <section className="iris-card border border-outline-variant/30 glass-border rounded-xl p-4 font-mono-data text-xs">
       <button
         onClick={() => toggleSection(sectionKey)}
         className="w-full flex items-center justify-between font-label-caps text-xs text-on-surface-variant tracking-wider py-1 focus:outline-none"

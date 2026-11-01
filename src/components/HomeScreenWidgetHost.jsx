@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 const WIDGET_TYPES = {
   clock: { label: 'Clock', icon: 'schedule', minWidth: 2, minHeight: 1, defaultWidth: 2, defaultHeight: 1 },
@@ -43,7 +43,7 @@ export default function HomeScreenWidgetHost({ widgets = [], onAddWidget, onRemo
     setResizeStart({ x: touch.clientX, y: touch.clientY })
   }, [])
 
-  const handleResizeEnd = useCallback((e, widgetId) => {
+  const _handleResizeEnd = useCallback((e, widgetId) => {
     if (!resizing || !resizeStart) return
     const touch = e.changedTouches?.[0] || e
     const dx = touch.clientX - resizeStart.x

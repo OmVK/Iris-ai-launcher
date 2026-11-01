@@ -5,7 +5,7 @@ import { APP_VERSION } from '../../utils/constants'
 
 export default function AboutSection({ expandedSections, toggleSection, onTriggerFeatureTour }) {
   const [deviceInfo, setDeviceInfo] = useState(null)
-  const [tapCount, setTapCount] = useState(0)
+  const [_tapCount, setTapCount] = useState(0)
   const [showHint, setShowHint] = useState(false)
   const tapTimerRef = useRef(null)
 

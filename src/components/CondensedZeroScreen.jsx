@@ -53,7 +53,7 @@ export default function CondensedZeroScreen({ onNavigate, onClose }) {
         </div>
       </div>
 
-      <div className="glass-surface border border-white/5 rounded-lg p-2 bg-black/40">
+      <div className="border border-white/10 rounded-lg p-2 bg-white/[0.04]">
         <p className="font-mono-data text-[9px] text-white/90 leading-relaxed uppercase">
           {data.briefing}
         </p>

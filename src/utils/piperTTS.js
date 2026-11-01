@@ -1,6 +1,6 @@
 import { playArrayBuffer } from './cartesiaTTS'
 
-export async function speakPiper(text, voiceTimbre) {
+export async function speakPiper(text, _voiceTimbre) {
   try {
     const piperWeb = await import('@mintplex-labs/piper-tts-web')
     const predictFn = piperWeb.predict || piperWeb.default?.predict

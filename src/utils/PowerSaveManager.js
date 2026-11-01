@@ -10,7 +10,6 @@ const MODES = {
 
 const FEATURE_PRESETS = {
   HIGH: {
-    use3DOrb: true,
     useWallpaper: true,
     particleCanvas: true,
     backdropBlur: true,
@@ -28,13 +27,11 @@ const FEATURE_PRESETS = {
     keepAlivePollMs: 300000,
     taskCheckPollMs: 120000,
     wallpaperFps: 60,
-    maxOrbParticles: 200,
     maxCanvasDpr: 1.5,
     iconDecodeSize: 64,
     maxRenderItems: Infinity
   },
   MEDIUM: {
-    use3DOrb: true,
     useWallpaper: false,
     particleCanvas: false,
     backdropBlur: true,
@@ -52,14 +49,12 @@ const FEATURE_PRESETS = {
     keepAlivePollMs: 300000,
     taskCheckPollMs: 120000,
     wallpaperFps: 30,
-    maxOrbParticles: 120,
     maxCanvasDpr: 1.25,
     iconDecodeSize: 48,
     deferredPiperInit: true,
     maxRenderItems: 50
   },
   LOW: {
-    use3DOrb: false,
     useWallpaper: false,
     particleCanvas: false,
     backdropBlur: false,
@@ -77,7 +72,6 @@ const FEATURE_PRESETS = {
     keepAlivePollMs: 120000,
     taskCheckPollMs: 120000,
     wallpaperFps: 0,
-    maxOrbParticles: 60,
     maxCanvasDpr: 1.0,
     iconDecodeSize: 32,
     deferredPiperInit: true,
@@ -180,7 +174,6 @@ class PowerSaveManager {
 
   shouldDisable(feature) {
     const map = {
-      orb: 'use3DOrb',
       wallpaper: 'useWallpaper',
       particles: 'particleCanvas',
       blur: 'backdropBlur',

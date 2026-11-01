@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { memo } from 'react'
+import HapticFeedback from '../../utils/HapticFeedback'
 import PerformanceWidget from './PerformanceWidget'
 import WeatherWidget from './WeatherWidget'
 import StockWidget from './StockWidget'
@@ -14,193 +15,213 @@ import {
   CalendarWidget,
   NotesWidget,
 } from '../../components/widgets/BuiltInWidgets'
-import HapticFeedback from '../../utils/HapticFeedback'
 
-export default function WidgetContentRenderer({
+export const WIDGET_CATALOG = {
+  performance: { label: 'Kernel Telemetry', icon: 'memory' },
+  weather: { label: 'Meteo Station', icon: 'cloud' },
+  stocks: { label: 'Market Feeds', icon: 'show_chart' },
+  media: { label: 'Media Core', icon: 'graphic_eq' },
+  tasks: { label: 'Task Protocol', icon: 'checklist' },
+  ping: { label: 'Network Latency', icon: 'network_ping' },
+  signal: { label: 'Signal Grid', icon: 'signal_cellular_alt' },
+  clock: { label: 'Digital Clock', icon: 'schedule' },
+  analog_clock: { label: 'Analog Clock', icon: 'watch' },
+  calendar: { label: 'Calendar Node', icon: 'calendar_month' },
+  battery: { label: 'Battery Cell', icon: 'battery_charging_full' },
+  notes: { label: 'Quick Notes', icon: 'edit_note' },
+}
+
+export function getWidgetMeta(id, customWidgets) {
+  if (id.startsWith('spacer_')) {
+    return { label: 'Grid Spacer', icon: 'space_bar' }
+  }
+  if (WIDGET_CATALOG[id]) return WIDGET_CATALOG[id]
+  const custom = customWidgets.find((w) => w.id === id)
+  if (custom) return { label: custom.label, icon: custom.icon || 'widgets' }
+  return { label: id.toUpperCase(), icon: 'widgets' }
+}
+
+const WidgetContentRenderer = memo(function WidgetContentRenderer({
   id,
-  metrics,
-  weather,
+  isEditMode,
+  onRemove,
+  batteryLevel,
+  isCharging,
+  osVersion,
+  usedMem,
+  totalMem,
+  cpuTemp,
+  isDiagnosticRunning,
+  handleCpuClick,
+  weatherData,
+  weatherCity,
+  weatherLocalTime,
+  isWeatherLoading,
+  onRefreshWeather,
+  audioMode,
+  isPlaying,
+  trackIndex,
+  tracks,
+  systemPlayer,
+  installedPlayers,
+  activeMedia,
+  switchAudioMode,
+  setSystemPlayer,
+  prevTrack,
+  togglePlay,
+  nextTrack,
+  handleLaunchSystemPlayer,
   tasks,
   newTaskText,
   newTaskTime,
-  onSetNewTaskText,
-  onSetNewTaskTime,
-  onAddTask,
-  onToggleTask,
-  onDeleteTask,
-  onClearAllTasks,
-  isPlaying,
-  trackIndex,
-  playerMode,
-  selectedSystemPlayer,
-  onSetPlayerMode,
-  onPlayToggle,
-  onSkip,
-  onSetSystemPlayer,
-  onLaunchSystemPlayer,
-  isAppActive,
-  notes,
-  onAddNote,
+  setNewTaskText,
+  setNewTaskTime,
+  addTask,
+  toggleTask,
+  deleteTask,
+  clearAllTasks,
   pingResult,
   pingHistory,
   pingFailed,
   isPingTesting,
-  onTriggerPingTest,
-  spacerHeights,
-  cycleSpacerHeight,
-  onRemoveWidget,
-  isEditMode,
+  triggerPingTest,
   customWidgets,
 }) {
-  if (id === 'performance') {
+  if (id.startsWith('spacer_')) {
+    if (!isEditMode) {
+      return <div className="min-h-[85px] sm:min-h-[110px] w-full pointer-events-none" />
+    }
     return (
-      <PerformanceWidget
-        batteryLevel={metrics.batteryLevel}
-        isCharging={metrics.isCharging}
-        osVersion={metrics.osVersion}
-        usedMem={metrics.usedMem}
-        totalMem={metrics.totalMem}
-        cpuTemp={metrics.cpuTemp}
-        isDiagnosticRunning={metrics.isDiagnosticRunning}
-        onCpuClick={metrics.handleCpuClick}
-      />
-    )
-  }
-  if (id === 'weather') {
-    return (
-      <WeatherWidget
-        weatherData={weather.weatherData}
-        weatherCity={weather.weatherCity}
-        weatherLocalTime={weather.weatherLocalTime}
-        isWeatherLoading={weather.isWeatherLoading}
-      />
-    )
-  }
-  if (id === 'stocks') return <StockWidget />
-  if (id === 'media') {
-    return (
-      <MediaWidget
-        isPlaying={isPlaying}
-        trackIndex={trackIndex}
-        playerMode={playerMode}
-        selectedSystemPlayer={selectedSystemPlayer}
-        onSetPlayerMode={onSetPlayerMode}
-        onPlayToggle={onPlayToggle}
-        onSkip={onSkip}
-        onSetSystemPlayer={onSetSystemPlayer}
-        onLaunchSystemPlayer={onLaunchSystemPlayer}
-        isAppActive={isAppActive}
-      />
-    )
-  }
-  if (id === 'tasks') {
-    return (
-      <TasksWidget
-        tasks={tasks}
-        newTaskText={newTaskText}
-        newTaskTime={newTaskTime}
-        onSetNewTaskText={onSetNewTaskText}
-        onSetNewTaskTime={onSetNewTaskTime}
-        onAddTask={onAddTask}
-        onToggleTask={onToggleTask}
-        onDeleteTask={onDeleteTask}
-        onClearAll={onClearAllTasks}
-      />
-    )
-  }
-  if (id === 'clock') {
-    return (
-      <div className="glass-surface border border-white/10 rounded-2xl overflow-hidden p-2">
-        <ClockWidget size="medium" />
+      <div className="min-h-[95px] sm:min-h-[120px] w-full rounded-2xl border-2 border-dashed border-cyan-500/35 bg-cyan-950/15 flex flex-col items-center justify-center p-4 gap-1.5 select-none">
+        <div className="flex items-center gap-2 text-cyan-400">
+          <span className="material-symbols-outlined text-base">space_bar</span>
+          <span className="text-[10px] font-mono-data uppercase tracking-widest font-bold">
+            EMPTY GRID SPACER
+          </span>
+        </div>
+        <p className="text-[8px] font-mono text-white/40 text-center">
+          Hold or use toolbar to resize width, reorder, or delete
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            HapticFeedback.light()
+            onRemove()
+          }}
+          className="mt-1 px-2.5 py-1 rounded-lg bg-error/20 border border-error/40 text-error text-[8.5px] font-mono font-bold hover:bg-error/30 transition-colors"
+        >
+          REMOVE SPACER
+        </button>
       </div>
     )
   }
-  if (id === 'analog_clock') {
-    return (
-      <div className="glass-surface border border-white/10 rounded-2xl overflow-hidden p-3 flex items-center justify-center">
-        <AnalogClockWidget size={110} />
-      </div>
-    )
+
+  switch (id) {
+    case 'performance':
+      return (
+        <PerformanceWidget
+          batteryLevel={batteryLevel}
+          isCharging={isCharging}
+          osVersion={osVersion}
+          usedMem={usedMem}
+          totalMem={totalMem}
+          cpuTemp={cpuTemp}
+          isDiagnosticRunning={isDiagnosticRunning}
+          onCpuClick={handleCpuClick}
+        />
+      )
+    case 'weather':
+      return (
+        <WeatherWidget
+          weatherData={weatherData}
+          weatherCity={weatherCity}
+          weatherLocalTime={weatherLocalTime}
+          isWeatherLoading={isWeatherLoading}
+          onRefresh={onRefreshWeather}
+        />
+      )
+    case 'stocks':
+      return <StockWidget />
+    case 'media':
+      return (
+        <MediaWidget
+          audioMode={audioMode}
+          isPlaying={isPlaying}
+          trackIndex={trackIndex}
+          tracks={tracks}
+          systemPlayer={systemPlayer}
+          installedPlayers={installedPlayers}
+          activeMedia={activeMedia}
+          onSwitchAudioMode={switchAudioMode}
+          onSetSystemPlayer={setSystemPlayer}
+          onPrevTrack={prevTrack}
+          onTogglePlay={togglePlay}
+          onNextTrack={nextTrack}
+          onLaunchSystemPlayer={handleLaunchSystemPlayer}
+        />
+      )
+    case 'tasks':
+      return (
+        <TasksWidget
+          tasks={tasks}
+          newTaskText={newTaskText}
+          _newTaskTime={newTaskTime}
+          onSetNewTaskText={setNewTaskText}
+          onSetNewTaskTime={setNewTaskTime}
+          onAddTask={addTask}
+          onToggleTask={toggleTask}
+          onDeleteTask={deleteTask}
+          onClearAll={clearAllTasks}
+        />
+      )
+    case 'ping':
+      return (
+        <PingWidget
+          pingResult={pingResult}
+          pingHistory={pingHistory}
+          pingFailed={pingFailed}
+          isPingTesting={isPingTesting}
+          onTriggerPingTest={triggerPingTest}
+        />
+      )
+    case 'signal':
+      return <SignalWidget />
+    case 'clock':
+      return (
+        <div className="iris-card border border-white/10 rounded-2xl p-4 relative h-full flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+          <ClockWidget size="medium" />
+        </div>
+      )
+    case 'analog_clock':
+      return (
+        <div className="iris-card border border-white/10 rounded-2xl p-4 relative h-full flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+          <AnalogClockWidget size={120} />
+        </div>
+      )
+    case 'calendar':
+      return (
+        <div className="iris-card border border-white/10 rounded-2xl p-4 relative h-full shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+          <CalendarWidget />
+        </div>
+      )
+    case 'battery':
+      return (
+        <div className="iris-card border border-white/10 rounded-2xl p-4 relative h-full flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+          <BatteryWidget level={batteryLevel} />
+        </div>
+      )
+    case 'notes':
+      return (
+        <div className="iris-card border border-white/10 rounded-2xl p-4 relative h-full shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+          <NotesWidget />
+        </div>
+      )
+    default: {
+      const custom = customWidgets.find((w) => w.id === id)
+      if (!custom) return null
+      return <CustomWidget widget={custom} />
+    }
   }
-  if (id === 'calendar') {
-    return (
-      <div className="glass-surface border border-white/10 rounded-2xl overflow-hidden p-3">
-        <CalendarWidget />
-      </div>
-    )
-  }
-  if (id === 'battery') {
-    return (
-      <div className="glass-surface border border-white/10 rounded-2xl overflow-hidden p-3">
-        <BatteryWidget level={metrics.batteryLevel} />
-      </div>
-    )
-  }
-  if (id === 'notes') {
-    return (
-      <div className="glass-surface border border-white/10 rounded-2xl overflow-hidden p-3">
-        <NotesWidget notes={notes} onAdd={onAddNote} />
-      </div>
-    )
-  }
-  if (id === 'ping') {
-    return (
-      <PingWidget
-        pingResult={pingResult}
-        pingHistory={pingHistory}
-        pingFailed={pingFailed}
-        isPingTesting={isPingTesting}
-        onTriggerPingTest={onTriggerPingTest}
-      />
-    )
-  }
-  if (id === 'signal') return <SignalWidget />
-  if (id.startsWith('spacer')) {
-    const heightClass = spacerHeights[id] || 'h-28'
-    return (
-      <div
-        className={`w-full ${heightClass} rounded-2xl transition-all flex items-center justify-center ${
-          isEditMode
-            ? 'border-2 border-dashed border-primary-fixed-dim/40 bg-primary-fixed-dim/10 backdrop-blur-sm'
-            : 'pointer-events-none'
-        }`}
-      >
-        {isEditMode && (
-          <div className="flex flex-col items-center gap-1.5 text-primary-fixed-dim">
-            <span className="material-symbols-outlined text-base">crop_free</span>
-            <span className="text-[9px] font-mono tracking-widest uppercase font-bold">SPACER</span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  HapticFeedback.light()
-                  cycleSpacerHeight(id)
-                }}
-                className="px-2 py-0.5 rounded-lg bg-primary-fixed-dim/20 hover:bg-primary-fixed-dim/30 text-[8.5px] font-mono border border-primary-fixed-dim/30 font-bold"
-              >
-                HEIGHT: {heightClass === 'h-28' ? 'S' : heightClass === 'h-48' ? 'M' : 'L'}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  HapticFeedback.light()
-                  onRemoveWidget(id)
-                }}
-                className="px-2 py-0.5 rounded-lg bg-error/20 hover:bg-error/30 text-[8.5px] font-mono border border-error/30 text-error font-bold"
-              >
-                DELETE
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-  if (id.startsWith('custom_')) {
-    const customWidget = customWidgets.find((w) => w.id === id)
-    if (customWidget) return <CustomWidget widget={customWidget} />
-  }
-  return null
-}
+})
+
+export default WidgetContentRenderer

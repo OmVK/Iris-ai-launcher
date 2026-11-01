@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 export default function HomePager({ pages, onPageChange, className = '' }) {
   const [currentPage, setCurrentPage] = useState(0)
@@ -47,7 +47,7 @@ export default function HomePager({ pages, onPageChange, className = '' }) {
     setIsDragging(false)
   }, [touchStart, touchDelta, currentPage, totalPages])
 
-  const goToPage = useCallback((index) => {
+  const _goToPage = useCallback((index) => {
     if (index >= 0 && index < totalPages) {
       setCurrentPage(index)
     }

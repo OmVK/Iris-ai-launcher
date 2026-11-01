@@ -2,14 +2,14 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { SecureStorage } from '../utils/secureStorage'
 import { useAIStore } from '../stores/aiStore'
 
-export default function VisionAssistant({ glassBg, onClose, speakTextFn }) {
+export default function VisionAssistant({ glassBg: _glassBg, onClose, speakTextFn }) {
   const [mode, setMode] = useState('CAMERA') // 'CAMERA' | 'UPLOAD'
   const [imagePreview, setImagePreview] = useState(null) // base64
   const [prompt, setPrompt] = useState('Explain what is visible in this image in detail.')
   const [analyzing, setAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState('')
-  const [cameraActive, setCameraActive] = useState(false)
-  const [cameraError, setCameraError] = useState(null)
+  const [_cameraActive, setCameraActive] = useState(false)
+  const [_cameraError, setCameraError] = useState(null)
 
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -172,9 +172,8 @@ export default function VisionAssistant({ glassBg, onClose, speakTextFn }) {
       <div className="flex gap-2">
         <button
           onClick={() => { setMode('CAMERA'); setImagePreview(null) }}
-          className={`flex-1 py-2 rounded-lg border font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
-            mode === 'CAMERA' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' : 'bg-black/30 border-white/10 text-on-surface-variant/50'
-          }`}
+          className={`flex-1 py-2 rounded-lg border font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${mode === 'CAMERA' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' : 'bg-black/30 border-white/10 text-on-surface-variant/50'
+            }`}
         >
           <span className="material-symbols-outlined text-sm">photo_camera</span>
           Live Camera
@@ -182,9 +181,8 @@ export default function VisionAssistant({ glassBg, onClose, speakTextFn }) {
 
         <button
           onClick={() => { setMode('UPLOAD'); setImagePreview(null) }}
-          className={`flex-1 py-2 rounded-lg border font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
-            mode === 'UPLOAD' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' : 'bg-black/30 border-white/10 text-on-surface-variant/50'
-          }`}
+          className={`flex-1 py-2 rounded-lg border font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${mode === 'UPLOAD' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' : 'bg-black/30 border-white/10 text-on-surface-variant/50'
+            }`}
         >
           <span className="material-symbols-outlined text-sm">upload_file</span>
           Upload Screenshot
@@ -249,9 +247,8 @@ export default function VisionAssistant({ glassBg, onClose, speakTextFn }) {
           <button
             key={p}
             onClick={() => setPrompt(p)}
-            className={`px-2.5 py-1 rounded text-[8.5px] font-bold tracking-wider shrink-0 transition-all ${
-              prompt === p ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300' : 'bg-black/20 border border-white/10 text-on-surface-variant/50 hover:text-white'
-            }`}
+            className={`px-2.5 py-1 rounded text-[8.5px] font-bold tracking-wider shrink-0 transition-all ${prompt === p ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300' : 'bg-black/20 border border-white/10 text-on-surface-variant/50 hover:text-white'
+              }`}
           >
             {p}
           </button>

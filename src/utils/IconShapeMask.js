@@ -12,8 +12,8 @@ const SHAPES = {
     borderRadius: '16%',
   },
   teardrop: {
-    clipPath: 'path("M 0.5 0 C 0.8 0, 1 0.2, 1 0.5 C 1 0.8, 0.8 1, 0.5 1 L 0.3 1 C 0 1, 0 0.7, 0 0.5 C 0 0.2, 0.2 0, 0.5 0 Z")',
-    borderRadius: '0',
+    clipPath: 'none',
+    borderRadius: '50% 50% 12% 50%',
   },
   system: {
     clipPath: 'none',
@@ -21,7 +21,7 @@ const SHAPES = {
   },
 }
 
-const NORMALIZATION_SIZES = {
+const _NORMALIZATION_SIZES = {
   adaptive: { padding: 0.1, targetRatio: 0.7 },
   normal: { padding: 0.15, targetRatio: 0.65 },
   small: { padding: 0.2, targetRatio: 0.6 },

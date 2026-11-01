@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import { getLS, getLSNum, getLSBool } from '../utils/storage'
+import { getLS } from '../utils/storage'
+import { setVaultPackages } from '../components/LauncherPlugin'
 
-export const useAppStore = create((set, get) => ({
+export const useAppStore = create((set) => ({
   activePage: 'home',
   setActivePage: (page) => set({ activePage: page }),
 
@@ -32,20 +33,20 @@ export const useAppStore = create((set, get) => ({
   setVaultTab: (v) => set({ vaultTab: v }),
   setLockedApps: (updater) => set((s) => {
     const next = typeof updater === 'function' ? updater(s.lockedApps) : updater
-    try { 
+    try {
       localStorage.setItem('iris_locked_apps', JSON.stringify(next))
-      import('../components/LauncherPlugin').then(m => m.setVaultPackages(next)).catch(() => {})
-    } catch {}
+      setVaultPackages(next).catch(() => { })
+    } catch { }
     return { lockedApps: next }
   }),
   toggleAppLock: (packageId) => set((s) => {
     const next = s.lockedApps.includes(packageId)
       ? s.lockedApps.filter(p => p !== packageId)
       : [...s.lockedApps, packageId]
-    try { 
+    try {
       localStorage.setItem('iris_locked_apps', JSON.stringify(next))
-      import('../components/LauncherPlugin').then(m => m.setVaultPackages(next)).catch(() => {})
-    } catch {}
+      setVaultPackages(next).catch(() => { })
+    } catch { }
     return { lockedApps: next }
   }),
 

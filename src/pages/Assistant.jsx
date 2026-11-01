@@ -14,16 +14,16 @@ import ChronoPinLock from '../components/ChronoPinLock'
 import { logNotification } from '../components/LauncherPlugin'
 
 export default function Assistant({
-  startVoiceInput, stopVoiceInput, speakText, stopSpeaking,
+  startVoiceInput, stopVoiceInput, speakText: _speakText, stopSpeaking,
   submitPrompt,
-  handleSaveLiveConfig, handleOpenLiveMode, handleExitLiveModeOnly, handleStopLiveModeCompletely,
+  handleSaveLiveConfig: _handleSaveLiveConfig, handleOpenLiveMode, handleExitLiveModeOnly, handleStopLiveModeCompletely,
   autoTriggerLive, setAutoTriggerLive,
   isAppActive,
   onNavigate
 }) {
   // Consume stores directly
   const { llmBackend, setLlmBackend, geminiKey, groqKey, voiceEnabled, setVoiceEnabled } = useAIStore()
-  const { chatLog, setChatLog, textPrompt, setTextPrompt, isListening, isSpeaking, isLiveVoice, isPrivateSession, activeUserTranscript, activeAiResponse, sessions, activeSessionId, createNewSession, loadSession, deleteSession, togglePrivate, setIsLiveVoice, setIsListening } = useAssistantStore()
+  const { chatLog, setChatLog, textPrompt, setTextPrompt, isListening, isSpeaking, isLiveVoice, isPrivateSession, activeUserTranscript, activeAiResponse, sessions, activeSessionId, createNewSession, loadSession, deleteSession, togglePrivate, setIsLiveVoice } = useAssistantStore()
   const { isAppActive: storeAppActive } = useAppStore()
 
   const _effectiveAppActive = isAppActive !== undefined ? isAppActive : storeAppActive
@@ -136,41 +136,41 @@ export default function Assistant({
       let res
       if (provider === 'GEMINI') res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } })
       else if (provider === 'GROQ') res = await fetch('https://api.groq.com/openai/v1/models', { headers: { 'Authorization': `Bearer ${key}` } })
-      else if (provider === 'NVIDIA') { 
-        try { 
+      else if (provider === 'NVIDIA') {
+        try {
           res = await fetch('https://integrate.api.nvidia.com/v1/models', { headers: { 'Authorization': `Bearer ${key}` } })
-          if (!res.ok) throw new Error() 
-        } catch (e) { 
+          if (!res.ok) throw new Error()
+        } catch (e) {
           setDynamicNvidiaModels(['meta/llama-3.1-70b-instruct', 'meta/llama-3.1-405b-instruct', 'google/gemma-2-27b-it'])
           logNotification('AUTH', 'NVIDIA CORS fallback. Key verified locally!', 'success')
           setTestingConnection(false)
-          return 
-        } 
+          return
+        }
       }
-      if (res && !res.ok) { 
+      if (res && !res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d?.error?.message || `HTTP ${res.status}`) 
+        throw new Error(d?.error?.message || `HTTP ${res.status}`)
       }
       logNotification('AUTH', `Connection Successful for ${provider}!`, 'success')
-    } catch (err) { 
+    } catch (err) {
       logNotification('AUTH', `Connection Failed: ${err.message}`, 'error')
-    } finally { 
-      setTestingConnection(false) 
+    } finally {
+      setTestingConnection(false)
     }
   }, [])
 
   const handleBiometricUnlock = useCallback(async () => {
-    try { 
-      const avail = await NativeBiometric.isAvailable(); 
-      if (avail.isAvailable) { 
-        await NativeBiometric.verifyIdentity({ reason: "Authenticate to decrypt Iris session", title: "Session Locked", subtitle: "Biometric Authentication Required" }); 
+    try {
+      const avail = await NativeBiometric.isAvailable();
+      if (avail.isAvailable) {
+        await NativeBiometric.verifyIdentity({ reason: "Authenticate to decrypt Iris session", title: "Session Locked", subtitle: "Biometric Authentication Required" });
         setChatUnlocked(true);
         logNotification('BIOMETRIC', 'Session Decrypted Successfully', 'success');
-      } else { 
+      } else {
         logNotification('BIOMETRIC', 'Biometric hardware unavailable. Please use PIN.', 'warning');
         setShowPinFallback(true);
-      } 
-    } catch (e) { 
+      }
+    } catch (e) {
       logNotification('BIOMETRIC', "Authentication failed: " + (e.message || e), 'error');
       setShowPinFallback(true);
     }
@@ -293,15 +293,15 @@ export default function Assistant({
                     <p className="text-[14px] font-sans text-white/60">How can I help you today?</p>
                   </div>
                 )}
-                
+
                 {chatLog.map((msg, index) => <ChatMessage key={msg.id || `msg-${index}`} msg={msg} index={index} chatUnlocked={chatUnlocked} onDelete={(i) => setChatLog(prev => prev.filter((_, idx) => idx !== i))} />)}
-                
+
                 {activeUserTranscript && <div className={`w-full flex justify-end mb-4 animate-pulse ${!chatUnlocked ? 'opacity-10 blur-md select-none' : ''}`}>
                   <div className="max-w-[85%] bg-[rgba(var(--primary-rgb),0.1)] border border-[rgba(var(--primary-rgb),0.2)] text-white px-4 py-2.5 rounded-2xl rounded-br-sm shadow-[0_0_15px_rgba(var(--primary-rgb),0.1)]">
                     <span className="break-words font-sans text-[13px] text-white/70">{activeUserTranscript}</span>
                   </div>
                 </div>}
-                
+
                 {activeAiResponse && <div className={`w-full flex justify-start mb-4 animate-pulse ${!chatUnlocked ? 'opacity-10 blur-md select-none' : ''}`}>
                   <div className="flex items-end gap-2 max-w-[85%]">
                     <div className="w-6 h-6 rounded-full bg-[rgba(var(--primary-rgb),0.2)] border border-[rgba(var(--primary-rgb),0.3)] flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(var(--primary-rgb),0.2)]"><span className="material-symbols-outlined text-[14px] text-[var(--primary-color)]">smart_toy</span></div>
@@ -320,11 +320,11 @@ export default function Assistant({
                 {isLiveVoice ? (
                   <div className="flex items-center gap-2 p-1">
                     {isSpeaking && <div className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[11px] font-bold text-center animate-pulse tracking-widest">SPEAKING</div>}
-                    <button onClick={() => { try { handleExitLiveModeOnly() } catch(e) { console.warn(e); setIsLiveVoice(false) } }} className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 font-bold text-[10px] tracking-widest transition-all">EXIT</button>
-                    <button onClick={() => { try { isListening ? stopVoiceInput() : startVoiceInput() } catch(e) { console.warn(e) } }} className={`flex-1 py-2 rounded-xl font-bold text-[10px] tracking-widest transition-all ${isListening ? 'bg-[rgba(var(--primary-rgb),0.2)] text-[var(--primary-color)] shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)] animate-pulse' : 'bg-white/5 hover:bg-white/10 text-white'}`}>
+                    <button onClick={() => { try { handleExitLiveModeOnly() } catch (e) { console.warn(e); setIsLiveVoice(false) } }} className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 font-bold text-[10px] tracking-widest transition-all">EXIT</button>
+                    <button onClick={() => { try { isListening ? stopVoiceInput() : startVoiceInput() } catch (e) { console.warn(e) } }} className={`flex-1 py-2 rounded-xl font-bold text-[10px] tracking-widest transition-all ${isListening ? 'bg-[rgba(var(--primary-rgb),0.2)] text-[var(--primary-color)] shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)] animate-pulse' : 'bg-white/5 hover:bg-white/10 text-white'}`}>
                       {isListening ? 'PAUSE' : 'LISTEN'}
                     </button>
-                    <button onClick={() => { try { handleStopLiveModeCompletely() } catch(e) { console.warn(e); setIsLiveVoice(false); setChatLog(p => p.filter(i => !i.loading)) } }} className="flex-1 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 font-bold text-[10px] tracking-widest transition-all">STOP</button>
+                    <button onClick={() => { try { handleStopLiveModeCompletely() } catch (e) { console.warn(e); setIsLiveVoice(false); setChatLog(p => p.filter(i => !i.loading)) } }} className="flex-1 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 font-bold text-[10px] tracking-widest transition-all">STOP</button>
                   </div>
                 ) : (
                   <form onSubmit={handleInputSubmit} className="flex gap-2 items-center">
@@ -334,13 +334,13 @@ export default function Assistant({
                     <button type="button" onClick={togglePrivate} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${isPrivateSession ? 'text-red-400 bg-red-500/10' : 'text-white/40 hover:text-white/80 hover:bg-white/5'}`} title="Private Mode">
                       <span className="material-symbols-outlined text-[18px]">{isPrivateSession ? 'lock' : 'lock_open'}</span>
                     </button>
-                    
+
                     <input type="text" value={textPrompt} onChange={e => setTextPrompt(e.target.value)} placeholder="Message IRIS..." className="flex-1 bg-transparent px-2 py-3 text-[14px] text-white placeholder:text-white/30 focus:outline-none focus:ring-0 focus:border-transparent border-none font-sans" disabled={isListening} />
-                    
+
                     <button type="button" onClick={isSpeaking ? stopSpeaking : (isListening ? stopVoiceInput : startVoiceInput)} className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isSpeaking ? 'bg-red-500/20 text-red-400 animate-pulse' : isListening ? 'bg-[var(--primary-color)] text-[#020617] animate-pulse shadow-[0_0_20px_rgba(var(--primary-rgb),0.4)]' : 'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                       <span className="material-symbols-outlined text-[18px]">{isSpeaking ? 'skip_next' : isListening ? 'mic_off' : 'mic'}</span>
                     </button>
-                    
+
                     <button type="submit" disabled={!textPrompt.trim()} className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${textPrompt.trim() ? 'bg-[var(--primary-color)] text-[#020617] hover:scale-105 shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]' : 'bg-white/5 text-white/20'}`}>
                       <span className="material-symbols-outlined text-[18px]">arrow_upward</span>
                     </button>

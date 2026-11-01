@@ -48,7 +48,7 @@ function getGestureAction(gestureId) {
   return entry
 }
 
-export default function useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp, drawerSheetRef }) {
+export default function useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp, drawerSheetRef, mainRef }) {
   const touchStartX = useRef(null)
   const touchStartY = useRef(null)
   const touchEndX = useRef(null)
@@ -57,9 +57,15 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   const touchCountRef = useRef(1)
   const initialPinchDistRef = useRef(0)
   const currentPinchDistRef = useRef(0)
+  const rafRef = useRef(null)
+  const swipeUpActiveRef = useRef(false)
 
   useEffect(() => {
     return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
       if (doubleTapTimerRef) {
         clearTimeout(doubleTapTimerRef)
         doubleTapTimerRef = null
@@ -179,20 +185,23 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
       // Interactive 1:1 finger tracking when swiping up on Home (only if swipe_up is assigned to open_drawer)
       if (activePage === 'home' && drawerSheetRef?.current) {
-        const swipeUpGesture = getGestureAction('swipe_up')
-        if (swipeUpGesture?.action === 'open_drawer') {
+        if (!swipeUpActiveRef.current) {
+          const swipeUpGesture = getGestureAction('swipe_up')
+          swipeUpActiveRef.current = swipeUpGesture?.action === 'open_drawer'
+        }
+        if (swipeUpActiveRef.current) {
           const deltaY = touchEndY.current - touchStartY.current
-          if (deltaY < -10 && dx < Math.abs(deltaY) * 1.5) {
-            const vh = window.innerHeight || 800
-            const currentTranslate = Math.max(0, vh + deltaY)
-            drawerSheetRef.current.style.transition = 'none'
-            drawerSheetRef.current.style.transform = `translate3d(0, ${currentTranslate}px, 0)`
-            drawerSheetRef.current.style.pointerEvents = 'auto'
-            const mainEl = document.querySelector('main')
-            if (mainEl) {
-              const progress = Math.min(1, Math.max(0, -deltaY / (vh * 0.4)))
-              mainEl.style.opacity = `${(1 - progress).toFixed(2)}`
-            }
+          if (deltaY < -8 && dx < Math.abs(deltaY) * 1.5) {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current)
+            rafRef.current = requestAnimationFrame(() => {
+              const sheetEl = drawerSheetRef.current
+              if (!sheetEl) return
+              const vh = window.innerHeight || 800
+              const currentTranslate = Math.max(0, vh + deltaY)
+              sheetEl.style.transition = 'none'
+              sheetEl.style.transform = `translate3d(0, ${currentTranslate}px, 0)`
+              sheetEl.style.pointerEvents = 'auto'
+            })
           }
         }
       }
@@ -207,6 +216,8 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    swipeUpActiveRef.current = false
 
     if (isOverlayActive()) {
       touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
@@ -225,31 +236,29 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     if (activePage === 'home' && drawerSheetRef?.current && touchStartY.current !== null && touchEndY.current !== null) {
       const swipeUpGesture = getGestureAction('swipe_up')
       if (swipeUpGesture?.action === 'open_drawer') {
-        if (deltaY < -15 && absDeltaX < Math.abs(deltaY) * 1.5) {
+        if (deltaY < -10 && absDeltaX < Math.abs(deltaY) * 1.5) {
           const velocity = Math.abs(deltaY) / Math.max(1, duration)
-          if (deltaY < -80 || (velocity > 0.35 && deltaY < -30)) {
+          const curve = 'cubic-bezier(0.22, 1, 0.36, 1)'
+          if (deltaY < -65 || (velocity > 0.3 && deltaY < -24)) {
             HapticFeedback.light()
-            drawerSheetRef.current.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+            drawerSheetRef.current.style.transition = `transform 200ms ${curve}`
             drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
-            const mainEl = document.querySelector('main')
-            if (mainEl) {
-              mainEl.style.transition = 'opacity 260ms cubic-bezier(0.16, 1, 0.3, 1)'
-              mainEl.style.opacity = '0'
-              mainEl.style.pointerEvents = 'none'
+            drawerSheetRef.current.style.pointerEvents = 'auto'
+            if (mainRef?.current) {
+              mainRef.current.style.transition = `opacity 180ms ${curve}`
+              mainRef.current.style.opacity = '0'
+              mainRef.current.style.pointerEvents = 'none'
             }
-            setActivePage('drawer')
+            setTimeout(() => setActivePage('drawer'), 200)
             touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
             initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
             return
           } else {
-            drawerSheetRef.current.style.transition = 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)'
+            drawerSheetRef.current.style.transition = `transform 180ms ${curve}`
             drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
             drawerSheetRef.current.style.pointerEvents = 'none'
-            const mainEl = document.querySelector('main')
-            if (mainEl) {
-              mainEl.style.transition = 'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1)'
-              mainEl.style.opacity = '1'
-              mainEl.style.pointerEvents = 'auto'
+            if (mainRef?.current) {
+              mainRef.current.style.pointerEvents = 'auto'
             }
           }
         }
@@ -286,7 +295,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
     touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
     initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
-  }, [activePage, setActivePage, detectGesture, executeAction, drawerSheetRef])
+  }, [activePage, setActivePage, detectGesture, executeAction, drawerSheetRef, mainRef])
 
   return { handleTouchStart, handleTouchMove, handleTouchEnd }
 }

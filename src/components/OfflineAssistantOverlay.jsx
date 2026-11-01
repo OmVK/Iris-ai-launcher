@@ -6,10 +6,11 @@ import useOfflineDispatch from '../hooks/useOfflineDispatch'
 import useOfflineAssistantCommand from '../hooks/useOfflineAssistantCommand'
 import AssistantStatusPanel from './AssistantStatusPanel'
 import { useAssistantStore } from '../stores/assistantStore'
+import { checkAndRequestPermission } from './LauncherPlugin'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
-export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, appsList, onStateChange, isAppActive = true }) {
+export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _onOpen, appsList, onStateChange, isAppActive = true }) {
   const [statusText, setStatusText] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isListening, setIsListening] = useState(false)
@@ -32,7 +33,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
     }
   }, [isVisible, setIsStoreListening])
 
-  const { speakTextNative, stopSpeakingNative, canvasRef, activeAudioRef, ttsResolvers } = useOfflineTTS({ isVisible, isAppActive, speechInterruptRef })
+  const { speakTextNative, stopSpeakingNative } = useOfflineTTS({ isVisible, isAppActive, speechInterruptRef })
 
   // Keep ref in sync with state for use in finally blocks
   useEffect(() => { pendingContextRef.current = pendingContext }, [pendingContext])
@@ -103,9 +104,12 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
     })
 
     return () => {
-      const removeStatus = typeof statusListener?.then === 'function' ? statusListener.then(l => l.remove()) : statusListener?.remove?.()
-      const removePartial = typeof partialListener?.then === 'function' ? partialListener.then(l => l.remove()) : partialListener?.remove?.()
+      if (typeof statusListener?.then === 'function') statusListener.then(l => l.remove())
+      else statusListener?.remove?.()
+      if (typeof partialListener?.then === 'function') partialListener.then(l => l.remove())
+      else partialListener?.remove?.()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible])
 
   useEffect(() => {
@@ -193,7 +197,6 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen, ap
       } catch (_) {}
       
       try {
-        const { checkAndRequestPermission } = await import('./LauncherPlugin')
         const micStatus = await checkAndRequestPermission('RECORD_AUDIO')
         if (micStatus && !micStatus.granted && micStatus.sdkRequired) {
           setStatusText('Microphone access required')

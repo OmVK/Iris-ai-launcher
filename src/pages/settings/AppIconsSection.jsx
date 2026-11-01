@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import SettingsSection from './SettingsSection'
-import { getInstalledIconPacks, loadIconPackFilter } from '../../components/LauncherPlugin'
+import { getInstalledIconPacks, loadIconPackFilter, getInstalledApps } from '../../components/LauncherPlugin'
 import { useAppsStore } from '../../stores/appsStore'
 
 const DEFAULT_APP_ICONS = {}
@@ -30,7 +30,6 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
     localStorage.setItem('iris_active_icon_pack', packPkg)
 
     if (packPkg === 'DEFAULT') {
-      const { getInstalledApps } = await import('../../components/LauncherPlugin')
       const nativeApps = await getInstalledApps()
       if (nativeApps && nativeApps.length > 0) {
         useAppsStore.getState().setInstalledApps(nativeApps)

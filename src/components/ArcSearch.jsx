@@ -257,7 +257,7 @@ function ArcFavoriteFolder({ installedApps = [], onLaunchApp, onClose, globalIco
   }
 
   return (
-    <div className="glass-surface rounded-2xl border border-primary-fixed/25 overflow-hidden transition-all shadow-xl bg-black/60 backdrop-blur-md">
+    <div className="rounded-2xl border border-primary-fixed/25 overflow-hidden shadow-xl bg-[#0a0e1a]/95">
       {/* Folder Header - Tapping anywhere toggles expand / collapse */}
       <div 
         onClick={() => setIsFolderOpen(!isFolderOpen)}
@@ -351,7 +351,7 @@ function ArcFavoriteFolder({ installedApps = [], onLaunchApp, onClose, globalIco
             title={isFolderOpen ? 'Collapse Folder' : 'Pull Down Favorite Apps'}
           >
             <span 
-              className="material-symbols-outlined text-lg transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]" 
+              className="material-symbols-outlined text-lg transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]" 
               style={{ transform: isFolderOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
             >
               expand_more
@@ -360,17 +360,17 @@ function ArcFavoriteFolder({ installedApps = [], onLaunchApp, onClose, globalIco
         </div>
       </div>
 
-      {/* Folder Apps Grid - Animated Pull Down Drawer with Slow Smooth Effect */}
+      {/* Folder Apps Grid - Hardware-Accelerated Grid Row Transition */}
       <div 
-        className="overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className="grid transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
         style={{ 
-          maxHeight: isFolderOpen ? '600px' : '0px',
+          gridTemplateRows: isFolderOpen ? '1fr' : '0fr',
           opacity: isFolderOpen ? 1 : 0,
-          transform: isFolderOpen ? 'translateY(0)' : 'translateY(-8px)',
           pointerEvents: isFolderOpen ? 'auto' : 'none'
         }}
       >
-        <div className="p-3.5 border-t border-white/10 bg-black/50">
+        <div className="overflow-hidden min-h-0">
+        <div className="p-3.5 border-t border-white/10 bg-black/40">
             {favoriteApps.length === 0 ? (
               <div 
                 onClick={() => setIsPickerOpen(true)}
@@ -438,6 +438,7 @@ function ArcFavoriteFolder({ installedApps = [], onLaunchApp, onClose, globalIco
               </div>
             )}
           </div>
+        </div>
         </div>
 
       {/* App Picker Modal */}
@@ -560,17 +561,30 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
     onNavigate: handleNavigate
   })
 
+  const [visible, setVisible] = useState(false)
+  const [animIn, setAnimIn] = useState(false)
+
   useEffect(() => {
     if (isOpen) {
       mountTime.current = Date.now()
-      setTimeout(() => inputRef.current?.focus(), 100)
-    } else {
-      clearSearch()
+      setVisible(true)
+      const raf = requestAnimationFrame(() => {
+        setAnimIn(true)
+        inputRef.current?.focus({ preventScroll: true })
+      })
+      return () => cancelAnimationFrame(raf)
+    } else if (visible) {
+      setAnimIn(false)
+      const t = setTimeout(() => {
+        setVisible(false)
+        clearSearch()
+      }, 160)
+      return () => clearTimeout(t)
     }
-  }, [isOpen, clearSearch])
+  }, [isOpen, visible, clearSearch])
 
   const safeClose = () => {
-    if (Date.now() - mountTime.current > 300) onClose()
+    if (Date.now() - mountTime.current > 180) onClose()
   }
 
   const handleResultClick = (result) => {
@@ -626,7 +640,7 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
     return 'Search apps, settings, contacts, or units...'
   }, [activeSource, query])
 
-  if (!isOpen) return null
+  if (!visible) return null
 
   return (
     <div 
@@ -634,17 +648,21 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
       onTouchStart={e => e.stopPropagation()}
       onTouchMove={e => e.stopPropagation()}
       onTouchEnd={e => e.stopPropagation()}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-fade-in select-none"
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-black/55 backdrop-blur-sm select-none transition-opacity duration-150 ${animIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
     >
       <div className="absolute inset-0" onClick={safeClose} />
 
       <div 
         onClick={e => e.stopPropagation()}
-        className="w-full max-w-2xl relative z-10 flex flex-col gap-3 animate-slide-up max-h-[90vh] overflow-y-auto scroll-container"
+        style={{
+          transform: animIn ? 'translate3d(0, 0, 0) scale(1)' : 'translate3d(0, 14px, 0) scale(0.97)',
+          willChange: 'transform, opacity'
+        }}
+        className="w-full max-w-2xl relative z-10 flex flex-col gap-3 transition-[transform,opacity] duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] max-h-[90vh] overflow-y-auto scroll-container"
       >
         {/* Search Header Bar */}
         <div className="flex flex-col gap-2">
-          <div className="glass-surface rounded-2xl p-2 flex items-center shadow-lg border border-primary-fixed/20">
+          <div className="bg-[#0a0e1a]/95 rounded-2xl p-2 flex items-center shadow-lg border border-primary-fixed/25">
             <span className="material-symbols-outlined text-primary-fixed px-3">search</span>
             <input
               ref={inputRef}
@@ -806,7 +824,7 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
             {calculatorResult && (
               <button
                 onClick={() => { navigator.clipboard?.writeText(String(calculatorResult.result)); onClose() }}
-                className="bg-[#0a0e17]/80 backdrop-blur-xl border border-green-400/30 rounded-2xl p-4 shadow-[0_0_20px_rgba(0,255,0,0.1)] text-left hover:bg-green-400/10 transition-colors"
+                className="bg-[#0a0e1a]/95 border border-green-400/30 rounded-2xl p-4 shadow-[0_0_20px_rgba(0,255,0,0.1)] text-left hover:bg-green-400/10 transition-colors"
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-green-400 text-sm">calculate</span>
@@ -820,7 +838,7 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
             {unitResult && (
               <button
                 onClick={() => { navigator.clipboard?.writeText(`${unitResult.result} ${unitResult.toUnit}`); onClose() }}
-                className="bg-[#0a0e17]/80 backdrop-blur-xl border border-purple-400/30 rounded-2xl p-4 shadow-[0_0_20px_rgba(128,0,255,0.1)] text-left hover:bg-purple-400/10 transition-colors"
+                className="bg-[#0a0e1a]/95 border border-purple-400/30 rounded-2xl p-4 shadow-[0_0_20px_rgba(128,0,255,0.1)] text-left hover:bg-purple-400/10 transition-colors"
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-purple-400 text-sm">straighten</span>
@@ -834,7 +852,7 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
         )}
 
         {results.length > 0 && (
-          <div className="glass-surface border border-primary-fixed/20 rounded-2xl overflow-hidden flex flex-col shadow-lg max-h-[50vh] overflow-y-auto">
+          <div className="bg-[#0a0e1a]/95 border border-primary-fixed/20 rounded-2xl overflow-hidden flex flex-col shadow-lg max-h-[50vh] overflow-y-auto">
             {results.map((res, i) => (
               res.type === 'contact' ? (
                 <div key={res.id || i} className="flex items-center justify-between p-4 transition-colors border-b border-white/5 last:border-b-0 hover:bg-white/5 group">

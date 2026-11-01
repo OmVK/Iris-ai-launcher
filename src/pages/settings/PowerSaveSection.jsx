@@ -31,10 +31,10 @@ export default function PowerSaveSection({ expandedSections, toggleSection, powe
         <p className="text-[9px] text-on-surface-variant/60 uppercase">ACTIVE PRESET</p>
         <div className="grid grid-cols-2 gap-2 text-[8px]">
           {[
-            ['3D Orb', 'orb'], ['Wallpaper', 'wallpaper'], ['Particles', 'particles'], ['Blur/Effects', 'blur'],
+            ['Wallpaper', 'useWallpaper'], ['Particles', 'particleCanvas'], ['Blur/Effects', 'backdropBlur'],
             ['Polling', null, () => `${PowerSaveManager.getPollingMultiplier()}x`],
             ['Icon Size', null, () => `${PowerSaveManager.getIconSizeMultiplier()}x`],
-            ['Transitions', 'transitions']
+            ['Transitions', 'pageTransitions']
           ].map(([label, feature, getter]) => (
             <div key={label} className="flex justify-between">
               <span className="text-on-surface-variant/40">{label}:</span>

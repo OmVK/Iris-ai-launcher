@@ -9,7 +9,7 @@ const COLOR_MAP = {
   red: ['255, 23, 68', '#ff1744', '#ff4d6a'],
 }
 
-export default function useThemeVars({ themeColor, glassOpacity }) {
+export default function useThemeVars({ themeColor, glassOpacity, darkGlassTheme }) {
   useEffect(() => {
     const [rgb, hex, hexSec] = COLOR_MAP[themeColor] || COLOR_MAP.cyan
     document.documentElement.style.setProperty('--primary-rgb', rgb)
@@ -20,6 +20,12 @@ export default function useThemeVars({ themeColor, glassOpacity }) {
   useEffect(() => {
     document.documentElement.style.setProperty('--glass-opacity', glassOpacity / 100)
   }, [glassOpacity])
+
+  useEffect(() => {
+    if (darkGlassTheme !== undefined) {
+      document.body.classList.toggle('dark-glass-theme', !!darkGlassTheme)
+    }
+  }, [darkGlassTheme])
 
   useEffect(() => {
     document.body.style.backgroundColor = '#020617'

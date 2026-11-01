@@ -39,7 +39,7 @@ export default function ZeroScreen({ onNavigate, isAppActive }) {
   useEffect(() => {
     if (!isAppActive) return
     refreshAll()
-  }, [isAppActive])
+  }, [isAppActive, refreshAll])
 
   const handleTouchStart = useCallback((e) => {
     e.currentTarget._startY = e.touches[0].clientY

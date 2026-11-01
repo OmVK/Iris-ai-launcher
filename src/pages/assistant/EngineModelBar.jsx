@@ -1,10 +1,10 @@
 import ProviderBadge from '../../components/ProviderBadge'
 import { logNotification } from '../../components/LauncherPlugin'
 
-export default function EngineModelBar({ activeBackend, onSetBackend, selectedOllamaModel, onSetOllamaModel, ollamaModels, ollamaStatus, activeGeminiModel, onSetGeminiModel, dynamicGeminiModels, activeGroqModel, onSetGroqModel, dynamicGroqModels, activeNvidiaModel, onSetNvidiaModel, dynamicNvidiaModels, onFetchOllamaModels, onNewChat, backendStatus }) {
+export default function EngineModelBar({ activeBackend, onSetBackend, selectedOllamaModel, onSetOllamaModel, ollamaModels, ollamaStatus, activeGeminiModel, onSetGeminiModel, dynamicGeminiModels, activeGroqModel, onSetGroqModel, dynamicGroqModels, activeNvidiaModel, onSetNvidiaModel, dynamicNvidiaModels, onFetchOllamaModels, onNewChat, backendStatus: _backendStatus }) {
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-black/20 backdrop-blur-xl border border-white/10 rounded-full shadow-lg">
-      
+
       <div className="flex items-center bg-white/5 rounded-full px-2 py-1">
         <ProviderBadge backend={activeBackend} showLabel={false} />
         <select value={activeBackend} onChange={e => { onSetBackend(e.target.value); if (e.target.value === 'OLLAMA') onFetchOllamaModels() }}

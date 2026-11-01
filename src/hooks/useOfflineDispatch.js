@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { registerPlugin } from '@capacitor/core'
-import { launchApp, getInstalledApps } from '../components/LauncherPlugin'
+import { launchApp, getInstalledApps, checkAndRequestPermission } from '../components/LauncherPlugin'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
@@ -146,24 +146,23 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
 
           let pkg = match ? match.packageId : params.app
           if (action === 'uninstall') {
-            try { await LauncherPlugin.uninstallApp({ packageId: pkg }) } catch (_) {}
+            try { await LauncherPlugin.uninstallApp({ packageId: pkg }) } catch (_) { }
           } else {
-            try { await LauncherPlugin.openAppInfo({ packageId: pkg }) } catch (_) {}
+            try { await LauncherPlugin.openAppInfo({ packageId: pkg }) } catch (_) { }
           }
           return { close: true }
         }
         case 'call': {
           let number = params.name
-          let contactName = params.name
+          let _contactName = params.name
           try {
             try {
-              const { checkAndRequestPermission } = await import('../components/LauncherPlugin')
               await checkAndRequestPermission('READ_CONTACTS')
-            } catch (_) {}
+            } catch (_) { }
             const contact = await LauncherPlugin.lookupContact({ name: params.name })
             if (contact?.number) {
               number = contact.number
-              contactName = contact.name || params.name
+              _contactName = contact.name || params.name
             }
           } catch (_) {
             try {
@@ -178,7 +177,7 @@ export default function useOfflineDispatch({ appsListRef, pendingSuggestionsRef 
                   keepListening: true
                 }
               }
-            } catch (_) {}
+            } catch (_) { }
             const isNumber = /^[\d\s+\-()]+$/.test(params.name)
             if (!isNumber) {
               return { error: `I couldn't find a contact named "${params.name}".` }
