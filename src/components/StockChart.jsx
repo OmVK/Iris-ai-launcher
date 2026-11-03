@@ -152,7 +152,7 @@ const StockChart = memo(function StockChart() {
           onTouchStart={handleTouchScrub}
           onTouchMove={handleTouchScrub}
           onTouchEnd={() => setHoverIndex(null)}
-          className="relative w-full max-w-[340px] aspect-[320/110] overflow-hidden"
+          className="relative w-full aspect-[320/110] overflow-hidden"
         >
           <svg viewBox="0 0 320 110" className="w-full h-full overflow-hidden" preserveAspectRatio="none">
             <line x1="0" y1="25" x2={chartWidth} y2="25" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />

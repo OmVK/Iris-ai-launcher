@@ -2,6 +2,16 @@ import React, { useState, useRef, useCallback } from 'react'
 import HapticFeedback from '../../utils/HapticFeedback'
 import WidgetContextMenuModal from './WidgetContextMenuModal'
 
+function getSpanTag(span) {
+  if (!span || span === 'col-span-1' || (!span.includes('col-span-2') && !span.includes('col-span-3'))) {
+    return '1C'
+  }
+  if (span.includes('col-span-2') && !span.includes('col-span-3')) {
+    return '2C'
+  }
+  return 'FULL'
+}
+
 export default function WidgetCardWrapper({
   id,
   index,
@@ -146,8 +156,7 @@ export default function WidgetCardWrapper({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onDragEnd={handleDragEnd}
-      style={showMenu ? undefined : { contain: 'layout style' }}
-      className={`relative transition-transform duration-200 ${currentSpan} ${
+      className={`relative transition-transform duration-200 flex flex-col ${currentSpan} ${
         isBeingDragged ? 'opacity-40 scale-[0.98] ring-2 ring-primary-fixed-dim/80 rounded-2xl' : ''
       } ${
         isTargetOfDrag ? 'ring-2 ring-primary-fixed-dim bg-primary-fixed-dim/10 scale-[1.01] rounded-2xl' : ''
@@ -215,7 +224,7 @@ export default function WidgetCardWrapper({
               title="Cycle Width"
             >
               <span className="material-symbols-outlined text-xs">aspect_ratio</span>
-              <span>{currentSpan === 'col-span-1' ? '1C' : currentSpan === 'col-span-2' ? '2C' : 'FULL'}</span>
+              <span>{getSpanTag(currentSpan)}</span>
             </button>
 
             <button
@@ -272,7 +281,7 @@ export default function WidgetCardWrapper({
           </span>
         </div>
       ) : (
-        <div className="relative w-full h-full">{children}</div>
+        <div className="relative w-full flex-1 flex flex-col">{children}</div>
       )}
 
       {/* Contextual Anchored Modal */}

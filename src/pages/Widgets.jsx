@@ -362,9 +362,13 @@ export default function Widgets() {
     setWidgetSpans((prev) => {
       const current = prev[id] || DEFAULT_SPANS[id] || 'col-span-1'
       let nextSpan = 'col-span-1'
-      if (current === 'col-span-1') nextSpan = 'col-span-1 md:col-span-2'
-      else if (current === 'col-span-1 md:col-span-2') nextSpan = 'col-span-1 md:col-span-3'
-      else nextSpan = 'col-span-1'
+      if (!current || current === 'col-span-1' || (!current.includes('col-span-2') && !current.includes('col-span-3'))) {
+        nextSpan = 'col-span-1 md:col-span-2'
+      } else if (current.includes('col-span-2') && !current.includes('col-span-3')) {
+        nextSpan = 'col-span-1 md:col-span-3'
+      } else {
+        nextSpan = 'col-span-1'
+      }
       return { ...prev, [id]: nextSpan }
     })
   }, [])
@@ -581,7 +585,7 @@ export default function Widgets() {
   }, [saveTasks])
 
   return (
-    <main className="h-screen pt-14 pb-28 px-4 max-w-6xl mx-auto overflow-y-auto scroll-container space-y-4">
+    <div className="flex-1 min-h-0 w-full overflow-y-auto scroll-container pt-14 pb-32 px-4 max-w-6xl mx-auto space-y-4">
       <div className="pt-2">
         <WidgetConfig
           activeWidgetIds={activeWidgetIds}
@@ -615,7 +619,7 @@ export default function Widgets() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch pb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch w-full pb-8">
         {activeWidgetIds.map((id, index) => {
           const meta = getWidgetMeta(id, customWidgets)
           const isSpacer = id.startsWith('spacer_')
@@ -698,6 +702,6 @@ export default function Widgets() {
       </div>
 
       <audio ref={audioRef} preload="none" loop />
-    </main>
+    </div>
   )
 }

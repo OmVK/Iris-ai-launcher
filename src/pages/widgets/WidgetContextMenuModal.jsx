@@ -2,6 +2,16 @@ import React, { useEffect } from 'react'
 import HapticFeedback from '../../utils/HapticFeedback'
 import { setContextMenuOpen } from '../../hooks/useAppGestures'
 
+function getSpanDescription(span) {
+  if (!span || span === 'col-span-1' || (!span.includes('col-span-2') && !span.includes('col-span-3'))) {
+    return '1 Column'
+  }
+  if (span.includes('col-span-2') && !span.includes('col-span-3')) {
+    return '2 Columns'
+  }
+  return 'Full Width'
+}
+
 export default function WidgetContextMenuModal({
   isOpen,
   style,
@@ -43,7 +53,7 @@ export default function WidgetContextMenuModal({
 
     return () => {
       setContextMenuOpen(false)
-      scrollContainers.forEach((el) => {
+      document.querySelectorAll('.scroll-container').forEach((el) => {
         el.style.overflow = ''
         el.style.touchAction = ''
       })
@@ -172,7 +182,7 @@ export default function WidgetContextMenuModal({
           >
             <span className="material-symbols-outlined text-base">aspect_ratio</span>
             <span>
-              Resize ({currentSpan === 'col-span-1' ? '1 Column' : currentSpan === 'col-span-2' ? '2 Columns' : 'Full Width'})
+              Resize ({getSpanDescription(currentSpan)})
             </span>
           </button>
 
