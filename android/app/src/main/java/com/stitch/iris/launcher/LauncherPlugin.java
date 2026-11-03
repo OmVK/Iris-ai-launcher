@@ -228,8 +228,6 @@ public class LauncherPlugin extends Plugin {
         if (instance != null && posted != null) {
             try {
                 JSObject data = new JSObject(posted.toString());
-                org.json.JSONArray archive = IrisNotificationListenerService.getArchivedNotificationsJson(instance.getContext());
-                data.put("archivedNotifications", new com.getcapacitor.JSArray(archive.toString()));
                 instance.notifyListeners("onNotificationPosted", data);
             } catch (Exception e) {
                 Log.e(TAG, "Failed to emit onNotificationPosted", e);
@@ -240,7 +238,7 @@ public class LauncherPlugin extends Plugin {
     public static void onNotificationChanged() {
         if (instance != null) {
             try {
-                // Compute badge counts per package
+                // Compute badge counts per package lightweightly
                 IrisNotificationListenerService nls = IrisNotificationListenerService.getInstance();
                 JSObject data = new JSObject();
                 if (nls != null) {
@@ -258,10 +256,7 @@ public class LauncherPlugin extends Plugin {
                     }
                     data.put("badgeCounts", badgeCounts);
                     data.put("totalUnread", totalUnread);
-                    data.put("notifications", new com.getcapacitor.JSArray(notifications.toString()));
                 }
-                org.json.JSONArray archive = IrisNotificationListenerService.getArchivedNotificationsJson(instance.getContext());
-                data.put("archivedNotifications", new com.getcapacitor.JSArray(archive.toString()));
                 instance.notifyListeners("onNotificationUpdated", data);
             } catch (Exception e) {
                 instance.notifyListeners("onNotificationUpdated", new JSObject());

@@ -3,6 +3,8 @@ import { getAppTheme } from '../utils/notificationColor'
 import { clearArchivedNotifications, deleteArchivedNotification } from '../components/LauncherPlugin'
 
 const STORAGE_KEY = 'iris_notification_history'
+const CLEARED_AT_KEY = 'iris_notif_cleared_at'
+const DELETED_SIGS_KEY = 'iris_notif_deleted_sigs'
 const MAX_HISTORY = 100
 
 function loadSavedHistory() {
@@ -14,6 +16,33 @@ function loadSavedHistory() {
     }
   } catch {}
   return []
+}
+
+function getClearedAt() {
+  try {
+    return parseInt(localStorage.getItem(CLEARED_AT_KEY) || '0', 10) || 0
+  } catch {
+    return 0
+  }
+}
+
+function getDeletedSigs() {
+  try {
+    const raw = localStorage.getItem(DELETED_SIGS_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(arr) ? arr : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function addDeletedSig(sig) {
+  try {
+    const set = getDeletedSigs()
+    set.add(sig)
+    const arr = Array.from(set).slice(-200)
+    localStorage.setItem(DELETED_SIGS_KEY, JSON.stringify(arr))
+  } catch {}
 }
 
 function isDeletedMessageText(text) {
@@ -48,6 +77,7 @@ function formatRecord(notif, installedApps = []) {
     time: notif.time || dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     date: notif.date || dt.toLocaleDateString([], { month: 'short', day: 'numeric' }),
     timestamp: ts,
+    postTime: notif.postTime || ts,
     color: theme.color,
     glow: theme.glow,
     icon: theme.icon,
@@ -66,6 +96,8 @@ export const useNotificationStore = create((set, get) => ({
   syncNativeArchive: (nativeList, installedApps = []) => {
     if (!Array.isArray(nativeList) || nativeList.length === 0) return
 
+    const clearedAt = getClearedAt()
+    const deletedSigs = getDeletedSigs()
     const existing = get().history
     const bySignature = new Map()
 
@@ -83,6 +115,11 @@ export const useNotificationStore = create((set, get) => ({
       const text = raw.text || ''
       if (!pkg && !title && !text) continue
 
+      const itemTs = Math.max(raw.timestamp || 0, raw.postTime || 0)
+      if (clearedAt > 0 && itemTs > 0 && itemTs <= clearedAt) {
+        continue
+      }
+
       if (isDeletedMessageText(text)) {
         const matchIdx = merged.findIndex(
           m => m.packageId === pkg && (!title || m.title === title || m.title.includes(title) || title.includes(m.title))
@@ -95,6 +132,8 @@ export const useNotificationStore = create((set, get) => ({
       }
 
       const sig = `${pkg}|${title}|${text}`
+      if (deletedSigs.has(sig)) continue
+
       const found = bySignature.get(sig)
       if (found) {
         if ((raw.deletedBySender && !found.deletedBySender) || (raw.dismissedFromSystem && !found.dismissedFromSystem)) {
@@ -138,7 +177,6 @@ export const useNotificationStore = create((set, get) => ({
     const existing = get().history
     const now = Date.now()
 
-    // If sender deleted message ("This message was deleted"), preserve original message and flag it!
     if (isDeletedMessageText(text)) {
       const matchIdx = existing.findIndex(
         item => item.packageId === pkg && (!title || item.title === title || item.title.includes(title) || title.includes(item.title))
@@ -154,7 +192,6 @@ export const useNotificationStore = create((set, get) => ({
       }
     }
 
-    // Deduplicate against recent 25 notifications so active bar refreshes never duplicate
     const duplicateIdx = existing.slice(0, 25).findIndex(
       item => item.packageId === pkg && item.title === title && item.text === text && Math.abs(now - (item.timestamp || 0)) < 60000
     )
@@ -188,7 +225,7 @@ export const useNotificationStore = create((set, get) => ({
       activeNotificationTimer = setTimeout(() => {
         set({ activeNotification: null, activeGlow: null })
         activeNotificationTimer = null
-      }, 6000)
+      }, 4500)
     } else {
       set({ history: updated })
     }
@@ -203,20 +240,36 @@ export const useNotificationStore = create((set, get) => ({
   },
 
   deleteHistoryItem: (id) => {
-    const next = get().history.filter(item => item.id !== id)
+    const current = get().history
+    const target = current.find(item => item.id === id)
+    const next = current.filter(item => item.id !== id)
     set({ history: next })
-    deleteArchivedNotification(id)
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     } catch {}
+    if (target) {
+      const sig = `${target.packageId}|${target.title}|${target.text}`
+      addDeletedSig(sig)
+      deleteArchivedNotification(target.id)
+      deleteArchivedNotification(sig)
+    } else {
+      deleteArchivedNotification(id)
+    }
   },
 
   clearHistory: () => {
-    set({ history: [] })
-    clearArchivedNotifications()
+    if (activeNotificationTimer) {
+      clearTimeout(activeNotificationTimer)
+      activeNotificationTimer = null
+    }
+    const now = Date.now()
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([]))
+      localStorage.setItem(STORAGE_KEY, '[]')
+      localStorage.setItem(CLEARED_AT_KEY, String(now))
+      localStorage.setItem(DELETED_SIGS_KEY, '[]')
     } catch {}
+    set({ history: [], activeNotification: null, activeGlow: null })
+    clearArchivedNotifications()
   }
 }))
 

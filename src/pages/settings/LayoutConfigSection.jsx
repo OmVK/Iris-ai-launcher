@@ -2,7 +2,7 @@ import SettingsSection from './SettingsSection'
 import { SettingSlider } from './SettingControls'
 import { useThemeStore } from '../../stores/themeStore'
 
-export default function LayoutConfigSection({ expandedSections, toggleSection, dpiScale, setDpiScale, gridColumns, setGridColumns, gridRows, setGridRows, layoutStyle, setLayoutStyle, homeIconSize, setHomeIconSize, drawerIconSize, setDrawerIconSize, drawerTextSize, setDrawerTextSize, homeTextSize, setHomeTextSize, drawerLayout, setDrawerLayout, iconShape, setIconShape, dockColumns, setDockColumns, dockBackground, setDockBackground, homePages, setHomePages }) {
+export default function LayoutConfigSection({ expandedSections, toggleSection, dpiScale, setDpiScale, gridColumns, setGridColumns, gridRows, setGridRows, layoutStyle, setLayoutStyle, homeIconSize, setHomeIconSize, drawerIconSize, setDrawerIconSize, drawerTextSize, setDrawerTextSize, homeTextSize, setHomeTextSize, drawerLayout, setDrawerLayout, dockColumns, setDockColumns, dockBackground, setDockBackground, homePages, setHomePages }) {
   const { islandProfile, setIslandProfile, islandWidthScale, setIslandWidthScale, islandHeightScale, setIslandHeightScale, islandTopMargin, setIslandTopMargin } = useThemeStore()
 
   return (
@@ -43,22 +43,10 @@ export default function LayoutConfigSection({ expandedSections, toggleSection, d
         <SettingSlider label="Top Offset Margin" value={islandTopMargin} onChange={setIslandTopMargin} min="0" max="24" unit="px" />
       </div>
 
-
       <SettingSlider label="Home Icon Scale" value={homeIconSize} onChange={setHomeIconSize} min="80" max="120" unit="%" />
       <SettingSlider label="Drawer Icon Scale" value={drawerIconSize} onChange={setDrawerIconSize} min="60" max="200" unit="%" />
       <SettingSlider label="Drawer Text Scale" value={drawerTextSize} onChange={setDrawerTextSize} min="60" max="200" unit="%" />
       <SettingSlider label="Home Text Scale" value={homeTextSize} onChange={setHomeTextSize} min="80" max="120" unit="%" />
-
-      <div className="space-y-2">
-        <label className="text-[9px] text-on-surface-variant block">ICON SHAPE MASK</label>
-        <div className="grid grid-cols-5 gap-2">
-          {[{ id: 'system', label: 'System' }, { id: 'circle', label: 'Circle' }, { id: 'squircle', label: 'Squircle' }, { id: 'rounded_rect', label: 'Rounded' }, { id: 'teardrop', label: 'Teardrop' }].map(shape => (
-            <button key={shape.id} onClick={() => setIconShape(shape.id)} className={`py-1.5 px-1 rounded border text-[8px] truncate transition-all active:scale-95 ${iconShape === shape.id ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim' : 'bg-black/20 border-outline-variant/30 text-on-surface-variant/70 hover:text-white'}`}>
-              {shape.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <div className="space-y-2">
         <label className="text-[9px] text-on-surface-variant block">DOCK BACKGROUND STYLE</label>

@@ -1,26 +1,25 @@
 import { getIconContainerStyle } from '../utils/IconShapeMask'
+import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
 
 export default function HomeGrid({
   installedApps,
   lockedApps,
-  globalIconTheme,
+  globalIconTheme = 'DEFAULT',
   showAppLabels,
   homeIconSize,
   homeTextSize,
   gridColumns,
   gridRows,
-  iconShape = 'system',
   handleAppClick,
   handleContextMenu,
-  IRIS_ICON_PACK: _IRIS_ICON_PACK,
-  HudIcon: _HudIcon,
-  HudFallbackIcon: _HudFallbackIcon
 }) {
   const homeApps = installedApps.filter(app => app.isHome && !(Array.isArray(lockedApps) && lockedApps.includes(app.packageId)))
 
   const iconPixel = 48 * (homeIconSize / 100)
   const fontPixel = 8 * (homeTextSize / 100)
-  const shapeStyle = getIconContainerStyle(iconShape, iconPixel)
+  const activeTheme = (globalIconTheme || 'DEFAULT').toUpperCase()
+  const shapeStyle = getIconContainerStyle(activeTheme, iconPixel)
+  const useVectorGlyph = activeTheme === 'GLYPH_ONLY' || activeTheme === 'RETRO' || activeTheme === 'SOLID'
 
   const dynamicGridStyle = {
     display: 'grid',
@@ -40,6 +39,9 @@ export default function HomeGrid({
       className="max-w-sm mx-auto w-full px-2 pb-4 pointer-events-none"
     >
       {homeApps.map((app) => {
+        const vectorGlyph = useVectorGlyph ? IRIS_ICON_PACK[app.packageId] : null
+        const isImgIcon = app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/'))
+
         return (
           <div
             key={app.packageId}
@@ -47,35 +49,43 @@ export default function HomeGrid({
             onClick={(e) => handleAppClick(e, app)}
             className="app-icon-item flex flex-col items-center gap-1.5 group cursor-pointer active:scale-90 transition-all select-none relative pointer-events-auto"
           >
-
             <div
               style={{
                 ...shapeStyle,
-                transform: `translateZ(10px)`,
-                boxShadow: '0 4px 16px rgba(var(--primary-rgb), 0.22), 0 0 8px rgba(var(--primary-rgb), 0.08)'
+                transform: 'translateZ(10px)',
               }}
-              className={`flex items-center justify-center border transition-[background-color,border-color] duration-200 icon-theme-${(globalIconTheme || 'default').toLowerCase()} border-primary-fixed-dim/20 glass-icon-container app-icon-hover-effect`}
+              className={`flex items-center justify-center border transition-all duration-200 icon-theme-${activeTheme.toLowerCase()} glass-icon-container app-icon-hover-effect`}
             >
-              {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+              {vectorGlyph ? (
+                <div
+                  style={{ width: `${iconPixel * 0.62}px`, height: `${iconPixel * 0.62}px` }}
+                  className="flex items-center justify-center"
+                >
+                  {vectorGlyph}
+                </div>
+              ) : isImgIcon ? (
                 <img
                   src={app.icon}
                   loading="lazy"
-                  style={{ width: `${iconPixel * 0.55}px`, height: `${iconPixel * 0.55}px` }}
-                  className="object-contain rounded-md drop-shadow-md"
+                  style={{ width: `${iconPixel * 0.58}px`, height: `${iconPixel * 0.58}px` }}
+                  className="object-contain rounded-md"
                   alt=""
                 />
               ) : (
                 <span
                   style={{ fontSize: `${iconPixel * 0.45}px` }}
-                  className={`material-symbols-outlined transition-colors text-primary-fixed-dim/60 group-hover:text-primary-fixed-dim`}
+                  className="material-symbols-outlined transition-colors text-primary-fixed-dim/80 group-hover:text-primary-fixed-dim"
                 >
-                  {app.icon}
+                  {app.icon || 'apps'}
                 </span>
               )}
             </div>
             {showAppLabels && (
               <span
-                style={{ fontSize: `${fontPixel}px` }}
+                style={{
+                  fontSize: `${fontPixel}px`,
+                  color: activeTheme === 'RETRO' ? '#39ff14' : undefined,
+                }}
                 className="font-label-caps tracking-widest uppercase transition-colors text-center truncate w-full px-0.5 text-on-surface-variant/70 group-hover:text-primary-fixed-dim"
               >
                 {app.label}
@@ -84,7 +94,6 @@ export default function HomeGrid({
           </div>
         )
       })}
-
     </div>
   )
 }

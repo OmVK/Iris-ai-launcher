@@ -3,7 +3,7 @@ import HapticFeedback from '../utils/HapticFeedback'
 import { HUD_SVG_PATHS, HUD_COLOR } from '../components/drawer/drawerMeshData'
 import { buildClusters, getColor, LONG_PRESS_MS } from '../components/drawer/drawerMeshUtils'
 
-export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawerIconSize = 100, onAppClick, onContextMenu, isActive = true }) {
+export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawerIconSize = 100, globalIconTheme = 'DEFAULT', onAppClick, onContextMenu, isActive = true }) {
   const canvasRef = useRef(null)
   const nodesRef = useRef([])
   const edgesRef = useRef([])
@@ -232,7 +232,10 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
       }
 
       const iconSize = 48 * (drawerIconSize / 100)
-      const useHud = window.useGlobalHudIcons !== false
+      const activeTheme = (globalIconTheme || 'DEFAULT').toUpperCase()
+      const isRetro = activeTheme === 'RETRO'
+      const isSolid = activeTheme === 'SOLID'
+      const isMinimal = activeTheme === 'GLYPH_ONLY'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.font = 'bold 16px "JetBrains Mono", monospace'
@@ -243,54 +246,48 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
 
         const isHovered = i === hoveredRef.current
         const isDraggedItem = isDragging && dragRef.current.nodeIdx === i
-        const col = useHud ? HUD_COLOR : getColor(node.app.cat || 'default')
+        const col = isRetro ? [57, 255, 20] : HUD_COLOR
         const scale = isDraggedItem ? 1.2 : isHovered ? 1.1 : 1
         const drawSize = iconSize * scale
         const r = drawSize * 0.5
         const dist = Math.sqrt(node.x * node.x + node.y * node.y)
         ctx.globalAlpha = Math.max(0.3, 1 - (dist / 350) * 0.5)
 
-        if (useHud) {
-          ctx.fillStyle = getColStr(col, 0.06)
+        if (!isMinimal) {
+          ctx.fillStyle = isRetro ? 'rgba(2, 8, 4, 0.92)' : isSolid ? getColStr(col, 0.45) : getColStr(col, 0.08)
           ctx.beginPath()
-          ctx.arc(node.x, node.y, r, 0, 6.283)
-          ctx.fill()
-
-          ctx.strokeStyle = getColStr(col, isHovered ? 0.9 : 0.4)
-          ctx.lineWidth = isHovered ? 2 : 1.2
-          ctx.beginPath()
-          ctx.arc(node.x, node.y, r, 0, 6.283)
-          ctx.stroke()
-
-          const hudImg = iconImageCache.current['hud_' + node.app.packageId]
-          const natImg = iconImageCache.current['nat_' + node.app.packageId]
-          if (natImg) {
-            const imgS = drawSize * 0.55
-            ctx.drawImage(natImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
-          } else if (hudImg) {
-            const imgS = drawSize * 0.55
-            ctx.drawImage(hudImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
+          if (isRetro && ctx.roundRect) {
+            ctx.roundRect(node.x - r, node.y - r, drawSize, drawSize, 6)
           } else {
-            ctx.fillStyle = getColStr(col, 0.9)
-            ctx.fillText((node.app.label || '?')[0].toUpperCase(), node.x, node.y)
+            ctx.arc(node.x, node.y, r, 0, 6.283)
           }
+          ctx.fill()
+        }
+
+        ctx.strokeStyle = getColStr(col, isHovered ? 0.95 : (isRetro || isSolid ? 0.75 : 0.45))
+        ctx.lineWidth = isHovered ? 2 : 1.3
+        ctx.beginPath()
+        if (isRetro && ctx.roundRect) {
+          ctx.roundRect(node.x - r, node.y - r, drawSize, drawSize, 6)
         } else {
-          ctx.fillStyle = getColStr(col, isHovered ? 0.25 : 0.1)
-          ctx.strokeStyle = getColStr(col, isHovered ? 0.75 : 0.3)
-          ctx.lineWidth = isHovered ? 1.5 : 1
-          ctx.beginPath()
           ctx.arc(node.x, node.y, r, 0, 6.283)
-          ctx.fill()
-          ctx.stroke()
+        }
+        ctx.stroke()
 
-          const natImg = iconImageCache.current['nat_' + node.app.packageId]
-          if (natImg) {
-            const imgS = drawSize * 0.55
-            ctx.drawImage(natImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
-          } else {
-            ctx.fillStyle = getColStr(col, 0.8)
-            ctx.fillText((node.app.label || '?')[0].toUpperCase(), node.x, node.y)
-          }
+        const hudImg = iconImageCache.current['hud_' + node.app.packageId]
+        const natImg = iconImageCache.current['nat_' + node.app.packageId]
+        if ((isMinimal || isRetro) && hudImg) {
+          const imgS = drawSize * 0.55
+          ctx.drawImage(hudImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
+        } else if (natImg) {
+          const imgS = drawSize * 0.55
+          ctx.drawImage(natImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
+        } else if (hudImg) {
+          const imgS = drawSize * 0.55
+          ctx.drawImage(hudImg, node.x - imgS * 0.5, node.y - imgS * 0.5, imgS, imgS)
+        } else {
+          ctx.fillStyle = getColStr(col, 0.9)
+          ctx.fillText((node.app.label || '?')[0].toUpperCase(), node.x, node.y)
         }
       }
 
@@ -299,7 +296,7 @@ export default function useDrawerMeshEngine({ filteredApps, showAppLabels, drawe
     }
     rafRef.current = requestAnimationFrame(render)
     return () => { running = false; if (rafRef.current) { cancelAnimationFrame(rafRef.current); clearTimeout(rafRef.current) } ro.disconnect() }
-  }, [filteredApps, showAppLabels, drawerIconSize, isActive])
+  }, [filteredApps, showAppLabels, drawerIconSize, globalIconTheme, isActive])
 
   const markDirty = useCallback(() => { dirtyRef.current = true; lastInteractRef.current = Date.now() }, [])
 

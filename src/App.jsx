@@ -78,26 +78,27 @@ export default function App() {
     const sheetEl = drawerSheetRef.current
     const mainEl = mainRef.current
     if (!sheetEl) return
-    const curve = 'cubic-bezier(0.22, 1, 0.36, 1)'
+    const springOpen = 'cubic-bezier(0.32, 1.28, 0.42, 1)'
+    const springClose = 'cubic-bezier(0.25, 1, 0.5, 1)'
     if (activePage === 'drawer') {
       if (sheetEl.style.transform !== 'translate3d(0, 0, 0)' && sheetEl.style.transform !== 'translate3d(0px, 0px, 0px)') {
-        sheetEl.style.transition = `transform 200ms ${curve}`
+        sheetEl.style.transition = `transform 300ms ${springOpen}`
         sheetEl.style.transform = 'translate3d(0, 0, 0)'
       }
       sheetEl.style.pointerEvents = 'auto'
       if (mainEl) {
-        mainEl.style.transition = `opacity 180ms ${curve}`
+        mainEl.style.transition = `opacity 220ms ${springClose}`
         mainEl.style.opacity = '0'
         mainEl.style.pointerEvents = 'none'
       }
     } else {
       if (!sheetEl.style.transform.includes('100%')) {
-        sheetEl.style.transition = `transform 200ms ${curve}`
+        sheetEl.style.transition = `transform 240ms ${springClose}`
         sheetEl.style.transform = 'translate3d(0, 100%, 0)'
       }
       sheetEl.style.pointerEvents = 'none'
       if (mainEl) {
-        mainEl.style.transition = `opacity 180ms ${curve}`
+        mainEl.style.transition = `opacity 200ms ${springClose}`
         mainEl.style.opacity = '1'
         mainEl.style.pointerEvents = 'auto'
       }
@@ -257,7 +258,7 @@ export default function App() {
       <TaskAlarmOverlay setActivePage={setActivePage} />
       <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} activePage={activePage} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} onNavigate={setActivePage} />
       <main ref={mainRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative z-10" style={{ backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
-        <div key={activePage === 'drawer' ? 'home' : activePage} className={`page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.22, 1, 0.36, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.56, 0.64, 1)' : 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+        <div key={activePage === 'drawer' ? 'home' : activePage} className={`page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.25, 1, 0.5, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.38, 0.64, 1)' : 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
           <Suspense fallback={null}>
             {renderActivePage()}
           </Suspense>

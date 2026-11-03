@@ -181,9 +181,6 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
         const matchedApp = installed.find(a => a.packageId === pkg || a.id === pkg)
         const appName = matchedApp?.label || matchedApp?.name || posted.appName || ''
         useNotificationStore.getState().recordNotification({ ...posted, appName }, { popBanner: true })
-        if (Array.isArray(posted.archivedNotifications)) {
-          useNotificationStore.getState().syncNativeArchive(posted.archivedNotifications, installed)
-        }
       } catch (e) {
         console.error('Failed to process posted notification:', e)
       }
@@ -192,38 +189,8 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
     const listener = addNotificationListener((data) => {
       try {
         if (!data) return
-
         if (data.badgeCounts || data.totalUnread !== undefined) {
           useBadgeStore.getState().setBadgeData(data)
-        }
-
-        const locked = useAppStore.getState().lockedApps || []
-        const installed = useAppsStore?.getState?.()?.installedApps || []
-
-        if (Array.isArray(data.archivedNotifications) && data.archivedNotifications.length > 0) {
-          useNotificationStore.getState().syncNativeArchive(data.archivedNotifications, installed)
-        }
-
-        const rawList = Array.isArray(data.notifications)
-          ? data.notifications
-          : (data.packageId ? [data] : [])
-
-        for (const notif of rawList) {
-          const pkg = notif.packageId || notif.packageName
-          if (!pkg) continue
-
-          if (Array.isArray(locked) && locked.includes(pkg)) {
-            dismissNotification(notif.key || notif.id)
-            continue
-          }
-
-          const matchedApp = installed.find(a => (a.packageId === pkg || a.id === pkg))
-          const appName = matchedApp?.label || matchedApp?.name || notif.appName || ''
-
-          useNotificationStore.getState().recordNotification({
-            ...notif,
-            appName
-          }, { popBanner: false })
         }
       } catch (e) {
         console.error("Failed to process notification update:", e)

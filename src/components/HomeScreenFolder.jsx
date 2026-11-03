@@ -1,12 +1,18 @@
 import { useState, useCallback, useMemo } from 'react'
 import { launchApp } from '../components/LauncherPlugin'
 import { useAppStore } from '../stores/appStore'
+import { useThemeStore } from '../stores/themeStore'
 import { routeAppClick } from '../utils/appClickRouter'
+import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
 
 export default function HomeScreenFolder({ folder, installedApps = [], onOpen, onRemove }) {
   const [isOpen, setIsOpen] = useState(false)
   const [folderName, setFolderName] = useState(folder?.name || 'Folder')
   const [isEditing, setIsEditing] = useState(false)
+  const globalIconTheme = useThemeStore(s => s.globalIconTheme) || 'DEFAULT'
+  const activeTheme = globalIconTheme.toUpperCase()
+  const themeClass = `icon-theme-${activeTheme.toLowerCase()}`
+  const useVectorGlyph = activeTheme === 'GLYPH_ONLY' || activeTheme === 'RETRO' || activeTheme === 'SOLID'
 
   const folderApps = useMemo(() => {
     if (!folder?.apps) return []
@@ -56,15 +62,20 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
         className="home-folder-preview glass-surface rounded-2xl p-2.5 border border-white/10 cursor-pointer hover:bg-white/10 transition-all group flex flex-col items-center justify-between aspect-square"
       >
         <div className="grid grid-cols-2 gap-1 w-full flex-1 p-0.5">
-          {folderApps.map(app => (
-            <div key={app.packageId} className="aspect-square rounded-lg overflow-hidden bg-white/5 flex items-center justify-center p-0.5 border border-white/5">
-              {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
-                <img src={app.icon} alt="" className="w-full h-full object-contain" />
-              ) : (
-                <span className="material-symbols-outlined text-primary-fixed-dim/90 text-sm">{app.icon || 'apps'}</span>
-              )}
-            </div>
-          ))}
+          {folderApps.map(app => {
+            const vectorGlyph = useVectorGlyph ? IRIS_ICON_PACK[app.packageId] : null
+            return (
+              <div key={app.packageId} className={`aspect-square overflow-hidden flex items-center justify-center p-0.5 glass-icon-container ${themeClass}`}>
+                {vectorGlyph ? (
+                  <div className="w-[75%] h-[75%] flex items-center justify-center">{vectorGlyph}</div>
+                ) : app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                  <img src={app.icon} alt="" className="w-full h-full object-contain" />
+                ) : (
+                  <span className="material-symbols-outlined text-primary-fixed-dim/90 text-sm">{app.icon || 'apps'}</span>
+                )}
+              </div>
+            )
+          })}
           {folderApps.length < 4 && Array.from({ length: 4 - folderApps.length }).map((_, i) => (
             <div key={`empty-${i}`} className="aspect-square rounded-lg bg-white/[0.02] border border-white/5" />
           ))}
@@ -86,13 +97,15 @@ export default function HomeScreenFolder({ folder, installedApps = [], onOpen, o
           onAppClick={handleAppClick}
           onClose={() => setIsOpen(false)}
           onRemove={onRemove}
+          themeClass={themeClass}
+          useVectorGlyph={useVectorGlyph}
         />
       )}
     </>
   )
 }
 
-function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing, setIsEditing, onNameSubmit, onAppClick, onClose, onRemove }) {
+function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing, setIsEditing, onNameSubmit, onAppClick, onClose, onRemove, themeClass, useVectorGlyph }) {
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -129,24 +142,29 @@ function FolderExpandedView({ folder, apps, folderName, setFolderName, isEditing
         </div>
 
         <div className="grid grid-cols-4 gap-3">
-          {apps.map(app => (
-            <button
-              key={app.packageId}
-              onClick={() => onAppClick(app)}
-              className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/5 transition-all"
-            >
-              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center p-1">
-                {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
-                  <img src={app.icon} alt="" className="w-full h-full object-contain drop-shadow-md" />
-                ) : (
-                  <span className="material-symbols-outlined text-primary-fixed-dim text-lg">{app.icon || 'apps'}</span>
-                )}
-              </div>
-              <span className="text-[8px] text-white/40 font-mono-data truncate max-w-[60px] text-center">
-                {app.label}
-              </span>
-            </button>
-          ))}
+          {apps.map(app => {
+            const vectorGlyph = useVectorGlyph ? IRIS_ICON_PACK[app.packageId] : null
+            return (
+              <button
+                key={app.packageId}
+                onClick={() => onAppClick(app)}
+                className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/5 transition-all"
+              >
+                <div className={`w-10 h-10 overflow-hidden flex items-center justify-center p-1 glass-icon-container ${themeClass}`}>
+                  {vectorGlyph ? (
+                    <div className="w-[75%] h-[75%] flex items-center justify-center">{vectorGlyph}</div>
+                  ) : app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
+                    <img src={app.icon} alt="" className="w-full h-full object-contain" />
+                  ) : (
+                    <span className="material-symbols-outlined text-primary-fixed-dim text-lg">{app.icon || 'apps'}</span>
+                  )}
+                </div>
+                <span className="text-[8px] text-white/60 font-mono-data truncate max-w-[60px] text-center">
+                  {app.label}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>

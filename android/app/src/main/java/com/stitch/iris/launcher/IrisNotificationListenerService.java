@@ -24,7 +24,9 @@ public class IrisNotificationListenerService extends NotificationListenerService
     public static final String PREFS_NAME = "iris_launcher_prefs";
     public static final String KEY_LOCKED_PACKAGES = "locked_packages_set";
     public static final String KEY_NOTIFICATION_ARCHIVE = "iris_native_notif_archive";
+    public static final String KEY_ARCHIVE_CLEARED_AT = "iris_notif_archive_cleared_at";
     private static final int MAX_ARCHIVE_SIZE = 100;
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> appLabelCache = new java.util.concurrent.ConcurrentHashMap<>();
     private static IrisNotificationListenerService instance;
 
     @Override
@@ -89,10 +91,13 @@ public class IrisNotificationListenerService extends NotificationListenerService
 
     private void archiveCurrentlyActiveNotifications() {
         try {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            long clearedAt = prefs.getLong(KEY_ARCHIVE_CLEARED_AT, 0L);
             StatusBarNotification[] active = getActiveNotifications();
             if (active == null) return;
             for (StatusBarNotification sbn : active) {
                 if (sbn == null || isPackageLocked(sbn.getPackageName())) continue;
+                if (clearedAt > 0 && sbn.getPostTime() <= clearedAt) continue;
                 JSONObject extracted = extractNotificationJson(sbn);
                 if (extracted != null) {
                     recordToNativeArchive(this, extracted);
@@ -105,12 +110,17 @@ public class IrisNotificationListenerService extends NotificationListenerService
 
     private String resolveAppLabel(String pkg) {
         if (pkg == null || pkg.isEmpty()) return "";
+        String cached = appLabelCache.get(pkg);
+        if (cached != null) return cached;
         try {
             PackageManager pm = getPackageManager();
             ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
             CharSequence label = pm.getApplicationLabel(ai);
-            return label != null ? label.toString() : pkg;
+            String resolved = label != null ? label.toString() : pkg;
+            appLabelCache.put(pkg, resolved);
+            return resolved;
         } catch (Exception e) {
+            appLabelCache.put(pkg, pkg);
             return pkg;
         }
     }
@@ -351,7 +361,10 @@ public class IrisNotificationListenerService extends NotificationListenerService
         if (context == null) return;
         try {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, "[]").apply();
+            prefs.edit()
+                .putString(KEY_NOTIFICATION_ARCHIVE, "[]")
+                .putLong(KEY_ARCHIVE_CLEARED_AT, System.currentTimeMillis())
+                .commit();
         } catch (Exception ignored) {}
     }
 
@@ -364,11 +377,14 @@ public class IrisNotificationListenerService extends NotificationListenerService
             JSONArray next = new JSONArray();
             for (int i = 0; i < current.length(); i++) {
                 JSONObject item = current.getJSONObject(i);
-                if (!id.equals(item.optString("id", "")) && !id.equals(item.optString("key", ""))) {
+                String itemId = item.optString("id", "");
+                String itemKey = item.optString("key", "");
+                String itemSig = item.optString("packageId", "") + "|" + item.optString("title", "") + "|" + item.optString("text", "");
+                if (!id.equals(itemId) && !id.equals(itemKey) && !id.equals(itemSig)) {
                     next.put(item);
                 }
             }
-            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, next.toString()).apply();
+            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, next.toString()).commit();
         } catch (Exception ignored) {}
     }
 

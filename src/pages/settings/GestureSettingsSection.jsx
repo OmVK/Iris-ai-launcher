@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import SettingsSection from './SettingsSection'
 import { isAccessibilityServiceEnabled, openPermissionSettings } from '../../components/LauncherPlugin'
+import { useThemeStore } from '../../stores/themeStore'
 
 const GESTURE_SLOTS = [
   { id: 'swipe_up', label: 'Swipe Up', icon: 'swipe_up', surface: 'home' },
@@ -18,6 +19,7 @@ const GESTURE_ACTIONS = [
   { id: 'open_home', label: 'Home' },
   { id: 'open_drawer', label: 'Open Drawer' },
   { id: 'open_search', label: 'Open Search' },
+  { id: 'assistant', label: 'Iris Assistant' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'quick_settings', label: 'Quick Settings' },
   { id: 'recents', label: 'Recent Tasks' },
@@ -55,6 +57,8 @@ export default function GestureSettingsSection({ expandedSections, toggleSection
   const [a11yEnabled, setA11yEnabled] = useState(false)
   const [gestureMap, setGestureMap] = useState(loadGestureMap)
   const [selectingAppSlot, setSelectingAppSlot] = useState(null)
+  const dockHoldAssistant = useThemeStore(s => s.dockHoldAssistant)
+  const setDockHoldAssistant = useThemeStore(s => s.setDockHoldAssistant)
 
   useEffect(() => {
     checkAccessibility()
@@ -98,6 +102,30 @@ export default function GestureSettingsSection({ expandedSections, toggleSection
           </p>
         </div>
 
+        {/* Bottom Dock Hold Shortcut Toggle */}
+        <div className="rounded-xl p-3 bg-black/35 border border-white/10" style={{ contain: 'content' }}>
+          <div className="flex items-center justify-between group">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center border border-white/5 shrink-0">
+                <span className="material-symbols-outlined text-primary-fixed-dim text-sm">smart_toy</span>
+              </div>
+              <div className="min-w-0 pr-2">
+                <p className="font-mono-data text-[10px] text-white/90">DOCK HOLD ASSISTANT</p>
+                <p className="font-label-caps text-[7.5px] text-on-surface-variant/50 leading-relaxed">
+                  Hold bottom dock to launch offline voice assistant. Keep disabled to prevent gesture collisions with Android Recent Apps on devices like Samsung S24 Ultra.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDockHoldAssistant(!dockHoldAssistant)}
+              className={`w-8 h-4.5 rounded-full relative transition-colors shrink-0 ${dockHoldAssistant ? 'bg-primary-fixed-dim/40' : 'bg-white/10'}`}
+            >
+              <div className={`absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all ${dockHoldAssistant ? 'right-[2px]' : 'left-[2px]'}`} />
+            </button>
+          </div>
+        </div>
+
         {!a11yEnabled && (
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
             <div className="flex items-center gap-2 mb-2">
@@ -125,7 +153,7 @@ export default function GestureSettingsSection({ expandedSections, toggleSection
               : (GESTURE_ACTIONS.find(a => a.id === currentGesture?.action)?.label || 'Do Nothing')
 
             return (
-              <div key={slot.id} className="glass-surface rounded-xl p-3">
+              <div key={slot.id} className="rounded-xl p-3 bg-black/35 border border-white/5" style={{ contain: 'content' }}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-rounded text-white/40 text-sm">{slot.icon}</span>

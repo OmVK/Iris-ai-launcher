@@ -3,7 +3,13 @@ import PowerSaveManager from '../utils/PowerSaveManager'
 import { fetchCurrentWeather } from '../utils/weather'
 import { useAssistantStore } from '../stores/assistantStore'
 import useBadgeStore from '../stores/badgeStore'
-import { getSystemStats } from './LauncherPlugin'
+import { getSystemStats, launchApp } from './LauncherPlugin'
+import { useThemeStore } from '../stores/themeStore'
+import { useNotificationStore } from '../stores/notificationStore'
+import CondensedZeroScreen from './CondensedZeroScreen'
+import CondensedTelemetry from './CondensedTelemetry'
+import CondensedNotifLog from './CondensedNotifLog'
+import HapticFeedback from '../utils/HapticFeedback'
 
 const CONDITION_ICONS = {
   CLEAR: 'clear_day',
@@ -26,21 +32,13 @@ const CONDITION_ICONS = {
   FREEZING_RAIN: 'weather_snowy',
 }
 
-import { useThemeStore } from '../stores/themeStore'
-import { useNotificationStore } from '../stores/notificationStore'
-import CondensedZeroScreen from './CondensedZeroScreen'
-import CondensedTelemetry from './CondensedTelemetry'
-import CondensedNotifLog from './CondensedNotifLog'
-import { launchApp } from './LauncherPlugin'
-import HapticFeedback from '../utils/HapticFeedback'
-
 const PROFILE_PRESETS = {
-  AUTO: { baseWidth: 210, baseHeight: 36, topMargin: 8 },
-  PIXEL: { baseWidth: 215, baseHeight: 38, topMargin: 10 },
-  GALAXY: { baseWidth: 190, baseHeight: 32, topMargin: 6 },
-  PILL: { baseWidth: 235, baseHeight: 36, topMargin: 8 },
-  NOTCH: { baseWidth: 220, baseHeight: 42, topMargin: 4 },
-  CUSTOM: { baseWidth: 200, baseHeight: 32, topMargin: 8 }
+  AUTO: { baseWidth: 220, baseHeight: 36, topMargin: 8 },
+  PIXEL: { baseWidth: 224, baseHeight: 38, topMargin: 8 },
+  GALAXY: { baseWidth: 204, baseHeight: 34, topMargin: 6 },
+  PILL: { baseWidth: 240, baseHeight: 36, topMargin: 8 },
+  NOTCH: { baseWidth: 228, baseHeight: 42, topMargin: 4 },
+  CUSTOM: { baseWidth: 215, baseHeight: 36, topMargin: 8 }
 }
 
 export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage, use24HourClock = true, isAppActive = true, powerSaveMode: _powerSaveMode, onNavigate }) {
@@ -58,7 +56,6 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
 
   useEffect(() => {
     setExpanded(false)
-    setAutoExpand(false)
   }, [activePage])
 
   const { isListening, isSpeaking } = useAssistantStore()
@@ -70,23 +67,6 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
   const collapsedWidth = Math.round(preset.baseWidth * (islandWidthScale / 100))
   const collapsedHeight = Math.round(preset.baseHeight * (islandHeightScale / 100))
   const computedTopMargin = islandProfile === 'CUSTOM' ? islandTopMargin : Math.max(0, preset.topMargin + (islandTopMargin - 8))
-
-  const [autoExpand, setAutoExpand] = useState(false)
-  const previousUnread = useRef(totalUnread)
-
-  // Trigger auto-expand on new notifications
-  useEffect(() => {
-    if (totalUnread > previousUnread.current) {
-      setAutoExpand(true)
-      setExpanded(true)
-      if (collapseTimer.current) clearTimeout(collapseTimer.current)
-      collapseTimer.current = setTimeout(() => {
-        setExpanded(false)
-        setAutoExpand(false)
-      }, 3000)
-    }
-    previousUnread.current = totalUnread
-  }, [totalUnread])
 
   useEffect(() => {
     const handlePermSummary = (e) => {
@@ -209,11 +189,10 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
   }, [expanded])
 
   const startCollapseTimer = useCallback(() => {
-    if (autoExpand) return // Handled by auto-expand effect
     if (collapseTimer.current) clearTimeout(collapseTimer.current)
-    const timeout = (expandedTab === 'zero_screen' || expandedTab === 'notif_log') ? 25000 : 8000
+    const timeout = (expandedTab === 'zero_screen' || expandedTab === 'notif_log') ? 30000 : 10000
     collapseTimer.current = setTimeout(() => setExpanded(false), timeout)
-  }, [autoExpand, expandedTab])
+  }, [expandedTab])
 
   useEffect(() => {
     if (!expanded) return
@@ -238,87 +217,107 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
 
   const handleToggle = useCallback(() => {
     setExpanded(prev => !prev)
-    setAutoExpand(false)
   }, [])
 
   const touchStartRef = useRef({ x: 0, y: 0, time: 0 })
 
   const handleTouchStart = (e) => {
-    if (!expanded) return
     e.stopPropagation()
     const t = e.touches[0]
     touchStartRef.current = { x: t.clientX, y: t.clientY, time: Date.now() }
   }
 
   const handleTouchMove = (e) => {
-    if (!expanded) return
     e.stopPropagation()
   }
 
   const handleTouchEnd = (e) => {
-    if (!expanded) return
     e.stopPropagation()
-    const t = e.changedTouches[0]
+    const t = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : null)
+    if (!t) return
+
     const dx = t.clientX - touchStartRef.current.x
     const dy = t.clientY - touchStartRef.current.y
-    startCollapseTimer()
-
+    const absDx = Math.abs(dx)
+    const absDy = Math.abs(dy)
     const tabList = ['telemetry', 'zero_screen', 'notif_log']
-    if (Math.abs(dx) > 25 && Math.abs(dx) > Math.abs(dy)) {
-      const idx = tabList.indexOf(expandedTab)
-      if (dx < 0 && idx < tabList.length - 1) {
-        setExpandedTab(tabList[idx + 1])
-        HapticFeedback.light()
-      } else if (dx > 0 && idx > 0) {
-        setExpandedTab(tabList[idx - 1])
+
+    if (expanded) {
+      startCollapseTimer()
+      // Horizontal swipe to navigate tabs vice-versa in both directions with circular wrap-around
+      if (absDx > 28 && absDx > absDy * 1.2) {
+        const idx = tabList.indexOf(expandedTab)
+        if (dx < 0) {
+          // Swipe left -> advance forward: telemetry -> zero_screen -> notif_log -> telemetry
+          const nextIdx = (idx + 1) % tabList.length
+          setExpandedTab(tabList[nextIdx])
+          HapticFeedback.light()
+        } else {
+          // Swipe right -> advance backward: notif_log -> zero_screen -> telemetry -> notif_log
+          const prevIdx = (idx - 1 + tabList.length) % tabList.length
+          setExpandedTab(tabList[prevIdx])
+          HapticFeedback.light()
+        }
+      } else if (dy < -42 && absDy > absDx * 1.3 && !e.target?.closest?.('[data-notif-scroll]')) {
+        setExpanded(false)
         HapticFeedback.light()
       }
-    } else if (dy < -35 && Math.abs(dy) > Math.abs(dx)) {
-      setExpanded(false)
-      HapticFeedback.light()
+    } else {
+      // Collapsed notch: swipe gestures
+      if (absDx > 25 && absDx > absDy * 1.2) {
+        if (dx < 0) {
+          setExpandedTab(history.length > 0 ? 'notif_log' : 'zero_screen')
+        } else {
+          setExpandedTab('telemetry')
+        }
+        setExpanded(true)
+        HapticFeedback.light()
+      } else if (dy > 25 && absDy > absDx * 1.2) {
+        setExpanded(true)
+        HapticFeedback.light()
+      }
     }
   }
 
   const weatherIcon = weather ? (CONDITION_ICONS[weather.condition] || 'cloud') : 'cloud'
   const weatherTemp = weather ? `${weather.temp}°` : '--'
 
-  // Dynamic state calculations
   const isAiActive = isListening || isSpeaking
   const isLowBattery = !battery.charging && battery.level < 20
   const isCharging = battery.charging
 
-  let glowColor = 'rgba(0, 0, 0, 0.4)'
+  let _glowColor = 'rgba(0, 0, 0, 0.4)'
   let borderColor = 'rgba(255, 255, 255, 0.08)'
 
   const isPoppingNotif = !!activeNotification && !expanded
-  const notifWidth = Math.min(typeof window !== 'undefined' ? window.innerWidth - 24 : 360, 360)
-  const notifHeight = 72
+  const notifWidth = Math.min(typeof window !== 'undefined' ? window.innerWidth - 24 : 356, 356)
+  // Height accounts for the top 30px camera punch-hole bridge + 62px unobstructed notification bay below the hole
+  const notifHeight = 94
 
   if (isPoppingNotif && activeGlow) {
-    glowColor = activeGlow.glow
+    _glowColor = activeGlow.glow
     borderColor = activeGlow.color
   } else if (activeGlow) {
-    glowColor = activeGlow.glow
+    _glowColor = activeGlow.glow
     borderColor = activeGlow.color
   } else if (isListening) {
-    glowColor = 'rgba(168, 85, 247, 0.85)'
+    _glowColor = 'rgba(168, 85, 247, 0.85)'
     borderColor = 'rgba(168, 85, 247, 0.9)'
   } else if (isSpeaking) {
-    glowColor = 'rgba(168, 85, 247, 0.75)'
+    _glowColor = 'rgba(168, 85, 247, 0.75)'
     borderColor = 'rgba(168, 85, 247, 0.8)'
   } else if (isLowBattery) {
-    glowColor = 'rgba(255, 50, 50, 0.4)'
+    _glowColor = 'rgba(255, 50, 50, 0.4)'
     borderColor = 'rgba(255, 50, 50, 0.3)'
   } else if (isCharging) {
-    glowColor = 'rgba(50, 255, 100, 0.3)'
+    _glowColor = 'rgba(50, 255, 100, 0.3)'
     borderColor = 'rgba(50, 255, 100, 0.2)'
   } else if (expanded) {
-    glowColor = 'rgba(0, 229, 255, 0.15)'
+    _glowColor = 'rgba(0, 229, 255, 0.15)'
   }
 
-  // Expanded dimensions
   const expWidth = 360
-  const expHeight = expandedTab === 'zero_screen' ? 310 : expandedTab === 'notif_log' ? 290 : 215
+  const expHeight = expandedTab === 'zero_screen' ? 330 : expandedTab === 'notif_log' ? 315 : 240
 
   const activeWidth = expanded ? expWidth : isPoppingNotif ? notifWidth : (isAiActive ? Math.max(collapsedWidth, 240) : collapsedWidth)
   const activeHeight = expanded ? expHeight : isPoppingNotif ? notifHeight : (isAiActive ? Math.max(collapsedHeight, 40) : collapsedHeight)
@@ -330,22 +329,22 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-[width,height,border-radius] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${isAiActive ? 'animate-aurora-breathe' : ''}`}
+        className={`pointer-events-auto relative flex items-center justify-center overflow-hidden island-morph ${
+          !expanded && !isPoppingNotif ? 'is-collapsed' : ''
+        } ${isAiActive ? 'animate-aurora-breathe' : ''}`}
         style={{
-          background: isAiActive ? 'rgba(8, 12, 24, 0.97)' : 'rgba(10, 14, 26, 0.96)',
+          background: isAiActive ? 'rgba(8, 12, 24, 0.98)' : 'rgba(6, 9, 18, 0.97)',
           border: isAiActive ? undefined : `1px solid ${borderColor}`,
           boxShadow: isAiActive
             ? undefined
-            : (isPoppingNotif && activeGlow
-              ? `0 10px 40px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}, inset 0 1px 0 rgba(255, 255, 255, 0.18)`
-              : (expanded ? `0 8px 28px ${glowColor}, inset 0 1px 0 rgba(255, 255, 255, 0.08)` : `0 4px 12px ${glowColor}`)),
+            : isPoppingNotif && activeGlow
+              ? `0 10px 28px ${activeGlow.glow}`
+              : expanded
+                ? '0 12px 36px rgba(0, 0, 0, 0.65)'
+                : '0 4px 14px rgba(0, 0, 0, 0.45)',
           width: activeWidth,
           height: activeHeight,
           borderRadius: expanded ? 28 : isPoppingNotif ? 24 : Math.round(activeHeight * 0.55),
-          transform: 'translate3d(0, 0, 0)',
-          backfaceVisibility: 'hidden',
-          contain: 'layout paint style',
-          willChange: 'width, height, border-radius',
         }}
       >
         {isAiActive && (
@@ -355,140 +354,212 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
           </>
         )}
 
-        {/* Active Notification Banner State (Pops when notification arrives) */}
-        {isPoppingNotif && (
-          <div
-            onClick={() => {
-              HapticFeedback.light()
-              if (activeNotification.packageId) {
-                launchApp(activeNotification.packageId)
-              }
-              dismissActive()
-            }}
-            className="absolute inset-0 flex items-center justify-between px-3 py-2 cursor-pointer z-20 animate-in fade-in zoom-in-95 duration-200 select-none"
-          >
-            {/* Top accent glow line in app color */}
-            <div
-              className="absolute top-0 left-0 right-0 h-[2px] animate-pulse"
-              style={{ backgroundColor: activeNotification.color, boxShadow: `0 0 14px ${activeNotification.color}` }}
-            />
-
-            <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1.5">
-              {/* App Icon / Badge */}
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border shadow-md transition-transform active:scale-95"
-                style={{
-                  backgroundColor: `${activeNotification.color}22`,
-                  borderColor: `${activeNotification.color}66`,
-                  color: activeNotification.color
-                }}
-              >
-                <span className="material-symbols-outlined text-lg">{activeNotification.icon || 'notifications'}</span>
-              </div>
-
-              {/* Sender & Text */}
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <div className="flex items-center gap-1.5 leading-tight">
+        {/* Active Notification Banner State — Split around top-center camera punch-hole */}
+        <div
+          onClick={() => {
+            HapticFeedback.light()
+            if (activeNotification?.packageId) {
+              launchApp(activeNotification.packageId)
+            }
+            dismissActive()
+          }}
+          className={`absolute inset-0 flex flex-col justify-between px-3.5 pt-1.5 pb-2.5 cursor-pointer z-20 select-none island-content-layer ${
+            isPoppingNotif
+              ? 'opacity-100 scale-100 pointer-events-auto'
+              : 'opacity-0 scale-95 pointer-events-none'
+          }`}
+        >
+          {activeNotification && (
+            <>
+              {/* Top Sensor Bridge: Left & Right wings hug the center 48px camera punch-hole */}
+              <div className="flex items-center justify-between h-[26px] shrink-0">
+                {/* Left of Punch-Hole: App Badge & Name */}
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-2">
                   <span
-                    className="text-[9.5px] font-bold uppercase tracking-wider truncate"
+                    className="w-2 h-2 rounded-full shrink-0 animate-pulse"
+                    style={{ backgroundColor: activeNotification.color, boxShadow: `0 0 8px ${activeNotification.color}` }}
+                  />
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-widest truncate font-mono-data"
                     style={{ color: activeNotification.color }}
                   >
                     {activeNotification.appName}
                   </span>
-                  <span className="text-[7.5px] text-white/40">•</span>
-                  <span className="text-[10px] font-semibold text-white/95 truncate">
+                </div>
+
+                {/* Center 48px Camera Cutout Cradle (Keeps text clear of physical punch-hole lens) */}
+                <div className="w-12 h-full shrink-0 flex items-end justify-center pb-0.5 pointer-events-none">
+                  <div
+                    className="w-6 h-[2px] rounded-full opacity-60"
+                    style={{ backgroundColor: activeNotification.color, boxShadow: `0 0 6px ${activeNotification.color}` }}
+                  />
+                </div>
+
+                {/* Right of Punch-Hole: Time + Quick Archive & Close Controls */}
+                <div className="flex items-center justify-end gap-1.5 flex-1 min-w-0 pl-2">
+                  <span className="text-[8.5px] font-mono-data text-white/45">{activeNotification.time}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      HapticFeedback.light()
+                      dismissActive()
+                      setExpandedTab('notif_log')
+                      setExpanded(true)
+                    }}
+                    className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-amber-300 transition-colors"
+                    title="Open Archive"
+                  >
+                    <span className="material-symbols-outlined text-[11px]">history_edu</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); HapticFeedback.selection(); dismissActive() }}
+                    className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-colors"
+                    title="Dismiss"
+                  >
+                    <span className="material-symbols-outlined text-[11px]">close</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bottom Unobstructed Message Bay (Below the physical camera hole) */}
+              <div className="flex items-center gap-2.5 pt-1 border-t border-white/[0.06] flex-1 min-h-0">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border"
+                  style={{
+                    backgroundColor: `${activeNotification.color}22`,
+                    borderColor: `${activeNotification.color}66`,
+                    color: activeNotification.color
+                  }}
+                >
+                  <span className="material-symbols-outlined text-lg">{activeNotification.icon || 'notifications'}</span>
+                </div>
+
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <span className="text-[10.5px] font-bold text-white/95 truncate leading-tight">
                     {activeNotification.title}
                   </span>
+                  <p className="text-[10px] text-white/80 line-clamp-2 font-sans mt-0.5 leading-snug">
+                    {activeNotification.text}
+                  </p>
                 </div>
-                <p className="text-[10px] text-white/80 truncate font-sans mt-0.5 leading-normal">
-                  {activeNotification.text}
-                </p>
               </div>
-            </div>
+            </>
+          )}
+        </div>
 
-            {/* Right Controls */}
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="text-[8px] font-mono text-white/40 pr-0.5">{activeNotification.time}</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); HapticFeedback.selection(); dismissActive() }}
-                className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-colors"
-                title="Dismiss"
-              >
-                <span className="material-symbols-outlined text-xs">close</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Collapsed State */}
+        {/* Collapsed State — Left & Right wings flank the center camera punch-hole */}
         <div
           onClick={handleToggle}
-          className={`absolute inset-0 flex items-center justify-center cursor-pointer transition-opacity duration-150 ${expanded || isPoppingNotif ? 'opacity-0 pointer-events-none' : 'opacity-100'
-            }`}
-          style={{ pointerEvents: expanded || isPoppingNotif ? 'none' : 'auto' }}
+          className={`absolute inset-0 flex items-center justify-center cursor-pointer island-content-layer ${
+            !expanded && !isPoppingNotif
+              ? 'opacity-100 scale-100 pointer-events-auto'
+              : 'opacity-0 scale-95 pointer-events-none'
+          }`}
         >
-          <div className="px-3 flex items-center justify-between shrink-0" style={{ width: `${collapsedWidth}px`, height: `${collapsedHeight}px` }}>
-            {autoExpand ? (
-              <div className="flex items-center gap-2 w-full justify-center">
-                <span className="material-symbols-outlined text-primary-fixed-dim animate-bounce" style={{ fontSize: 13 }}>notifications</span>
-                <span className="font-mono-data text-[10px] text-primary-fixed-dim font-bold tracking-widest">{totalUnread} NEW</span>
+            <div className="px-3 flex items-center justify-between shrink-0" style={{ width: `${collapsedWidth}px`, height: `${collapsedHeight}px` }}>
+              <div
+                className="flex items-center gap-1.5 flex-1 min-w-0"
+                onClick={(e) => { e.stopPropagation(); setExpandedTab('telemetry'); setExpanded(true); HapticFeedback.light() }}
+              >
+                <span className="material-symbols-outlined text-primary-fixed-dim shrink-0" style={{ fontSize: 13, fontVariationSettings: "'FILL' 1" }}>fingerprint</span>
+                <span className="font-mono-data text-[10px] text-primary-fixed-dim font-bold tracking-wider truncate">{time}</span>
               </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-primary-fixed-dim" style={{ fontSize: 13, fontVariationSettings: "'FILL' 1" }}>fingerprint</span>
-                  <span className="font-mono-data text-[10px] text-primary-fixed-dim font-bold tracking-wider">{time}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-0.5">
-                    <span className="material-symbols-outlined text-on-surface-variant/50" style={{ fontSize: 11 }}>{weatherIcon}</span>
-                    <span className="font-mono-data text-[9px] text-on-surface-variant/50">{weatherTemp}</span>
+
+              {/* Center 44px reserved gap for the physical punch-hole camera */}
+              <div className="w-11 shrink-0" />
+
+              <div className="flex items-center justify-end gap-1.5 flex-1 min-w-0">
+                {history.length > 0 && (
+                  <div
+                    className="flex items-center gap-0.5 text-amber-400/90 hover:text-amber-300 transition-colors cursor-pointer"
+                    title={`${history.length} archived messages`}
+                    onClick={(e) => { e.stopPropagation(); setExpandedTab('notif_log'); setExpanded(true); HapticFeedback.light() }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 11 }}>mark_email_unread</span>
+                    <span className="font-mono-data text-[8.5px] font-bold">{history.length}</span>
                   </div>
+                )}
+                <div
+                  className="flex items-center gap-0.5 cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); setExpandedTab('zero_screen'); setExpanded(true); HapticFeedback.light() }}
+                >
+                  <span className="material-symbols-outlined text-on-surface-variant/50" style={{ fontSize: 11 }}>{weatherIcon}</span>
+                  <span className="font-mono-data text-[9px] text-on-surface-variant/50">{weatherTemp}</span>
+                </div>
+                <div
+                  className="flex items-center gap-0.5"
+                  onClick={(e) => { e.stopPropagation(); setExpandedTab('telemetry'); setExpanded(true); HapticFeedback.light() }}
+                >
+                  <span className={`material-symbols-outlined ${isLowBattery ? 'text-error animate-pulse' : isCharging ? 'text-green-400' : 'text-on-surface-variant/50'}`} style={{ fontSize: 11 }}>
+                    {battery.charging ? 'battery_charging_full' : 'battery_full'}
+                  </span>
+                  <span className={`font-mono-data text-[9px] ${isLowBattery ? 'text-error' : isCharging ? 'text-green-400' : 'text-on-surface-variant/50'}`}>{battery.level}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        {/* Expanded State — Top status bridge flanks camera hole; tabs & content sit cleanly below */}
+        {expanded && (
+          <div className="absolute inset-0 flex items-center justify-center island-content-layer opacity-100 scale-100">
+            <div className="w-[360px] shrink-0 px-3.5 pt-1.5 pb-3.5 flex flex-col justify-between overflow-hidden" style={{ height: `${expHeight}px` }}>
+              {/* Row 1: Camera-Safe Top Bridge (Left & Right of center punch-hole) */}
+              <div className="flex items-center justify-between h-[26px] shrink-0">
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <span className="material-symbols-outlined text-primary-fixed-dim text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>fingerprint</span>
+                  <span className="font-mono-data text-[10px] text-primary-fixed-dim font-bold tracking-wider">{time}</span>
                   {degradedCount > 0 && (
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
+                        setExpanded(false)
                         HapticFeedback.light()
                         window.dispatchEvent(new CustomEvent('iris:open-permission-modal'))
                       }}
-                      className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25 transition-colors"
-                      title={`${degradedCount} degraded features`}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:bg-amber-500/30 transition-colors"
+                      title="View permission status"
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: 10 }}>warning</span>
-                      <span className="font-mono-data text-[8.5px] font-bold">{degradedCount}</span>
+                      <span className="material-symbols-outlined text-[10px]">warning</span>
+                      <span className="font-mono-data text-[8px] font-bold">{degradedCount}</span>
                     </button>
                   )}
+                </div>
+
+                {/* Center 48px Camera Cutout Cradle */}
+                <div className="w-12 h-full shrink-0" />
+
+                <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
                   <div className="flex items-center gap-0.5">
-                    <span className={`material-symbols-outlined ${isLowBattery ? 'text-error animate-pulse' : isCharging ? 'text-green-400' : 'text-on-surface-variant/50'}`} style={{ fontSize: 11 }}>
+                    <span className="material-symbols-outlined text-on-surface-variant/60 text-xs">{weatherIcon}</span>
+                    <span className="font-mono-data text-[9px] text-on-surface-variant/60">{weatherTemp}</span>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <span className={`material-symbols-outlined text-xs ${isLowBattery ? 'text-error' : isCharging ? 'text-green-400' : 'text-on-surface-variant/60'}`}>
                       {battery.charging ? 'battery_charging_full' : 'battery_full'}
                     </span>
-                    <span className={`font-mono-data text-[9px] ${isLowBattery ? 'text-error' : isCharging ? 'text-green-400' : 'text-on-surface-variant/50'}`}>{battery.level}</span>
+                    <span className="font-mono-data text-[9px] text-on-surface-variant/60">{battery.level}%</span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpanded(false); HapticFeedback.light() }}
+                    className="p-0.5 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">expand_less</span>
+                  </button>
                 </div>
-              </>
-            )}
-          </div>
-        </div>
+              </div>
 
-        {/* Expanded State */}
-        <div
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          className={`absolute inset-0 flex items-center justify-center transition-opacity duration-150 ${expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-        >
-          <div className="w-[360px] shrink-0 p-3.5 flex flex-col justify-between overflow-hidden" style={{ height: `${expHeight}px` }}>
-            {/* Top Row: Mode Switcher & Time */}
-            <div className="flex items-center justify-between mb-2 shrink-0">
-              <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/10">
+              {/* Row 2: Mode Switcher Tabs (Positioned below the camera punch-hole so nothing is blocked) */}
+              <div className="grid grid-cols-3 gap-1 bg-black/50 p-1 rounded-xl border border-white/10 my-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpandedTab('telemetry'); HapticFeedback.light() }}
-                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors ${expandedTab === 'telemetry'
-                    ? 'bg-primary-fixed-dim/30 text-primary-fixed-dim border border-primary-fixed-dim/40 shadow-[0_0_8px_rgba(0,242,255,0.3)]'
-                    : 'text-white/40 hover:text-white/70'
+                  className={`py-1 px-1.5 rounded-lg font-mono-data text-[8.5px] font-bold tracking-wider transition-colors truncate ${expandedTab === 'telemetry'
+                    ? 'bg-primary-fixed-dim/30 text-primary-fixed-dim border border-primary-fixed-dim/40 shadow-[0_0_8px_rgba(0,242,255,0.25)]'
+                    : 'text-white/45 hover:text-white/75'
                     }`}
                 >
                   SYS TELEMETRY
@@ -496,91 +567,58 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpandedTab('zero_screen'); HapticFeedback.light() }}
-                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center gap-1 ${expandedTab === 'zero_screen'
-                    ? 'bg-[#ff007f]/30 text-[#ff007f] border border-[#ff007f]/40 shadow-[0_0_10px_rgba(255,0,127,0.3)]'
-                    : 'text-white/40 hover:text-white/70'
+                  className={`py-1 px-1.5 rounded-lg font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center justify-center gap-1 truncate ${expandedTab === 'zero_screen'
+                    ? 'bg-[#ff007f]/30 text-[#ff007f] border border-[#ff007f]/40 shadow-[0_0_10px_rgba(255,0,127,0.25)]'
+                    : 'text-white/45 hover:text-white/75'
                     }`}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#ff007f] animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#ff007f] animate-pulse shrink-0" />
                   ZERO SCREEN
                 </button>
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpandedTab('notif_log'); HapticFeedback.light() }}
-                  className={`px-2 py-0.5 rounded font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center gap-1 ${expandedTab === 'notif_log'
-                    ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
-                    : 'text-white/40 hover:text-white/70'
+                  className={`py-1 px-1.5 rounded-lg font-mono-data text-[8.5px] font-bold tracking-wider transition-colors flex items-center justify-center gap-1 truncate ${expandedTab === 'notif_log'
+                    ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.25)]'
+                    : 'text-white/45 hover:text-white/75'
                     }`}
                 >
-                  <span className="material-symbols-outlined text-[10px]">mark_email_unread</span>
+                  <span className="material-symbols-outlined text-[10px] shrink-0">mark_email_unread</span>
                   ARCHIVE ({history.length})
                 </button>
               </div>
-              <div className="flex items-center gap-1.5">
-                {degradedCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setExpanded(false)
-                      HapticFeedback.light()
-                      window.dispatchEvent(new CustomEvent('iris:open-permission-modal'))
-                    }}
-                    className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:bg-amber-500/30 transition-colors"
-                    title="View permission status"
-                  >
-                    <span className="material-symbols-outlined text-[10px]">warning</span>
-                    <span className="font-mono-data text-[8.5px] font-bold">{degradedCount}</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setExpanded(false); HapticFeedback.light() }}
-                  className="p-0.5 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[13px]">expand_less</span>
-                </button>
-                <span className="font-mono-data text-[11px] text-primary-fixed-dim font-bold tracking-wider">{time}</span>
-              </div>
-            </div>
 
-            {/* Sliding Carousel of Tabs */}
-            <div className="flex-1 w-full overflow-hidden relative min-h-0" onClick={(e) => e.stopPropagation()}>
-              <div
-                className="flex w-[300%] h-full transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                style={{
-                  willChange: 'transform',
-                  backfaceVisibility: 'hidden',
-                  transform: expandedTab === 'zero_screen'
-                    ? 'translate3d(-33.333%, 0, 0)'
-                    : expandedTab === 'notif_log'
-                      ? 'translate3d(-66.666%, 0, 0)'
-                      : 'translate3d(0, 0, 0)'
-                }}
-              >
-                <div className="w-1/3 h-full pr-2 flex flex-col justify-between">
-                  <CondensedTelemetry
-                    weather={weather}
-                    weatherIcon={weatherIcon}
-                    weatherTemp={weatherTemp}
-                    battery={battery}
-                    isLowBattery={isLowBattery}
-                    isCharging={isCharging}
-                    networkType={networkType}
-                    sysStats={sysStats}
-                    totalUnread={totalUnread}
-                  />
-                </div>
-                <div className="w-1/3 h-full px-2">
-                  <CondensedZeroScreen onNavigate={onNavigate} onClose={() => setExpanded(false)} />
-                </div>
-                <div className="w-1/3 h-full pl-2">
-                  <CondensedNotifLog onClose={() => setExpanded(false)} />
-                </div>
+              {/* Active Tab View */}
+              <div className="flex-1 w-full overflow-hidden relative min-h-0" onClick={(e) => e.stopPropagation()}>
+                {expandedTab === 'telemetry' && (
+                  <div className="w-full h-full flex flex-col justify-between">
+                    <CondensedTelemetry
+                      weather={weather}
+                      weatherIcon={weatherIcon}
+                      weatherTemp={weatherTemp}
+                      battery={battery}
+                      isLowBattery={isLowBattery}
+                      isCharging={isCharging}
+                      networkType={networkType}
+                      sysStats={sysStats}
+                      totalUnread={totalUnread}
+                    />
+                  </div>
+                )}
+                {expandedTab === 'zero_screen' && (
+                  <div className="w-full h-full">
+                    <CondensedZeroScreen onNavigate={onNavigate} onClose={() => setExpanded(false)} />
+                  </div>
+                )}
+                {expandedTab === 'notif_log' && (
+                  <div className="w-full h-full">
+                    <CondensedNotifLog onClose={() => setExpanded(false)} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

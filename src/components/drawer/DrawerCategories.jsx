@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
+import { IRIS_ICON_PACK } from '../../utils/IrisIconPack'
 
-function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, drawerTextSize, onAppClick, onContextMenu, onCreateFolder }) {
+function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, drawerTextSize, globalIconTheme = 'DEFAULT', onAppClick, onContextMenu, onCreateFolder }) {
   const appLookup = useMemo(() => {
     const map = new Map()
     for (const app of installedApps) map.set(app.packageId, app)
@@ -11,6 +12,20 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
   const _scale = drawerIconSize / 100
   const _catTextPx = Math.round(11 * (drawerTextSize / 100))
   const catNamePx = Math.round(13 * (drawerTextSize / 100))
+  const activeTheme = (globalIconTheme || 'DEFAULT').toUpperCase()
+  const themeClass = `icon-theme-${activeTheme.toLowerCase()}`
+  const useVectorGlyph = activeTheme === 'GLYPH_ONLY' || activeTheme === 'RETRO' || activeTheme === 'SOLID'
+
+  const renderAppThumb = (pApp, sizeClass = 'w-full h-full') => {
+    const vectorGlyph = useVectorGlyph && pApp?.packageId ? IRIS_ICON_PACK[pApp.packageId] : null
+    if (vectorGlyph) {
+      return <div className="w-[75%] h-[75%] flex items-center justify-center">{vectorGlyph}</div>
+    }
+    if (pApp?.icon && typeof pApp.icon === 'string' && (pApp.icon.startsWith('data:') || pApp.icon.startsWith('http') || pApp.icon.startsWith('/'))) {
+      return <img src={pApp.icon} loading="lazy" className={`${sizeClass} object-contain`} alt="" />
+    }
+    return <span className="material-symbols-outlined text-primary-fixed-dim text-xl">{pApp?.icon || 'apps'}</span>
+  }
 
   return (
     <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto mt-4 px-3 pb-20">
@@ -24,7 +39,7 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
             key={app.id}
             onClick={(e) => onAppClick(e, app)}
             onContextMenu={(e) => onContextMenu(e, app)}
-            className="app-icon-item bg-white/[0.04] backdrop-blur-md border border-white/10 rounded-2xl p-3.5 flex flex-col gap-3 cursor-pointer group hover:bg-white/[0.08] hover:border-primary-fixed-dim/40 shadow-xl transition-all select-none"
+            className="app-icon-item iris-card border border-white/10 rounded-2xl p-3.5 flex flex-col gap-3 cursor-pointer group hover:border-primary-fixed-dim/40 shadow-xl transition-all select-none"
           >
             {/* App Preview Area */}
             <div className="w-full aspect-square rounded-xl bg-white/[0.03] border border-white/5 p-2 flex items-center justify-center overflow-hidden">
@@ -35,12 +50,8 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
                 </div>
               ) : appCount === 1 ? (
                 /* Single App: Large Prominent Icon */
-                <div className="w-16 h-16 rounded-xl flex items-center justify-center p-1 group-hover:scale-105 transition-transform">
-                  {resolvedApps[0].icon && typeof resolvedApps[0].icon === 'string' && (resolvedApps[0].icon.startsWith('data:') || resolvedApps[0].icon.startsWith('http') || resolvedApps[0].icon.startsWith('/')) ? (
-                    <img src={resolvedApps[0].icon} loading="lazy" className="w-full h-full object-contain drop-shadow-md" alt="" />
-                  ) : (
-                    <span className="material-symbols-outlined text-primary-fixed-dim text-4xl">{resolvedApps[0].icon || 'apps'}</span>
-                  )}
+                <div className={`w-16 h-16 flex items-center justify-center p-2 group-hover:scale-105 transition-transform glass-icon-container ${themeClass}`}>
+                  {renderAppThumb(resolvedApps[0], 'w-[75%] h-[75%]')}
                 </div>
               ) : (
                 /* Multi App: 2x2 Grid with Large, Clear Icons */
@@ -48,13 +59,9 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
                   {resolvedApps.slice(0, 4).map(pApp => (
                     <div 
                       key={pApp.packageId} 
-                      className="aspect-square rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-1.5 hover:bg-white/10 transition-colors"
+                      className={`aspect-square flex items-center justify-center p-1.5 transition-colors glass-icon-container ${themeClass}`}
                     >
-                      {pApp.icon && typeof pApp.icon === 'string' && (pApp.icon.startsWith('data:') || pApp.icon.startsWith('http') || pApp.icon.startsWith('/')) ? (
-                        <img src={pApp.icon} loading="lazy" className="w-full h-full object-contain drop-shadow" alt="" />
-                      ) : (
-                        <span className="material-symbols-outlined text-primary-fixed-dim text-xl">{pApp.icon || 'apps'}</span>
-                      )}
+                      {renderAppThumb(pApp, 'w-[75%] h-[75%]')}
                     </div>
                   ))}
                   {Array.from({ length: Math.max(0, 4 - Math.min(4, resolvedApps.length)) }).map((_, i) => (

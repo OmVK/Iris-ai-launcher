@@ -24,7 +24,7 @@ const LIVE_WALLPAPERS = [
   { id: 'NEON_PARTICLES', label: 'Constellations', desc: 'Pointer gravity networks', icon: 'star' }
 ]
 
-export default function WallpaperThemeSection({ expandedSections, toggleSection, themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setHasCustomWallpaper, activeLiveWallpaper, setActiveLiveWallpaper, glassOpacity: _glassOpacity, setGlassOpacity, iconShape, setIconShape }) {
+export default function WallpaperThemeSection({ expandedSections, toggleSection, themeColor, setThemeColor, wallpaper, setWallpaper, hasCustomWallpaper, setHasCustomWallpaper, activeLiveWallpaper, setActiveLiveWallpaper, glassOpacity: _glassOpacity, setGlassOpacity }) {
   const [dailyRotation, setDailyRotation] = useState(WallpaperManager.shouldRotateDaily())
   const [dynamicColor, setDynamicColor] = useState(MaterialYou.isDynamicColorEnabled())
   const [_showPresets, setShowPresets] = useState(false)
@@ -113,7 +113,7 @@ export default function WallpaperThemeSection({ expandedSections, toggleSection,
   const handleApplyPreset = (preset) => {
     ThemePresets.applyPreset(preset, {
       setThemeColor, setGlassOpacity, setWallpaper, setActiveLiveWallpaper,
-      setIconShape, setGlobalIconTheme, setShowAppLabels,
+      setGlobalIconTheme, setShowAppLabels,
       setUse24HourClock, setPageTransitionEffect,
       setPageTransitionSpeed, setPageTransitionEasing,
     })
@@ -206,17 +206,6 @@ export default function WallpaperThemeSection({ expandedSections, toggleSection,
                   <span className="material-symbols-outlined text-[10px] text-primary-fixed-dim">{liveWp.icon}</span>{liveWp.label}
                 </span>
                 <span className="text-[6.5px] text-on-surface-variant/45 truncate uppercase">{liveWp.desc}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-white/5 flex flex-col gap-2">
-          <p className="text-[7.5px] text-on-surface-variant/40 uppercase">ICON SHAPE MASK</p>
-          <div className="grid grid-cols-5 gap-2">
-            {[{ id: 'system', label: 'System' }, { id: 'circle', label: 'Circle' }, { id: 'squircle', label: 'Squircle' }, { id: 'rounded_rect', label: 'Rounded' }, { id: 'teardrop', label: 'Teardrop' }].map(shape => (
-              <button key={shape.id} onClick={() => setIconShape(shape.id)} className={`py-1.5 px-1 rounded border text-[8px] truncate transition-all active:scale-95 ${iconShape === shape.id ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim text-primary-fixed-dim' : 'bg-black/20 border-outline-variant/30 text-on-surface-variant/70 hover:text-white'}`}>
-                {shape.label}
               </button>
             ))}
           </div>

@@ -9,7 +9,6 @@ const BUILT_IN_PRESETS = {
     glassOpacity: 75,
     wallpaper: 'VOID',
     activeLiveWallpaper: 'MATRIX',
-    iconShape: 'squircle',
     globalIconTheme: 'DEFAULT',
     showAppLabels: true,
     use24HourClock: true,
@@ -21,12 +20,11 @@ const BUILT_IN_PRESETS = {
     id: 'MINIMAL',
     name: 'Minimal',
     description: 'Clean, simple, distraction-free',
-    themeColor: 'white',
-    glassOpacity: 0,
+    themeColor: 'cyan',
+    glassOpacity: 40,
     wallpaper: 'VOID',
     activeLiveWallpaper: 'NONE',
-    iconShape: 'circle',
-    globalIconTheme: 'DEFAULT',
+    globalIconTheme: 'GLYPH_ONLY',
     showAppLabels: false,
     use24HourClock: true,
     pageTransitionEffect: 'FADE',
@@ -41,13 +39,12 @@ const BUILT_IN_PRESETS = {
     glassOpacity: 60,
     wallpaper: 'FIBER',
     activeLiveWallpaper: 'NONE',
-    iconShape: 'rounded_rect',
-    globalIconTheme: 'DEFAULT',
+    globalIconTheme: 'RETRO',
     showAppLabels: true,
     use24HourClock: true,
     pageTransitionEffect: 'SLIDE_UP',
     pageTransitionSpeed: 300,
-    pageTransitionEasing: 'LINEAR',
+    pageTransitionEasing: 'CRISP',
   },
   GLASS: {
     id: 'GLASS',
@@ -57,13 +54,12 @@ const BUILT_IN_PRESETS = {
     glassOpacity: 90,
     wallpaper: 'NEBULA',
     activeLiveWallpaper: 'NONE',
-    iconShape: 'circle',
-    globalIconTheme: 'DEFAULT',
+    globalIconTheme: 'CLASSIC',
     showAppLabels: true,
     use24HourClock: true,
     pageTransitionEffect: 'SLIDE_UP',
     pageTransitionSpeed: 350,
-    pageTransitionEasing: 'BOUNCY',
+    pageTransitionEasing: 'SPRING',
   },
   DRACULA: {
     id: 'DRACULA',
@@ -73,8 +69,7 @@ const BUILT_IN_PRESETS = {
     glassOpacity: 70,
     wallpaper: 'VOID',
     activeLiveWallpaper: 'NONE',
-    iconShape: 'squircle',
-    globalIconTheme: 'DEFAULT',
+    globalIconTheme: 'SOLID',
     showAppLabels: true,
     use24HourClock: true,
     pageTransitionEffect: 'FADE',
@@ -117,12 +112,11 @@ function deleteCustomPreset(id) {
 
 function applyPreset(preset, themeStore) {
   if (!preset || !themeStore) return
-  const { setThemeColor, setGlassOpacity, setWallpaper, setActiveLiveWallpaper, setIconShape, setGlobalIconTheme, setShowAppLabels, setUse24HourClock, setPageTransitionEffect, setPageTransitionSpeed, setPageTransitionEasing } = themeStore
+  const { setThemeColor, setGlassOpacity, setWallpaper, setActiveLiveWallpaper, setGlobalIconTheme, setShowAppLabels, setUse24HourClock, setPageTransitionEffect, setPageTransitionSpeed, setPageTransitionEasing } = themeStore
   if (preset.themeColor) setThemeColor(preset.themeColor)
   if (preset.glassOpacity !== undefined) setGlassOpacity(preset.glassOpacity)
   if (preset.wallpaper) setWallpaper(preset.wallpaper)
   if (preset.activeLiveWallpaper) setActiveLiveWallpaper(preset.activeLiveWallpaper)
-  if (preset.iconShape) setIconShape(preset.iconShape)
   if (preset.globalIconTheme) setGlobalIconTheme(preset.globalIconTheme)
   if (preset.showAppLabels !== undefined) setShowAppLabels(preset.showAppLabels)
   if (preset.use24HourClock !== undefined) setUse24HourClock(preset.use24HourClock)

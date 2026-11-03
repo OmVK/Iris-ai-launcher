@@ -5,14 +5,15 @@ import { useThemeStore } from '../stores/themeStore'
 import { useAppsStore } from '../stores/appsStore'
 import { getIconContainerStyle } from '../utils/IconShapeMask'
 
-function ArcAppIcon({ icon, label, size = 36, iconTheme = 'DEFAULT', iconShape = 'system' }) {
+function ArcAppIcon({ icon, label, size = 36, iconTheme = 'DEFAULT' }) {
   const isImage = icon && typeof icon === 'string' && (icon.startsWith('data:') || icon.startsWith('http') || icon.startsWith('/'))
-  const shapeStyle = getIconContainerStyle(iconShape, size)
+  const activeTheme = (iconTheme || 'DEFAULT').toUpperCase()
+  const shapeStyle = getIconContainerStyle(activeTheme, size)
 
   return (
     <div
       style={shapeStyle}
-      className={`glass-icon-container flex items-center justify-center relative transition-[background-color,border-color] duration-200 icon-theme-${(iconTheme || 'default').toLowerCase()} overflow-hidden flex-shrink-0 border border-primary-fixed/20 shadow-sm`}
+      className={`glass-icon-container flex items-center justify-center relative transition-all duration-200 icon-theme-${activeTheme.toLowerCase()} overflow-hidden flex-shrink-0 border border-primary-fixed/20 shadow-sm`}
     >
       {isImage ? (
         <img

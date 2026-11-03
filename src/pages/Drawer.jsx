@@ -175,20 +175,20 @@ export default function Drawer({
 
     const triggerSmoothClose = () => {
       swipeStartPos.current = null
-      const curve = 'cubic-bezier(0.22, 1, 0.36, 1)'
+      const springClose = 'cubic-bezier(0.25, 1, 0.5, 1)'
       if (drawerSheetRef?.current) {
-        drawerSheetRef.current.style.transition = `transform 200ms ${curve}`
+        drawerSheetRef.current.style.transition = `transform 240ms ${springClose}`
         drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
         drawerSheetRef.current.style.pointerEvents = 'none'
       }
       if (mainRef?.current) {
-        mainRef.current.style.transition = `opacity 180ms ${curve}`
+        mainRef.current.style.transition = `opacity 200ms ${springClose}`
         mainRef.current.style.opacity = '1'
         mainRef.current.style.pointerEvents = 'auto'
       }
       setTimeout(() => {
         onNavigateRef.current('home')
-      }, 200)
+      }, 220)
     }
 
     const onTouchStart = (e) => {
@@ -441,8 +441,8 @@ export default function Drawer({
         <DrawerCategories
           autoCategoriesItems={autoCategoriesItems} installedApps={categorizedApps}
           drawerIconSize={drawerIconSize} drawerTextSize={drawerTextSize}
+          globalIconTheme={globalIconTheme}
           onAppClick={handleAppClick} onContextMenu={handleContextMenu} onCreateFolder={handleCreateFolder}
-          iconShape={iconShape}
         />
       )}
 
@@ -451,6 +451,7 @@ export default function Drawer({
           filteredApps={filteredApps}
           showAppLabels={showAppLabels} drawerIconSize={drawerIconSize}
           drawerTextSize={drawerTextSize}
+          globalIconTheme={globalIconTheme}
           activeLetter={activeLetter} setActiveLetter={setActiveLetter}
           onAppClick={handleAppClick} onContextMenu={handleContextMenu}
           isActive={isDrawerOpen && isAppActive}

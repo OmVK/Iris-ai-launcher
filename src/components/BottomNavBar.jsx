@@ -5,7 +5,7 @@ import { useNotificationStore } from '../stores/notificationStore'
 import HapticFeedback from '../utils/HapticFeedback'
 
 export default function BottomNavBar({ activePage, setActivePage, showAppLabels = true }) {
-  const { dockColumns, dockBackground } = useThemeStore()
+  const { dockColumns, dockBackground, dockHoldAssistant } = useThemeStore()
   const { isListening, isSpeaking } = useAssistantStore()
   const { activeGlow } = useNotificationStore()
   const [collapsed, setCollapsed] = useState(false)
@@ -99,12 +99,21 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     isSwiping.current = false
     holdTriggeredRef.current = false
     clearHoldTimer()
+
+    // 1. If dock hold assistant is disabled in settings, do not start hold timer
+    if (!dockHoldAssistant) return
+
+    // 2. Bottom safe area exclusion: ignore hold gesture if touch originates within 32px of screen bottom
+    // to preserve Android system navigation / Recent Apps gesture swipe on devices like S24 Ultra
+    const screenH = typeof window !== 'undefined' ? window.innerHeight : 800
+    if (touchStartY.current > screenH - 32) return
+
     holdTimerRef.current = setTimeout(() => {
       holdTriggeredRef.current = true
       HapticFeedback.double()
       window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
     }, 1000)
-  }, [])
+  }, [dockHoldAssistant])
 
   const handleTouchMove = useCallback((e) => {
     if (touchStartX.current === null || touchStartY.current === null) return
@@ -152,10 +161,15 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   }, [handleExpand])
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-2 pointer-events-none">
+    <div
+      className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none"
+      style={{ paddingBottom: 'max(14px, env(safe-area-inset-bottom, 14px))' }}
+    >
         <div
           ref={navRef}
-          className={`pointer-events-auto relative flex items-center justify-center overflow-hidden transition-[width,height,border-radius] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
+          className={`pointer-events-auto relative flex items-center justify-center overflow-hidden island-morph ${
+            collapsed ? 'is-collapsed' : ''
+          } ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
         style={{
           ...getDockBgStyle(),
           border: isAiActive
@@ -166,17 +180,13 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
           boxShadow: isAiActive
             ? undefined
             : (activeGlow
-              ? `0 -4px 30px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}, inset 0 1px 0 rgba(255, 255, 255, 0.2)`
+              ? `0 -4px 30px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}`
               : (dockBackground === 'none' ? 'none' : (collapsed
-                ? '0 -2px 12px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
-                : '0 -4px 24px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)'))),
+                ? '0 -2px 10px rgba(0, 0, 0, 0.4)'
+                : '0 -6px 24px rgba(0, 0, 0, 0.6)'))),
           width: collapsed ? colWidth : expWidth,
           height: collapsed ? colHeight : expHeight,
           borderRadius: collapsed ? 20 : 34,
-          transform: 'translate3d(0, 0, 0)',
-          backfaceVisibility: 'hidden',
-          contain: 'layout paint style',
-          willChange: 'width, height, border-radius',
         }}
       >
         {activeGlow && (
@@ -193,8 +203,8 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
         )}
         {/* Collapsed State */}
         <div 
-          className={`absolute inset-0 flex items-center justify-center transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-            collapsed ? 'opacity-100 scale-100 duration-200 delay-75' : 'opacity-0 scale-95 duration-150 pointer-events-none'
+          className={`absolute inset-0 flex items-center justify-center island-content-layer ${
+            collapsed ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'
           }`}
         >
           <div 
@@ -228,8 +238,8 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
 
         {/* Expanded State */}
         <div 
-          className={`absolute inset-0 flex items-center justify-center transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-            collapsed ? 'opacity-0 scale-95 duration-150 pointer-events-none' : 'opacity-100 scale-100 duration-200 delay-75'
+          className={`absolute inset-0 flex items-center justify-center island-content-layer ${
+            collapsed ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100 pointer-events-auto'
           }`}
         >
           <div className="w-[360px] h-[68px] px-3 flex justify-around items-center">

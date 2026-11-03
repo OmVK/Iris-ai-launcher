@@ -28,10 +28,27 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.5.0
+- **Version**: 5.6.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
+
+## ⚡ v5.6.0 iPhone-Grade Fluid Spring Physics, Camera-Safe Notch, Bidirectional Swiping & Gesture Optimization
+
+IRIS v5.6.0 introduces fluid iOS-grade Dynamic Island spring physics, an unobstructed punch-hole camera safe notification bay, bidirectional continuous notch swiping, Samsung One UI gesture navigation protections, and lag-free settings rendering:
+- **iPhone-Grade Dynamic Island Spring Physics**:
+  - Unified iOS momentum curves (`cubic-bezier(0.32, 1.34, 0.42, 1)` expand, `cubic-bezier(0.25, 1, 0.5, 1)` collapse) across the top notch island, bottom dock, and app drawer sheet.
+  - Zero-lag GPU compositing (`transform: translate3d(0, 0, 0)` with layout/paint containment) eliminates frame drops on 90Hz/120Hz displays.
+- **Camera Punch-Hole Safe Split-Wing Notification Bay**:
+  - Re-architected notch notifications with a 30px top sensor bridge flanking the center camera cutout and a 64px message bay positioned cleanly beneath the hole.
+  - Text, icons, and sender headers are never obscured by physical camera punch-holes.
+- **Bidirectional Notch Swipe & Archive Fix**:
+  - Smooth circular wrap-around swiping (Telemetry ↔ Zero Screen ↔ Archive) with removed container-level swipe locks.
+  - Permanent archive clear fix prevents old status bar notifications from re-populating cleared history.
+- **Samsung One UI Gesture Navigation Safety & Zero-Lag Gestures Settings**:
+  - Added bottom 32px gesture exclusion zone and lifted dock to prevent conflict with Android system Recent Apps gesture on devices like the Galaxy S24 Ultra.
+  - Added dedicated `Dock Hold Assistant` toggle in Settings -> Gestures.
+  - Replaced nested backdrop blur layers with hardware-accelerated translucent styling and CSS layout containment, ensuring 120fps scrolling in the Gestures settings menu.
 
 ## ⚡ v5.5.0 Native Message Archive, 60fps Dashboard & Deep Battery Optimization
 

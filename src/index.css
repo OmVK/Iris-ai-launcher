@@ -9,6 +9,10 @@
   --primary-color-secondary: #00f2ff;
   --primary-rgb: 0, 219, 231;
   --wallpaper-bg: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+  --spring-expand: cubic-bezier(0.32, 1.34, 0.42, 1);
+  --spring-collapse: cubic-bezier(0.25, 1, 0.5, 1);
+  --spring-duration-expand: 320ms;
+  --spring-duration-collapse: 240ms;
 }
 
 html, body, #root, * {
@@ -89,9 +93,9 @@ body.custom-wallpaper-active .glass-surface {
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
-body.custom-wallpaper-active .glass-icon-container {
+body.custom-wallpaper-active .glass-icon-container.icon-theme-default {
   background: rgba(15, 23, 42, calc(var(--glass-opacity) + 0.1)) !important;
-  border: 1px solid rgba(var(--primary-rgb), 0.2) !important;
+  border: 1px solid rgba(var(--primary-rgb), 0.35) !important;
 }
 
 body.dark-glass-theme .glass-surface {
@@ -102,10 +106,10 @@ body.dark-glass-theme .glass-surface {
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-body.dark-glass-theme .glass-icon-container {
+body.dark-glass-theme .glass-icon-container.icon-theme-default {
   background: rgba(5, 5, 10, calc(var(--glass-opacity) + 0.1)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--primary-rgb), 0.3) !important;
+  box-shadow: 0 4px 16px rgba(var(--primary-rgb), 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
 .glass-border {
@@ -495,25 +499,85 @@ body.dark-glass-theme .iris-card,
   animation: none !important;
 }
 
+/* iOS Dynamic Island Fluid Morph */
+.island-morph {
+  contain: layout paint style;
+  will-change: width, height, border-radius, transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  transition-property: width, height, border-radius, background-color, border-color, box-shadow;
+  transition-duration: var(--spring-duration-expand);
+  transition-timing-function: var(--spring-expand);
+}
+
+.island-morph.is-collapsed {
+  transition-duration: var(--spring-duration-collapse);
+  transition-timing-function: var(--spring-collapse);
+}
+
+.island-content-layer {
+  contain: layout paint style;
+  will-change: opacity, transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  transition: opacity 200ms ease, transform 240ms var(--spring-expand);
+}
 
 /* Global Icon Theme Modifiers */
 
-/* 1. Solid Accent Theme (Acid Solid) */
-.icon-theme-solid {
-  background: var(--primary-color) !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.3) !important;
+/* 0. Default Theme (Cyberpunk Glow) */
+body .icon-theme-default,
+.icon-theme-default {
+  border-radius: 22% !important;
+  background: rgba(16, 22, 36, calc(var(--glass-opacity, 0.75) * 0.9)) !important;
+  border: 1px solid rgba(var(--primary-rgb), 0.38) !important;
+  box-shadow: 0 4px 16px rgba(var(--primary-rgb), 0.22), inset 0 0 8px rgba(var(--primary-rgb), 0.1) !important;
 }
-.icon-theme-solid span {
-  color: #020617 !important;
-  text-shadow: none !important;
+.icon-theme-default img {
+  filter: drop-shadow(0 2px 5px rgba(var(--primary-rgb), 0.35));
+}
+.icon-theme-default span,
+.icon-theme-default svg {
+  color: var(--primary-color) !important;
+  filter: drop-shadow(0 0 6px rgba(var(--primary-rgb), 0.45));
 }
 
-/* 2. Glyph Only Theme (Minimalist Outline) */
+/* 1. Solid Accent Theme (Acid Solid) */
+body .icon-theme-solid,
+.icon-theme-solid {
+  border-radius: 20% !important;
+  background: var(--primary-color) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.45) !important;
+  box-shadow: 0 4px 14px rgba(var(--primary-rgb), 0.45), inset 0 1px 2px rgba(255, 255, 255, 0.4) !important;
+}
+.icon-theme-solid img {
+  filter: grayscale(1) contrast(1.55) brightness(1.08) !important;
+  mix-blend-mode: multiply !important;
+}
+.icon-theme-solid span,
+.icon-theme-solid svg {
+  color: #020617 !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+/* 2. Glyph Only Theme (Minimal Outline) */
+body .icon-theme-glyph_only,
 .icon-theme-glyph_only {
+  border-radius: 16% !important;
   background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
+  border: 1px solid rgba(var(--primary-rgb), 0.48) !important;
+  box-shadow: inset 0 0 8px rgba(var(--primary-rgb), 0.1) !important;
+}
+.icon-theme-glyph_only img {
+  filter: grayscale(1) contrast(1.4) brightness(1.12) drop-shadow(0 0 4px rgba(var(--primary-rgb), 0.55)) !important;
+  opacity: 0.92;
+}
+.icon-theme-glyph_only span,
+.icon-theme-glyph_only svg {
+  color: var(--primary-color) !important;
+  text-shadow: 0 0 8px rgba(var(--primary-rgb), 0.6) !important;
+  filter: drop-shadow(0 0 4px rgba(var(--primary-rgb), 0.5));
 }
 
 /* Minimal outline for HUD icons */
@@ -523,10 +587,21 @@ body.dark-glass-theme .iris-card,
 }
 
 /* 3. Retro Phosphor Green Terminal Theme */
+body .icon-theme-retro,
 .icon-theme-retro {
-  background: #000000 !important;
+  border-radius: 8px !important;
+  background: #020804 !important;
   border: 1.5px solid #39ff14 !important;
-  box-shadow: 0 0 10px rgba(57, 255, 20, 0.4) !important;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.38), inset 0 0 8px rgba(57, 255, 20, 0.16) !important;
+}
+.icon-theme-retro img {
+  filter: grayscale(1) sepia(1) hue-rotate(70deg) saturate(5) brightness(1.05) contrast(1.35) drop-shadow(0 0 4px rgba(57, 255, 20, 0.55)) !important;
+}
+.icon-theme-retro span,
+.icon-theme-retro svg {
+  color: #39ff14 !important;
+  text-shadow: 0 0 6px #39ff14 !important;
+  filter: drop-shadow(0 0 4px rgba(57, 255, 20, 0.6));
 }
 
 /* Aurora Breathing & Organic Scale Pulse Animations */
@@ -583,18 +658,23 @@ body.dark-glass-theme .iris-card,
 .animate-aurora-dock-breathe {
   animation: iris-aurora-dock-breathe 2.0s ease-in-out infinite !important;
 }
-.icon-theme-retro span {
-  color: #39ff14 !important;
-  text-shadow: 0 0 6px #39ff14 !important;
-}
 
 /* 4. Glassmorphic Circular Theme */
+body .icon-theme-classic,
 .icon-theme-classic {
   border-radius: 50% !important;
-  /* Removed backdrop-filter to prevent scroll lag in lists */
-  background: rgba(20, 25, 38, 0.85) !important;
-  border: 1px solid rgba(var(--primary-rgb), 0.3) !important;
-  box-shadow: inset 0 1px 1px rgba(255,255,255,0.05), 0 0 8px rgba(var(--primary-rgb), 0.1) !important;
+  background: rgba(20, 26, 42, 0.88) !important;
+  border: 1.25px solid rgba(var(--primary-rgb), 0.42) !important;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.18), 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 10px rgba(var(--primary-rgb), 0.2) !important;
+}
+.icon-theme-classic img {
+  border-radius: 50% !important;
+  filter: saturate(1.12) contrast(1.05) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+.icon-theme-classic span,
+.icon-theme-classic svg {
+  color: var(--primary-color) !important;
+  text-shadow: 0 0 6px rgba(var(--primary-rgb), 0.4);
 }
 
 /* 5. IRIS Native HUD Theme */

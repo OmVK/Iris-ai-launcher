@@ -62,6 +62,7 @@ export const useThemeStore = create((set, get) => ({
   islandWidthScale: getLSNum('iris_island_width_scale', 100),
   islandHeightScale: getLSNum('iris_island_height_scale', 100),
   islandTopMargin: getLSNum('iris_island_top_margin', 0),
+  dockHoldAssistant: getLSBool('iris_dock_hold_assistant', false),
 
   setThemeColor: (v) => { try { localStorage.setItem('theme_color', v) } catch {} set({ themeColor: v }) },
   setGlassOpacity: (v) => { try { localStorage.setItem('glass_opacity', v) } catch {} set({ glassOpacity: v }) },
@@ -116,6 +117,7 @@ export const useThemeStore = create((set, get) => ({
   setIslandWidthScale: (v) => { try { localStorage.setItem('iris_island_width_scale', v) } catch {} set({ islandWidthScale: v }) },
   setIslandHeightScale: (v) => { try { localStorage.setItem('iris_island_height_scale', v) } catch {} set({ islandHeightScale: v }) },
   setIslandTopMargin: (v) => { try { localStorage.setItem('iris_island_top_margin', v) } catch {} set({ islandTopMargin: v }) },
+  setDockHoldAssistant: (v) => { try { localStorage.setItem('iris_dock_hold_assistant', String(v)) } catch {} set({ dockHoldAssistant: v }) },
 
   syncSystemWallpaper: async () => {
     try {
