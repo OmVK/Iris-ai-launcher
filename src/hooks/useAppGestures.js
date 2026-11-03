@@ -99,7 +99,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     }
   }, [setActivePage, setShowArcSearch, launchApp])
 
-  const detectGesture = useCallback((deltaX, deltaY, _startX, _startY, duration, touchCount, pinchRatio) => {
+  const detectGesture = useCallback((deltaX, deltaY, _startX, startY, duration, touchCount, pinchRatio) => {
     if (touchCount === 2) {
       if (pinchRatio > 0 && pinchRatio < 0.75) return 'pinch_in'
       if (Math.abs(deltaY) > 60) return deltaY < 0 ? 'two_finger_swipe_up' : 'two_finger_swipe_down'
@@ -116,6 +116,13 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     }
 
     if (absDeltaX < dynamicMinSwipe && absDeltaY < dynamicMinSwipe) return null
+
+    // System navigation exclusion: if a vertical swipe up started within the bottom 64px of the screen,
+    // it belongs to Android system navigation (Recent Apps / Home bar), NOT launcher gestures!
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+    if (deltaY < 0 && startY !== null && startY !== undefined && startY > vh - 64) {
+      return null
+    }
 
     if (absDeltaX > absDeltaY) {
       const dir = deltaX > 0 ? 'right' : 'left'
@@ -143,25 +150,29 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
     // Only run tap / long-press timers on the Home screen to avoid interfering with scrolling in sub-pages
     if (activePage === 'home') {
-      if (!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.app-icon-item') && !e.target.closest('[data-no-arc]')) {
-        tapCountRef++
-        if (tapCountRef === 1) {
-          doubleTapTimerRef = setTimeout(() => { tapCountRef = 0 }, 350)
-          longPressTimerRef = setTimeout(() => {
-            if (tapCountRef === 1) {
-              const gesture = getGestureAction('long_press_empty')
-              if (gesture) executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
-              tapCountRef = 0
+      const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+      // Ignore taps / holds in the bottom 64px system navigation gesture area
+      if (e.touches[0].clientY <= vh - 64) {
+        if (!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.app-icon-item') && !e.target.closest('[data-no-arc]')) {
+          tapCountRef++
+          if (tapCountRef === 1) {
+            doubleTapTimerRef = setTimeout(() => { tapCountRef = 0 }, 350)
+            longPressTimerRef = setTimeout(() => {
+              if (tapCountRef === 1) {
+                const gesture = getGestureAction('long_press_empty')
+                if (gesture) executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
+                tapCountRef = 0
+              }
+            }, 600)
+          } else if (tapCountRef === 2) {
+            if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
+            if (doubleTapTimerRef) { clearTimeout(doubleTapTimerRef); doubleTapTimerRef = null }
+            const gesture = getGestureAction('double_tap')
+            if (gesture) {
+              executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
             }
-          }, 600)
-        } else if (tapCountRef === 2) {
-          if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
-          if (doubleTapTimerRef) { clearTimeout(doubleTapTimerRef); doubleTapTimerRef = null }
-          const gesture = getGestureAction('double_tap')
-          if (gesture) {
-            executeAction(gesture.action, gesture.packageId || gesture.actionData || gesture.app)
+            tapCountRef = 0
           }
-          tapCountRef = 0
         }
       }
     }
@@ -184,7 +195,10 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       }
 
       // Interactive 1:1 finger tracking when swiping up on Home (only if swipe_up is assigned to open_drawer)
-      if (activePage === 'home' && drawerSheetRef?.current) {
+      // Exclude touches originating from the bottom 64px system navigation zone (Recent Apps swipe)
+      const vh = window.innerHeight || 800
+      const isFromBottomSystemNav = touchStartY.current !== null && touchStartY.current > vh - 64
+      if (activePage === 'home' && drawerSheetRef?.current && !isFromBottomSystemNav) {
         if (!swipeUpActiveRef.current) {
           const swipeUpGesture = getGestureAction('swipe_up')
           swipeUpActiveRef.current = swipeUpGesture?.action === 'open_drawer'
@@ -196,7 +210,6 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
             rafRef.current = requestAnimationFrame(() => {
               const sheetEl = drawerSheetRef.current
               if (!sheetEl) return
-              const vh = window.innerHeight || 800
               const currentTranslate = Math.max(0, vh + deltaY)
               sheetEl.style.transition = 'none'
               sheetEl.style.transform = `translate3d(0, ${currentTranslate}px, 0)`
@@ -234,34 +247,49 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
     // Interactive release on Home: snap open or closed with spring physics (only if swipe_up is assigned to open_drawer)
     if (activePage === 'home' && drawerSheetRef?.current && touchStartY.current !== null && touchEndY.current !== null) {
-      const swipeUpGesture = getGestureAction('swipe_up')
-      if (swipeUpGesture?.action === 'open_drawer') {
-        if (deltaY < -10 && absDeltaX < Math.abs(deltaY) * 1.5) {
-          const velocity = Math.abs(deltaY) / Math.max(1, duration)
-          const springOpen = 'cubic-bezier(0.32, 1.28, 0.42, 1)'
-          const springClose = 'cubic-bezier(0.25, 1, 0.5, 1)'
-          if (deltaY < -65 || (velocity > 0.3 && deltaY < -24)) {
-            HapticFeedback.light()
-            drawerSheetRef.current.style.transition = `transform 300ms ${springOpen}`
-            drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
-            drawerSheetRef.current.style.pointerEvents = 'auto'
-            if (mainRef?.current) {
-              mainRef.current.style.transition = `opacity 220ms ${springClose}`
-              mainRef.current.style.opacity = '0'
-              mainRef.current.style.pointerEvents = 'none'
-            }
-            setTimeout(() => setActivePage('drawer'), 280)
-            touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
-            initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
-            return
-          } else {
-            drawerSheetRef.current.style.transition = `transform 240ms ${springClose}`
-            drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
-            drawerSheetRef.current.style.pointerEvents = 'none'
-            if (mainRef?.current) {
-              mainRef.current.style.transition = `opacity 200ms ${springClose}`
-              mainRef.current.style.opacity = '1'
-              mainRef.current.style.pointerEvents = 'auto'
+      const vh = window.innerHeight || 800
+      const isFromBottomSystemNav = touchStartY.current > vh - 64
+
+      if (isFromBottomSystemNav) {
+        // If gesture originated in the bottom system navigation zone, ensure drawer stays closed
+        drawerSheetRef.current.style.transition = 'none'
+        drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
+        drawerSheetRef.current.style.pointerEvents = 'none'
+        if (mainRef?.current) {
+          mainRef.current.style.transition = 'none'
+          mainRef.current.style.opacity = '1'
+          mainRef.current.style.pointerEvents = 'auto'
+        }
+      } else {
+        const swipeUpGesture = getGestureAction('swipe_up')
+        if (swipeUpGesture?.action === 'open_drawer') {
+          if (deltaY < -10 && absDeltaX < Math.abs(deltaY) * 1.5) {
+            const velocity = Math.abs(deltaY) / Math.max(1, duration)
+            const springOpen = 'cubic-bezier(0.32, 1.28, 0.42, 1)'
+            const springClose = 'cubic-bezier(0.25, 1, 0.5, 1)'
+            if (deltaY < -65 || (velocity > 0.3 && deltaY < -24)) {
+              HapticFeedback.light()
+              drawerSheetRef.current.style.transition = `transform 300ms ${springOpen}`
+              drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
+              drawerSheetRef.current.style.pointerEvents = 'auto'
+              if (mainRef?.current) {
+                mainRef.current.style.transition = `opacity 220ms ${springClose}`
+                mainRef.current.style.opacity = '0'
+                mainRef.current.style.pointerEvents = 'none'
+              }
+              setTimeout(() => setActivePage('drawer'), 280)
+              touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
+              initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
+              return
+            } else {
+              drawerSheetRef.current.style.transition = `transform 240ms ${springClose}`
+              drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
+              drawerSheetRef.current.style.pointerEvents = 'none'
+              if (mainRef?.current) {
+                mainRef.current.style.transition = `opacity 200ms ${springClose}`
+                mainRef.current.style.opacity = '1'
+                mainRef.current.style.pointerEvents = 'auto'
+              }
             }
           }
         }
