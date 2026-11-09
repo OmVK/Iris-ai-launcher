@@ -89,24 +89,23 @@ export default function App() {
     if (!sheetEl) return
     const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
     if (activePage === 'drawer') {
-      if (sheetEl.style.transform !== 'translate3d(0, 0, 0)' && sheetEl.style.transform !== 'translate3d(0px, 0px, 0px)') {
-        sheetEl.style.transition = `transform 210ms ${fastEase}`
+      if (sheetEl.dataset.drawerOpen !== 'true') {
+        sheetEl.dataset.drawerOpen = 'true'
+        sheetEl.style.transition = `transform 185ms ${fastEase}`
         sheetEl.style.transform = 'translate3d(0, 0, 0)'
       }
       sheetEl.style.pointerEvents = 'auto'
       if (mainEl) {
-        mainEl.style.transition = `opacity 170ms ${fastEase}`
-        mainEl.style.opacity = '0'
         mainEl.style.pointerEvents = 'none'
       }
     } else {
-      if (!sheetEl.style.transform.includes('100%')) {
-        sheetEl.style.transition = `transform 190ms ${fastEase}`
+      if (sheetEl.dataset.drawerOpen !== 'false') {
+        sheetEl.dataset.drawerOpen = 'false'
+        sheetEl.style.transition = `transform 175ms ${fastEase}`
         sheetEl.style.transform = 'translate3d(0, 100%, 0)'
       }
       sheetEl.style.pointerEvents = 'none'
       if (mainEl) {
-        mainEl.style.transition = `opacity 160ms ${fastEase}`
         mainEl.style.opacity = '1'
         mainEl.style.pointerEvents = 'auto'
       }
@@ -313,8 +312,8 @@ export default function App() {
       </main>
       <div
         ref={drawerSheetRef}
-        className="fixed inset-0 z-30 translate-y-full pointer-events-none"
-        style={{ willChange: 'transform', backfaceVisibility: 'hidden', contain: 'strict', transform: 'translate3d(0, 100%, 0)' }}
+        className="fixed inset-0 z-30 translate-y-full pointer-events-none bg-[#020617]/95"
+        style={{ willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 100%, 0)' }}
       >
         <Drawer
           onNavigate={setActivePage}

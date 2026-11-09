@@ -65,16 +65,16 @@ export async function getInstalledApps() {
         const nativeMapped = await Promise.all(result.apps
           .filter(app => app.packageId !== selfPkg)
           .map(async (app) => ({
-          id: app.packageId,
-          packageId: app.packageId,
-          label: app.label,
-          icon: await downsampleIcon(app.icon || 'rocket_launch'),
-          cat: app.category || 'COMMUNICATION',
-          isHome: false,
-          version: app.version || '1.0.0',
-          permissions: app.permissions || 'STORAGE',
-          storageSize: app.size || '12.4 MB'
-        })))
+            id: app.packageId,
+            packageId: app.packageId,
+            label: app.label,
+            icon: await downsampleIcon(app.icon || 'rocket_launch'),
+            cat: app.category || 'COMMUNICATION',
+            isHome: false,
+            version: app.version || '1.0.0',
+            permissions: app.permissions || 'STORAGE',
+            storageSize: app.size || '12.4 MB'
+          })))
 
         return nativeMapped
       }
@@ -300,7 +300,7 @@ export function addAudioFinishedListener(callback) {
   if (isNative) {
     return NativeLauncher.addListener('onAudioFinished', callback)
   }
-  return { remove: () => {} }
+  return { remove: () => { } }
 }
 
 export async function stopSpeakingNative() {
@@ -419,14 +419,14 @@ export function addNotificationListener(callback) {
   if (isNative) {
     return NativeLauncher.addListener('onNotificationUpdated', callback)
   }
-  return { remove: () => {} }
+  return { remove: () => { } }
 }
 
 export function addNotificationPostedListener(callback) {
   if (isNative) {
     return NativeLauncher.addListener('onNotificationPosted', callback)
   }
-  return { remove: () => {} }
+  return { remove: () => { } }
 }
 
 export async function getArchivedNotifications() {
@@ -445,14 +445,14 @@ export async function clearArchivedNotifications() {
   if (!isNative) return
   try {
     await NativeLauncher.clearArchivedNotifications()
-  } catch {}
+  } catch { }
 }
 
 export async function deleteArchivedNotification(id) {
   if (!isNative || !id) return
   try {
     await NativeLauncher.deleteArchivedNotification({ id: String(id) })
-  } catch {}
+  } catch { }
 }
 
 export async function expandNotificationPanel() {
@@ -501,7 +501,7 @@ export async function requestStorageAccess() {
         await NativeLauncher.requestStorageAccess()
         return true
       }
-    } catch(e) {
+    } catch (e) {
       console.error("Native requestStorageAccess failed", e)
       return false
     }
@@ -529,7 +529,7 @@ export async function getSystemStats() {
         const stats = await NativeLauncher.getSystemStats()
         return stats
       }
-    } catch(e) {
+    } catch (e) {
       console.error("Native getSystemStats failed", e)
     }
   }
@@ -678,7 +678,7 @@ export function addPackageChangeListener(callback) {
   if (isNative) {
     return NativeLauncher.addListener('onPackageChanged', callback)
   }
-  return { remove: () => {} }
+  return { remove: () => { } }
 }
 
 export async function restartKeepAlive() {

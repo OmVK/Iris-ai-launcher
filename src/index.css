@@ -782,3 +782,23 @@ body .icon-theme-classic,
     animation: none !important;
   }
 }
+
+/* High-specificity Drawer GPU optimization: eliminate per-icon drop-shadow & multi-layer blur box-shadows across 100+ icons during 120Hz slide-up */
+body .drawer-app-item .glass-icon-container,
+.drawer-app-item .glass-icon-container {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: none !important;
+}
+
+body .drawer-app-item .glass-icon-container img,
+body .drawer-app-item .glass-icon-container svg,
+body .drawer-app-item .glass-icon-container span,
+.drawer-app-item .glass-icon-container img,
+.drawer-app-item .glass-icon-container svg,
+.drawer-app-item .glass-icon-container span {
+  filter: none !important;
+  text-shadow: none !important;
+  mix-blend-mode: normal !important;
+}

@@ -1,7 +1,5 @@
-import React, { memo, useState, useEffect } from 'react'
+import React, { memo } from 'react'
 import DrawerIcon from '../drawer/DrawerIcon'
-
-const INITIAL_RENDER_COUNT = 40
 
 const DrawerGridItem = memo(function DrawerGridItem({
   app,
@@ -18,8 +16,6 @@ const DrawerGridItem = memo(function DrawerGridItem({
     <div
       style={{
         width: widthPercent,
-        contentVisibility: 'auto',
-        containIntrinsicSize: '0 84px',
       }}
       className="p-1 box-border shrink-0"
     >
@@ -54,30 +50,12 @@ function DrawerGrid({
   onAppClick,
   iconShape = 'system'
 }) {
-  const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_COUNT)
-
-  useEffect(() => {
-    if (filteredApps.length <= INITIAL_RENDER_COUNT) return
-    let rafId = null
-    let timerId = null
-    rafId = requestAnimationFrame(() => {
-      timerId = setTimeout(() => {
-        setRenderLimit(filteredApps.length)
-      }, 32)
-    })
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId)
-      if (timerId) clearTimeout(timerId)
-    }
-  }, [filteredApps.length])
-
   const iconMaxPx = Math.round(48 * (drawerIconSize / 100))
   const widthPercent = `${100 / Math.max(1, gridColumns)}%`
-  const visibleApps = filteredApps.length > renderLimit ? filteredApps.slice(0, renderLimit) : filteredApps
 
   return (
     <div className="mt-4 px-1 flex flex-wrap w-full">
-      {visibleApps.map((app) => (
+      {filteredApps.map((app) => (
         <DrawerGridItem
           key={app.packageId}
           app={app}

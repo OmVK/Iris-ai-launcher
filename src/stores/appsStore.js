@@ -16,8 +16,20 @@ const loadApps = () => {
     const cached = localStorage.getItem('installed_apps')
     if (cached) {
       const parsed = JSON.parse(cached)
-      const filtered = parsed.filter(app => !IRIS_PACKAGE_IDS.has(app.packageId))
-      if (filtered.length !== parsed.length) {
+      let mutated = false
+      const filtered = []
+      for (const app of parsed) {
+        if (IRIS_PACKAGE_IDS.has(app.packageId)) {
+          mutated = true
+          continue
+        }
+        if (isNative && app.packageId && !app.customIcon && typeof app.icon === 'string' && app.icon.startsWith('data:image/')) {
+          app.icon = `https://localhost/__iris_icon__/${app.packageId}`
+          mutated = true
+        }
+        filtered.push(app)
+      }
+      if (mutated) {
         localStorage.setItem('installed_apps', JSON.stringify(filtered))
       }
       return filtered
@@ -97,7 +109,7 @@ function persistInstalledAppsDeferred(apps) {
 }
 
 const prewarmedIcons = new Set()
-export function prewarmAppIcons(apps, limit = 40) {
+export function prewarmAppIcons(apps, limit = 250) {
   if (typeof window === 'undefined' || !Array.isArray(apps)) return
   const run = () => {
     let count = 0

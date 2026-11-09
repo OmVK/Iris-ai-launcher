@@ -181,18 +181,17 @@ export default function Drawer({
       swipeStartPos.current = null
       const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
       if (drawerSheetRef?.current) {
-        drawerSheetRef.current.style.transition = `transform 200ms ${fastEase}`
+        drawerSheetRef.current.dataset.drawerOpen = 'false'
+        drawerSheetRef.current.style.transition = `transform 175ms ${fastEase}`
         drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
         drawerSheetRef.current.style.pointerEvents = 'none'
       }
       if (mainRef?.current) {
-        mainRef.current.style.transition = `opacity 160ms ${fastEase}`
-        mainRef.current.style.opacity = '1'
         mainRef.current.style.pointerEvents = 'auto'
       }
       setTimeout(() => {
         onNavigateRef.current('home')
-      }, 190)
+      }, 180)
     }
 
     const onTouchStart = (e) => {

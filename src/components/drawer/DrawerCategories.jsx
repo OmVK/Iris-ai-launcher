@@ -22,7 +22,7 @@ function DrawerCategories({ autoCategoriesItems, installedApps, drawerIconSize, 
       return <div className="w-[75%] h-[75%] flex items-center justify-center">{vectorGlyph}</div>
     }
     if (pApp?.icon && typeof pApp.icon === 'string' && (pApp.icon.startsWith('data:') || pApp.icon.startsWith('http') || pApp.icon.startsWith('/'))) {
-      return <img src={pApp.icon} loading="lazy" className={`${sizeClass} object-contain`} alt="" />
+      return <img src={pApp.icon} decoding="async" className={`${sizeClass} object-contain`} alt="" />
     }
     return <span className="material-symbols-outlined text-primary-fixed-dim text-xl">{pApp?.icon || 'apps'}</span>
   }

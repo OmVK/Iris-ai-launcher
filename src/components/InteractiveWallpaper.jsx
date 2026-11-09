@@ -3,6 +3,8 @@ import React, { useEffect, useRef } from 'react'
 export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home', isAppActive = true }) {
   const canvasRef = useRef(null)
   const mouseRef = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 })
+  const activePageRef = useRef(activePage)
+  activePageRef.current = activePage
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -99,10 +101,11 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
       // Determine target FPS dynamically:
       // When on Home screen, run at full refresh speed (e.g. 60-120fps, targetInterval = 0)
       // When on settings, drawer, assistant, widgets, throttle background rendering to 24fps
-      const targetFps = activePage === 'home' ? 60 : 24
+      const currentActivePage = activePageRef.current
+      const targetFps = currentActivePage === 'home' ? 60 : 24
       const targetInterval = 1000 / targetFps
 
-      if (activePage !== 'home' && elapsed < targetInterval) {
+      if (currentActivePage !== 'home' && elapsed < targetInterval) {
         return
       }
 
@@ -265,7 +268,7 @@ export default function InteractiveWallpaper({ mode = 'NONE', activePage = 'home
       window.removeEventListener('touchmove', handleTouchMove)
       window.removeEventListener('deviceorientation', handleOrientation)
     }
-  }, [mode, activePage, isAppActive])
+  }, [mode, isAppActive])
 
   return (
     <canvas 

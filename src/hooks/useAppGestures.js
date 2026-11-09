@@ -255,40 +255,36 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
         drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
         drawerSheetRef.current.style.pointerEvents = 'none'
         if (mainRef?.current) {
-          mainRef.current.style.transition = 'none'
-          mainRef.current.style.opacity = '1'
           mainRef.current.style.pointerEvents = 'auto'
         }
       } else {
         const swipeUpGesture = getGestureAction('swipe_up')
         if (swipeUpGesture?.action === 'open_drawer') {
-          if (deltaY < -10 && absDeltaX < Math.abs(deltaY) * 1.5) {
+          if (deltaY < -8 && absDeltaX < Math.abs(deltaY) * 1.5) {
             const velocity = Math.abs(deltaY) / Math.max(1, duration)
             const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
-            if (deltaY < -60 || (velocity > 0.28 && deltaY < -22)) {
+            if (deltaY < -38 || (velocity > 0.2 && deltaY < -14)) {
               HapticFeedback.light()
-              drawerSheetRef.current.style.transition = `transform 210ms ${fastEase}`
+              drawerSheetRef.current.dataset.drawerOpen = 'true'
+              drawerSheetRef.current.style.transition = `transform 185ms ${fastEase}`
               drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
               drawerSheetRef.current.style.pointerEvents = 'auto'
               if (mainRef?.current) {
-                mainRef.current.style.transition = `opacity 170ms ${fastEase}`
-                mainRef.current.style.opacity = '0'
                 mainRef.current.style.pointerEvents = 'none'
               }
-              setTimeout(() => setActivePage('drawer'), 210)
-              touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
-              initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
-              return
+              setTimeout(() => setActivePage('drawer'), 190)
             } else {
-              drawerSheetRef.current.style.transition = `transform 190ms ${fastEase}`
+              drawerSheetRef.current.dataset.drawerOpen = 'false'
+              drawerSheetRef.current.style.transition = `transform 165ms ${fastEase}`
               drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
               drawerSheetRef.current.style.pointerEvents = 'none'
               if (mainRef?.current) {
-                mainRef.current.style.transition = `opacity 160ms ${fastEase}`
-                mainRef.current.style.opacity = '1'
                 mainRef.current.style.pointerEvents = 'auto'
               }
             }
+            touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
+            initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
+            return
           }
         }
       }
