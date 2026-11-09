@@ -20,7 +20,7 @@ const DrawerGridItem = memo(function DrawerGridItem({
       <div
         onContextMenu={(e) => onContextMenu(e, app)}
         onClick={(e) => onAppClick(e, app)}
-        className="drawer-app-item flex flex-col items-center gap-1.5 p-1.5 rounded-xl cursor-pointer select-none hover:bg-white/5 border border-transparent hover:border-white/10"
+        className="drawer-app-item flex flex-col items-center gap-1.5 p-1.5 rounded-xl cursor-pointer select-none active:scale-95"
       >
         <DrawerIcon app={app} size={iconMaxPx} iconTheme={globalIconTheme} iconShape={iconShape} />
         {showAppLabels && (

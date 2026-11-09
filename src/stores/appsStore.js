@@ -85,6 +85,43 @@ function autoPinDefaults(apps) {
   }))
 }
 
+let persistAppsTimer = null
+function persistInstalledAppsDeferred(apps) {
+  if (persistAppsTimer) clearTimeout(persistAppsTimer)
+  persistAppsTimer = setTimeout(() => {
+    try {
+      localStorage.setItem('installed_apps', JSON.stringify(apps))
+    } catch {}
+    persistAppsTimer = null
+  }, 250)
+}
+
+const prewarmedIcons = new Set()
+export function prewarmAppIcons(apps, limit = 40) {
+  if (typeof window === 'undefined' || !Array.isArray(apps)) return
+  const run = () => {
+    let count = 0
+    for (let i = 0; i < apps.length && count < limit; i++) {
+      const src = apps[i]?.customIcon || apps[i]?.icon
+      if (src && typeof src === 'string' && src.startsWith('data:') && !prewarmedIcons.has(src)) {
+        prewarmedIcons.add(src)
+        const img = new Image()
+        img.decoding = 'async'
+        img.src = src
+        if (typeof img.decode === 'function') {
+          img.decode().catch(() => {})
+        }
+        count++
+      }
+    }
+  }
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 1000 })
+  } else {
+    setTimeout(run, 120)
+  }
+}
+
 export const useAppsStore = create((set, get) => ({
   installedApps: loadApps(),
   hiddenApps: loadHiddenApps(),
@@ -92,7 +129,7 @@ export const useAppsStore = create((set, get) => ({
 
   setInstalledApps: (updater) => set((s) => {
     const next = typeof updater === 'function' ? updater(s.installedApps) : updater
-    localStorage.setItem('installed_apps', JSON.stringify(next))
+    persistInstalledAppsDeferred(next)
     return { installedApps: next }
   }),
 
@@ -115,20 +152,28 @@ export const useAppsStore = create((set, get) => ({
 
   isAppHidden: (packageId) => get().hiddenApps.includes(packageId),
 
-  recordAppLaunch: (packageId) => set((s) => {
-    const freq = { ...s.appFrequency }
-    freq[packageId] = (freq[packageId] || 0) + 1
-    localStorage.setItem(APP_FREQUENCY_KEY, JSON.stringify(freq))
-    return { appFrequency: freq }
-  }),
+  recordAppLaunch: (packageId) => {
+    if (!packageId) return
+    setTimeout(() => {
+      set((s) => {
+        const freq = { ...s.appFrequency }
+        freq[packageId] = (freq[packageId] || 0) + 1
+        try {
+          localStorage.setItem(APP_FREQUENCY_KEY, JSON.stringify(freq))
+        } catch {}
+        return { appFrequency: freq }
+      })
+    }, 350)
+  },
 
   getAppFrequency: (packageId) => get().appFrequency[packageId] || 0,
 
   mergeNativeApps: (nativeApps) => set((s) => {
     if (!nativeApps || nativeApps.length === 0) return s
     const filtered = nativeApps.filter(app => !IRIS_PACKAGE_IDS.has(app.packageId))
-    const existingMap = new Map((s.installedApps || []).map(a => [a.packageId, a]))
-    const hasAnyHome = (s.installedApps || []).some(a => a.isHome)
+    const currentApps = s.installedApps || []
+    const existingMap = new Map(currentApps.map(a => [a.packageId, a]))
+    const hasAnyHome = currentApps.some(a => a.isHome)
 
     let updated = filtered.map(app => {
       const existing = existingMap.get(app.packageId)
@@ -148,10 +193,34 @@ export const useAppsStore = create((set, get) => ({
       updated = autoPinDefaults(updated)
     }
 
-    const nonNativeApps = (s.installedApps || []).filter(a => a.path && !a.packageId)
+    const nonNativeApps = currentApps.filter(a => a.path && !a.packageId)
     const finalApps = [...nonNativeApps, ...updated]
 
-    localStorage.setItem('installed_apps', JSON.stringify(finalApps))
+    if (finalApps.length === currentApps.length) {
+      let identical = true
+      for (let i = 0; i < finalApps.length; i++) {
+        const a = finalApps[i]
+        const b = currentApps[i]
+        if (
+          a.packageId !== b.packageId ||
+          a.label !== b.label ||
+          a.isHome !== b.isHome ||
+          a.customLabel !== b.customLabel ||
+          a.customIcon !== b.customIcon ||
+          Boolean(a.icon) !== Boolean(b.icon)
+        ) {
+          identical = false
+          break
+        }
+      }
+      if (identical) {
+        prewarmAppIcons(currentApps)
+        return s
+      }
+    }
+
+    persistInstalledAppsDeferred(finalApps)
+    prewarmAppIcons(finalApps)
     return { installedApps: finalApps }
   }),
 
@@ -172,3 +241,5 @@ export const useAppsStore = create((set, get) => ({
     }
   },
 }))
+
+prewarmAppIcons(useAppsStore.getState().installedApps)

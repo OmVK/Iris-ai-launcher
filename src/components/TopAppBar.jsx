@@ -60,7 +60,7 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
 
   const { isListening, isSpeaking } = useAssistantStore()
   const { totalUnread } = useBadgeStore()
-  const { islandProfile, islandWidthScale, islandHeightScale, islandTopMargin } = useThemeStore()
+  const { islandProfile, islandWidthScale, islandHeightScale, islandTopMargin, notifPopupsEnabled } = useThemeStore()
   const { activeNotification, activeGlow, dismissActive, history } = useNotificationStore()
 
   const preset = PROFILE_PRESETS[islandProfile] || PROFILE_PRESETS.AUTO
@@ -289,7 +289,7 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
   let _glowColor = 'rgba(0, 0, 0, 0.4)'
   let borderColor = 'rgba(255, 255, 255, 0.08)'
 
-  const isPoppingNotif = !!activeNotification && !expanded
+  const isPoppingNotif = !!activeNotification && !expanded && notifPopupsEnabled
   const notifWidth = Math.min(typeof window !== 'undefined' ? window.innerWidth - 24 : 356, 356)
   // Height accounts for the top 30px camera punch-hole bridge + 62px unobstructed notification bay below the hole
   const notifHeight = 94

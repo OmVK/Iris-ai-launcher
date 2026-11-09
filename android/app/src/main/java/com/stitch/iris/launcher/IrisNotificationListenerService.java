@@ -25,6 +25,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
     public static final String KEY_LOCKED_PACKAGES = "locked_packages_set";
     public static final String KEY_NOTIFICATION_ARCHIVE = "iris_native_notif_archive";
     public static final String KEY_ARCHIVE_CLEARED_AT = "iris_notif_archive_cleared_at";
+    public static final String KEY_DELETED_ARCHIVE_IDS = "iris_notif_deleted_ids";
     private static final int MAX_ARCHIVE_SIZE = 100;
     private static final java.util.concurrent.ConcurrentHashMap<String, String> appLabelCache = new java.util.concurrent.ConcurrentHashMap<>();
     private static IrisNotificationListenerService instance;
@@ -256,10 +257,61 @@ public class IrisNotificationListenerService extends NotificationListenerService
         }
     }
 
+    private static java.util.Set<String> getDeletedArchiveIds(SharedPreferences prefs) {
+        java.util.Set<String> set = new java.util.HashSet<>();
+        if (prefs == null) return set;
+        try {
+            String raw = prefs.getString(KEY_DELETED_ARCHIVE_IDS, "[]");
+            JSONArray arr = new JSONArray(raw);
+            for (int i = 0; i < arr.length(); i++) {
+                String val = arr.optString(i, "");
+                if (!val.isEmpty()) set.add(val);
+            }
+        } catch (Exception ignored) {}
+        return set;
+    }
+
+    private static void saveDeletedArchiveIds(SharedPreferences prefs, java.util.Set<String> ids) {
+        if (prefs == null || ids == null) return;
+        try {
+            JSONArray arr = new JSONArray();
+            int count = 0;
+            for (String s : ids) {
+                if (s != null && !s.isEmpty()) {
+                    arr.put(s);
+                    if (++count >= 300) break;
+                }
+            }
+            prefs.edit().putString(KEY_DELETED_ARCHIVE_IDS, arr.toString()).commit();
+        } catch (Exception ignored) {}
+    }
+
+    private static boolean isDeletedArchiveItem( java.util.Set<String> deletedIds, JSONObject item) {
+        if (deletedIds == null || deletedIds.isEmpty() || item == null) return false;
+        String id = item.optString("id", "");
+        String key = item.optString("key", "");
+        String pkg = item.optString("packageId", "");
+        String title = item.optString("title", "");
+        String text = item.optString("text", "");
+        String sig = pkg + "|" + title + "|" + text;
+        return (!id.isEmpty() && deletedIds.contains(id))
+                || (!key.isEmpty() && deletedIds.contains(key))
+                || deletedIds.contains(sig);
+    }
+
     public static synchronized void recordToNativeArchive(Context context, JSONObject incoming) {
         if (context == null || incoming == null) return;
         try {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            long clearedAt = prefs.getLong(KEY_ARCHIVE_CLEARED_AT, 0L);
+            long postTime = incoming.optLong("postTime", 0L);
+            if (clearedAt > 0 && postTime > 0 && postTime <= clearedAt) {
+                return;
+            }
+            java.util.Set<String> deletedIds = getDeletedArchiveIds(prefs);
+            if (isDeletedArchiveItem(deletedIds, incoming)) {
+                return;
+            }
             String raw = prefs.getString(KEY_NOTIFICATION_ARCHIVE, "[]");
             JSONArray current = new JSONArray(raw);
 
@@ -363,15 +415,19 @@ public class IrisNotificationListenerService extends NotificationListenerService
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             prefs.edit()
                 .putString(KEY_NOTIFICATION_ARCHIVE, "[]")
+                .putString(KEY_DELETED_ARCHIVE_IDS, "[]")
                 .putLong(KEY_ARCHIVE_CLEARED_AT, System.currentTimeMillis())
                 .commit();
         } catch (Exception ignored) {}
     }
 
     public static synchronized void deleteFromNativeArchive(Context context, String id) {
-        if (context == null || id == null) return;
+        if (context == null || id == null || id.isEmpty()) return;
         try {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            java.util.Set<String> deletedIds = getDeletedArchiveIds(prefs);
+            deletedIds.add(id);
+
             String raw = prefs.getString(KEY_NOTIFICATION_ARCHIVE, "[]");
             JSONArray current = new JSONArray(raw);
             JSONArray next = new JSONArray();
@@ -379,11 +435,20 @@ public class IrisNotificationListenerService extends NotificationListenerService
                 JSONObject item = current.getJSONObject(i);
                 String itemId = item.optString("id", "");
                 String itemKey = item.optString("key", "");
-                String itemSig = item.optString("packageId", "") + "|" + item.optString("title", "") + "|" + item.optString("text", "");
-                if (!id.equals(itemId) && !id.equals(itemKey) && !id.equals(itemSig)) {
+                String itemPkg = item.optString("packageId", "");
+                String itemTitle = item.optString("title", "");
+                String itemText = item.optString("text", "");
+                String itemSig = itemPkg + "|" + itemTitle + "|" + itemText;
+                String itemAppSig = itemPkg + "|" + item.optString("appName", "") + "|" + itemText;
+                if (id.equals(itemId) || id.equals(itemKey) || id.equals(itemSig) || id.equals(itemAppSig)) {
+                    if (!itemId.isEmpty()) deletedIds.add(itemId);
+                    if (!itemKey.isEmpty()) deletedIds.add(itemKey);
+                    deletedIds.add(itemSig);
+                } else {
                     next.put(item);
                 }
             }
+            saveDeletedArchiveIds(prefs, deletedIds);
             prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, next.toString()).commit();
         } catch (Exception ignored) {}
     }

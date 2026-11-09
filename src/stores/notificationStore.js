@@ -37,10 +37,15 @@ function getDeletedSigs() {
 }
 
 function addDeletedSig(sig) {
+  if (!sig) return
   try {
     const set = getDeletedSigs()
-    set.add(sig)
-    const arr = Array.from(set).slice(-200)
+    if (Array.isArray(sig)) {
+      sig.forEach(s => { if (s) set.add(s) })
+    } else {
+      set.add(sig)
+    }
+    const arr = Array.from(set).slice(-300)
     localStorage.setItem(DELETED_SIGS_KEY, JSON.stringify(arr))
   } catch {}
 }
@@ -66,14 +71,17 @@ function formatRecord(notif, installedApps = []) {
   const theme = getAppTheme(pkg, resolvedAppName)
   const ts = notif.timestamp || notif.postTime || Date.now()
   const dt = new Date(ts)
+  const rawTitle = (notif.title || '').trim()
+  const rawText = (notif.text || notif.message || '').trim()
 
   return {
     id: notif.id || `${ts}_${Math.random().toString(36).substring(2, 7)}`,
     key: notif.key || String(ts),
     packageId: pkg,
     appName: resolvedAppName || theme.name,
-    title: notif.title || theme.name,
-    text: notif.text || notif.message || 'New notification received',
+    title: rawTitle || theme.name,
+    text: rawText || 'New notification received',
+    rawSig: notif.rawSig || `${pkg}|${rawTitle}|${rawText}`,
     time: notif.time || dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     date: notif.date || dt.toLocaleDateString([], { month: 'short', day: 'numeric' }),
     timestamp: ts,
@@ -104,6 +112,8 @@ export const useNotificationStore = create((set, get) => ({
     for (const item of existing) {
       const sig = `${item.packageId}|${item.title}|${item.text}`
       bySignature.set(sig, item)
+      if (item.rawSig) bySignature.set(item.rawSig, item)
+      if (item.id) bySignature.set(item.id, item)
     }
 
     let changed = false
@@ -111,8 +121,8 @@ export const useNotificationStore = create((set, get) => ({
 
     for (const raw of nativeList) {
       const pkg = raw.packageId || raw.packageName || ''
-      const title = raw.title || ''
-      const text = raw.text || ''
+      const title = (raw.title || '').trim()
+      const text = (raw.text || '').trim()
       if (!pkg && !title && !text) continue
 
       const itemTs = Math.max(raw.timestamp || 0, raw.postTime || 0)
@@ -131,10 +141,20 @@ export const useNotificationStore = create((set, get) => ({
         continue
       }
 
+      const formatted = formatRecord(raw, installedApps)
       const sig = `${pkg}|${title}|${text}`
-      if (deletedSigs.has(sig)) continue
+      const formattedSig = `${pkg}|${formatted.title}|${formatted.text}`
+      if (
+        deletedSigs.has(sig) ||
+        deletedSigs.has(formattedSig) ||
+        (raw.id && deletedSigs.has(raw.id)) ||
+        (raw.key && deletedSigs.has(raw.key)) ||
+        deletedSigs.has(formatted.id)
+      ) {
+        continue
+      }
 
-      const found = bySignature.get(sig)
+      const found = bySignature.get(sig) || bySignature.get(formattedSig) || (raw.id ? bySignature.get(raw.id) : null)
       if (found) {
         if ((raw.deletedBySender && !found.deletedBySender) || (raw.dismissedFromSystem && !found.dismissedFromSystem)) {
           const idx = merged.findIndex(m => m.id === found.id)
@@ -148,9 +168,10 @@ export const useNotificationStore = create((set, get) => ({
           }
         }
       } else {
-        const formatted = formatRecord(raw, installedApps)
         merged.push(formatted)
         bySignature.set(sig, formatted)
+        bySignature.set(formattedSig, formatted)
+        if (formatted.id) bySignature.set(formatted.id, formatted)
         changed = true
       }
     }
@@ -214,7 +235,12 @@ export const useNotificationStore = create((set, get) => ({
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
     } catch {}
 
-    if (options?.popBanner !== false) {
+    let popupsEnabled = true
+    try {
+      popupsEnabled = localStorage.getItem('iris_notif_popups_enabled') !== 'false'
+    } catch {}
+
+    if (options?.popBanner !== false && popupsEnabled) {
       set({
         history: updated,
         activeNotification: record,
@@ -240,19 +266,37 @@ export const useNotificationStore = create((set, get) => ({
   },
 
   deleteHistoryItem: (id) => {
+    if (!id) return
     const current = get().history
-    const target = current.find(item => item.id === id)
-    const next = current.filter(item => item.id !== id)
-    set({ history: next })
+    const target = current.find(item => item.id === id || item.key === id)
+    const targetSig = target ? `${target.packageId}|${target.title}|${target.text}` : null
+    const targetRawSig = target?.rawSig || null
+
+    const next = current.filter(item => {
+      if (item.id === id || item.key === id) return false
+      if (targetSig && `${item.packageId}|${item.title}|${item.text}` === targetSig && Math.abs((item.timestamp || 0) - (target.timestamp || 0)) < 60000) return false
+      return true
+    })
+
+    const active = get().activeNotification
+    const clearActive = active && (active.id === id || active.key === id)
+    set(clearActive ? { history: next, activeNotification: null, activeGlow: null } : { history: next })
+
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     } catch {}
+
     if (target) {
-      const sig = `${target.packageId}|${target.title}|${target.text}`
-      addDeletedSig(sig)
+      addDeletedSig([id, target.id, target.key, targetSig, targetRawSig])
       deleteArchivedNotification(target.id)
-      deleteArchivedNotification(sig)
+      if (targetRawSig && targetRawSig !== target.id) {
+        deleteArchivedNotification(targetRawSig)
+      }
+      if (targetSig && targetSig !== targetRawSig) {
+        deleteArchivedNotification(targetSig)
+      }
     } else {
+      addDeletedSig(id)
       deleteArchivedNotification(id)
     }
   },

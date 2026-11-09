@@ -78,27 +78,26 @@ export default function App() {
     const sheetEl = drawerSheetRef.current
     const mainEl = mainRef.current
     if (!sheetEl) return
-    const springOpen = 'cubic-bezier(0.32, 1.28, 0.42, 1)'
-    const springClose = 'cubic-bezier(0.25, 1, 0.5, 1)'
+    const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
     if (activePage === 'drawer') {
       if (sheetEl.style.transform !== 'translate3d(0, 0, 0)' && sheetEl.style.transform !== 'translate3d(0px, 0px, 0px)') {
-        sheetEl.style.transition = `transform 300ms ${springOpen}`
+        sheetEl.style.transition = `transform 210ms ${fastEase}`
         sheetEl.style.transform = 'translate3d(0, 0, 0)'
       }
       sheetEl.style.pointerEvents = 'auto'
       if (mainEl) {
-        mainEl.style.transition = `opacity 220ms ${springClose}`
+        mainEl.style.transition = `opacity 170ms ${fastEase}`
         mainEl.style.opacity = '0'
         mainEl.style.pointerEvents = 'none'
       }
     } else {
       if (!sheetEl.style.transform.includes('100%')) {
-        sheetEl.style.transition = `transform 240ms ${springClose}`
+        sheetEl.style.transition = `transform 190ms ${fastEase}`
         sheetEl.style.transform = 'translate3d(0, 100%, 0)'
       }
       sheetEl.style.pointerEvents = 'none'
       if (mainEl) {
-        mainEl.style.transition = `opacity 200ms ${springClose}`
+        mainEl.style.transition = `opacity 160ms ${fastEase}`
         mainEl.style.opacity = '1'
         mainEl.style.pointerEvents = 'auto'
       }

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, addNotificationPostedListener, getArchivedNotifications, dismissNotification, addPackageChangeListener } from '../components/LauncherPlugin'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { useAppStore } from '../stores/appStore'
-import { useAppsStore } from '../stores/appsStore'
+import { useAppsStore, prewarmAppIcons } from '../stores/appsStore'
 import useBadgeStore from '../stores/badgeStore'
 import { useNotificationStore } from '../stores/notificationStore'
 
@@ -24,7 +24,15 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
         })
         stateHandle = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
           setIsAppActive(isActive)
-          if (isActive) { restartKeepAlive(); loadNativeApps() }
+          if (isActive) {
+            restartKeepAlive()
+            const currentApps = useAppsStore.getState().installedApps
+            if (!currentApps || currentApps.length === 0) {
+              loadNativeApps()
+            } else {
+              prewarmAppIcons(currentApps)
+            }
+          }
         })
       })
       return () => {
@@ -40,15 +48,8 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
     const pkgListener = addPackageChangeListener(() => {
       loadNativeApps()
     })
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        loadNativeApps()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       if (pkgListener && typeof pkgListener.remove === 'function') pkgListener.remove()
-      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [loadNativeApps])
 

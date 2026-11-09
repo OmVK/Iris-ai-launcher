@@ -133,11 +133,16 @@ body.dark-glass-theme .iris-card,
   overscroll-behavior-y: contain;
 }
 
-/* Drawer performance: isolate each app item's layout */
+/* Drawer performance: isolate each app item's layout without promoting 120+ separate GPU layers */
 .drawer-app-item {
   contain: layout style paint;
-  transform: translateZ(0);
-  backface-visibility: hidden;
+}
+
+.drawer-app-item img,
+.drawer-app-item svg,
+.drawer-app-item span {
+  filter: none !important;
+  text-shadow: none !important;
 }
 
 /* Suppress transitions during fast scroll */

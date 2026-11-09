@@ -63,6 +63,7 @@ export const useThemeStore = create((set, get) => ({
   islandHeightScale: getLSNum('iris_island_height_scale', 100),
   islandTopMargin: getLSNum('iris_island_top_margin', 0),
   dockHoldAssistant: getLSBool('iris_dock_hold_assistant', false),
+  notifPopupsEnabled: getLSBool('iris_notif_popups_enabled', true),
 
   setThemeColor: (v) => { try { localStorage.setItem('theme_color', v) } catch {} set({ themeColor: v }) },
   setGlassOpacity: (v) => { try { localStorage.setItem('glass_opacity', v) } catch {} set({ glassOpacity: v }) },
@@ -118,6 +119,7 @@ export const useThemeStore = create((set, get) => ({
   setIslandHeightScale: (v) => { try { localStorage.setItem('iris_island_height_scale', v) } catch {} set({ islandHeightScale: v }) },
   setIslandTopMargin: (v) => { try { localStorage.setItem('iris_island_top_margin', v) } catch {} set({ islandTopMargin: v }) },
   setDockHoldAssistant: (v) => { try { localStorage.setItem('iris_dock_hold_assistant', String(v)) } catch {} set({ dockHoldAssistant: v }) },
+  setNotifPopupsEnabled: (v) => { try { localStorage.setItem('iris_notif_popups_enabled', String(v)) } catch {} set({ notifPopupsEnabled: v }) },
 
   syncSystemWallpaper: async () => {
     try {

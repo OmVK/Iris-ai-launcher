@@ -213,7 +213,6 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
               const currentTranslate = Math.max(0, vh + deltaY)
               sheetEl.style.transition = 'none'
               sheetEl.style.transform = `translate3d(0, ${currentTranslate}px, 0)`
-              sheetEl.style.pointerEvents = 'auto'
             })
           }
         }
@@ -265,28 +264,27 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
         if (swipeUpGesture?.action === 'open_drawer') {
           if (deltaY < -10 && absDeltaX < Math.abs(deltaY) * 1.5) {
             const velocity = Math.abs(deltaY) / Math.max(1, duration)
-            const springOpen = 'cubic-bezier(0.32, 1.28, 0.42, 1)'
-            const springClose = 'cubic-bezier(0.25, 1, 0.5, 1)'
-            if (deltaY < -65 || (velocity > 0.3 && deltaY < -24)) {
+            const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
+            if (deltaY < -60 || (velocity > 0.28 && deltaY < -22)) {
               HapticFeedback.light()
-              drawerSheetRef.current.style.transition = `transform 300ms ${springOpen}`
+              drawerSheetRef.current.style.transition = `transform 210ms ${fastEase}`
               drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
               drawerSheetRef.current.style.pointerEvents = 'auto'
               if (mainRef?.current) {
-                mainRef.current.style.transition = `opacity 220ms ${springClose}`
+                mainRef.current.style.transition = `opacity 170ms ${fastEase}`
                 mainRef.current.style.opacity = '0'
                 mainRef.current.style.pointerEvents = 'none'
               }
-              setTimeout(() => setActivePage('drawer'), 280)
+              setTimeout(() => setActivePage('drawer'), 210)
               touchStartX.current = null; touchEndX.current = null; touchStartY.current = null; touchEndY.current = null
               initialPinchDistRef.current = 0; currentPinchDistRef.current = 0
               return
             } else {
-              drawerSheetRef.current.style.transition = `transform 240ms ${springClose}`
+              drawerSheetRef.current.style.transition = `transform 190ms ${fastEase}`
               drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
               drawerSheetRef.current.style.pointerEvents = 'none'
               if (mainRef?.current) {
-                mainRef.current.style.transition = `opacity 200ms ${springClose}`
+                mainRef.current.style.transition = `opacity 160ms ${fastEase}`
                 mainRef.current.style.opacity = '1'
                 mainRef.current.style.pointerEvents = 'auto'
               }

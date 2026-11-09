@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useAppsStore } from '../stores/appsStore'
+import { useThemeStore } from '../stores/themeStore'
 import {
   launchApp,
   isNotificationAccessGranted,
@@ -10,7 +11,8 @@ import {
 import HapticFeedback from '../utils/HapticFeedback'
 
 export default function CondensedNotifLog({ onClose }) {
-  const { history, clearHistory, deleteHistoryItem, syncNativeArchive } = useNotificationStore()
+  const { history, clearHistory, deleteHistoryItem, syncNativeArchive, dismissActive } = useNotificationStore()
+  const { notifPopupsEnabled, setNotifPopupsEnabled } = useThemeStore()
   const [hasPermission, setHasPermission] = useState(true)
 
   useEffect(() => {
@@ -36,7 +38,8 @@ export default function CondensedNotifLog({ onClose }) {
     await requestNotificationAccess()
   }
 
-  const handleLaunch = (pkg) => {
+  const handleLaunch = (e, pkg) => {
+    if (e?.target?.closest?.('[data-notif-delete]')) return
     if (pkg) {
       HapticFeedback.light()
       launchApp(pkg)
@@ -45,15 +48,30 @@ export default function CondensedNotifLog({ onClose }) {
   }
 
   const handleDelete = (e, id) => {
-    e.preventDefault()
-    e.stopPropagation()
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     HapticFeedback.selection()
     deleteHistoryItem(id)
   }
 
+  const handleTogglePopups = (e) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    HapticFeedback.light()
+    const next = !notifPopupsEnabled
+    setNotifPopupsEnabled(next)
+    if (!next) dismissActive()
+  }
+
   const handleClear = (e) => {
-    e.preventDefault()
-    e.stopPropagation()
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     HapticFeedback.double()
     clearHistory()
   }
@@ -61,23 +79,43 @@ export default function CondensedNotifLog({ onClose }) {
   return (
     <div className="flex flex-col h-full text-white/90 font-mono-data select-none">
       {/* Header bar */}
-      <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-primary-fixed text-sm">history_edu</span>
-          <span className="text-[9px] font-bold tracking-widest uppercase text-white/80">
-            NOTIFICATION ARCHIVE ({history.length})
+      <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0 gap-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="material-symbols-outlined text-primary-fixed text-sm shrink-0">history_edu</span>
+          <span className="text-[9px] font-bold tracking-widest uppercase text-white/80 truncate">
+            ARCHIVE ({history.length})
           </span>
         </div>
-        {history.length > 0 && (
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={handleClear}
-            onTouchEnd={(e) => { e.stopPropagation() }}
-            className="text-[8.5px] font-bold text-red-300 hover:text-red-200 active:scale-95 px-2.5 py-1 rounded-md bg-red-500/20 border border-red-500/40 transition-all cursor-pointer"
+            onClick={handleTogglePopups}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleTogglePopups(e) }}
+            className={`text-[8px] font-bold active:scale-95 px-2 py-1 rounded-md border transition-all cursor-pointer flex items-center gap-1 ${
+              notifPopupsEnabled
+                ? 'text-primary-fixed-dim bg-primary-fixed-dim/15 border-primary-fixed-dim/40'
+                : 'text-white/50 bg-white/5 border-white/15'
+            }`}
+            title="Toggle Notch Notification Popups"
           >
-            CLEAR LOG
+            <span className="material-symbols-outlined text-[10px]">
+              {notifPopupsEnabled ? 'notifications_active' : 'notifications_paused'}
+            </span>
+            <span>{notifPopupsEnabled ? 'POPUP ON' : 'SILENT'}</span>
           </button>
-        )}
+          {history.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClear}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleClear(e) }}
+              className="text-[8.5px] font-bold text-red-300 hover:text-red-200 active:scale-95 px-2.5 py-1 rounded-md bg-red-500/20 border border-red-500/40 transition-all cursor-pointer"
+            >
+              CLEAR LOG
+            </button>
+          )}
+        </div>
       </div>
 
       {!hasPermission && (
@@ -120,7 +158,7 @@ export default function CondensedNotifLog({ onClose }) {
           history.map((item) => (
             <div
               key={item.id}
-              onClick={() => handleLaunch(item.packageId)}
+              onClick={(e) => handleLaunch(e, item.packageId)}
               className="group relative flex items-start gap-2.5 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/5 hover:border-white/20 transition-colors cursor-pointer"
               style={{
                 boxShadow: `inset 2px 0 0 ${item.color || '#00f2ff'}`
@@ -179,12 +217,16 @@ export default function CondensedNotifLog({ onClose }) {
                   </div>
                   <button
                     type="button"
+                    data-notif-delete="true"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => handleDelete(e, item.id)}
                     onClick={(e) => handleDelete(e, item.id)}
-                    onTouchEnd={(e) => { e.stopPropagation() }}
-                    className="text-white/40 hover:text-red-400 active:scale-90 px-1.5 py-0.5 rounded bg-white/5 hover:bg-red-500/15 transition-all cursor-pointer"
+                    className="flex items-center gap-1 text-red-300/80 hover:text-red-300 active:scale-90 px-2.5 py-1 rounded-md bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 transition-all cursor-pointer shrink-0"
                     title="Delete log entry"
                   >
                     <span className="material-symbols-outlined text-[12px]">delete</span>
+                    <span className="text-[7.5px] font-bold tracking-wider uppercase">CLEAR</span>
                   </button>
                 </div>
               </div>

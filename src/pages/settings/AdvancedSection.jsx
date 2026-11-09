@@ -3,8 +3,11 @@ import { SettingToggle } from './SettingControls'
 import SettingsSection from './SettingsSection'
 import { isAccessibilityServiceEnabled, isUsageStatsEnabled, isNotificationAccessGranted, openPermissionSettings } from '../../components/LauncherPlugin'
 import HapticFeedback from '../../utils/HapticFeedback'
+import { useThemeStore } from '../../stores/themeStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 
 export default function AdvancedSection({ expandedSections, toggleSection }) {
+  const { notifPopupsEnabled, setNotifPopupsEnabled } = useThemeStore()
   const [settings, setSettings] = useState({
     debugMode: false,
     accessibilityEnabled: false,
@@ -73,6 +76,17 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
           sublabel="Capture deleted WhatsApp/social messages & media sessions"
           value={settings.notificationAccessEnabled}
           onChange={() => openPermissionSettings('BIND_NOTIFICATION_LISTENER_SERVICE')}
+        />
+
+        <SettingToggle
+          icon="notifications_paused"
+          label="Notch Notification Popups"
+          sublabel="Show live banner in top notch (disable to archive silently)"
+          value={notifPopupsEnabled}
+          onChange={(v) => {
+            setNotifPopupsEnabled(v)
+            if (!v) useNotificationStore.getState().dismissActive()
+          }}
         />
 
         <SettingToggle

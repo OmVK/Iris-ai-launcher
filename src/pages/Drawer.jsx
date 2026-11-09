@@ -74,15 +74,19 @@ export default function Drawer({
     }))
   }, [installedApps])
 
+  const freqDep = sortBy === 'FREQUENCY' ? appFrequency : null
+
   const filteredApps = useMemo(() => {
+    const lockedSet = new Set(Array.isArray(lockedApps) ? lockedApps : [])
+    const hiddenSet = new Set(Array.isArray(hiddenApps) ? hiddenApps : [])
+    const q = searchQuery.trim().toLowerCase()
+
     return categorizedApps.filter(app => {
-      const isLocked = Array.isArray(lockedApps) && lockedApps.includes(app.packageId)
-      if (isLocked) return false
-      const isHidden = hiddenApps.includes(app.packageId)
+      if (lockedSet.has(app.packageId)) return false
+      const isHidden = hiddenSet.has(app.packageId)
       if (isHidden && !showHidden) return false
       if (!isHidden && showHidden) return false
 
-      const q = searchQuery.toLowerCase()
       const matchesSearch = !q || 
         app.label.toLowerCase().includes(q) ||
         app.packageId.toLowerCase().includes(q)
@@ -96,12 +100,12 @@ export default function Drawer({
         const parseSize = (s) => parseFloat(s) || 0
         return parseSize(b.storageSize) - parseSize(a.storageSize)
       }
-      if (sortBy === 'FREQUENCY') {
-        return (appFrequency[b.packageId] || 0) - (appFrequency[a.packageId] || 0)
+      if (sortBy === 'FREQUENCY' && freqDep) {
+        return (freqDep[b.packageId] || 0) - (freqDep[a.packageId] || 0)
       }
       return 0
     })
-  }, [categorizedApps, lockedApps, hiddenApps, showHidden, searchQuery, activeCategory, sortBy, activeLetter, appFrequency])
+  }, [categorizedApps, lockedApps, hiddenApps, showHidden, searchQuery, activeCategory, sortBy, activeLetter, freqDep])
 
   const [activeFolder, setActiveFolder] = useState(null)
   const [customFolders, setCustomFolders] = useState(() => {
@@ -175,20 +179,20 @@ export default function Drawer({
 
     const triggerSmoothClose = () => {
       swipeStartPos.current = null
-      const springClose = 'cubic-bezier(0.25, 1, 0.5, 1)'
+      const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
       if (drawerSheetRef?.current) {
-        drawerSheetRef.current.style.transition = `transform 240ms ${springClose}`
+        drawerSheetRef.current.style.transition = `transform 200ms ${fastEase}`
         drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
         drawerSheetRef.current.style.pointerEvents = 'none'
       }
       if (mainRef?.current) {
-        mainRef.current.style.transition = `opacity 200ms ${springClose}`
+        mainRef.current.style.transition = `opacity 160ms ${fastEase}`
         mainRef.current.style.opacity = '1'
         mainRef.current.style.pointerEvents = 'auto'
       }
       setTimeout(() => {
         onNavigateRef.current('home')
-      }, 220)
+      }, 190)
     }
 
     const onTouchStart = (e) => {
