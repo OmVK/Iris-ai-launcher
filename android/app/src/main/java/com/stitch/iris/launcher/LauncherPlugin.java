@@ -1132,42 +1132,61 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void optimizeMemory(PluginCall call) {
-        try {
-            android.app.ActivityManager am = (android.app.ActivityManager) getContext().getSystemService(android.content.Context.ACTIVITY_SERVICE);
-            long beforeAvail = 0L;
-            if (am != null) {
-                android.app.ActivityManager.MemoryInfo miBefore = new android.app.ActivityManager.MemoryInfo();
-                am.getMemoryInfo(miBefore);
-                beforeAvail = miBefore.availMem;
+        new Thread(() -> {
+            try {
+                android.app.ActivityManager am = (android.app.ActivityManager) getContext().getSystemService(android.content.Context.ACTIVITY_SERVICE);
+                long beforeAvail = 0L;
+                int killedCount = 0;
+                if (am != null) {
+                    android.app.ActivityManager.MemoryInfo miBefore = new android.app.ActivityManager.MemoryInfo();
+                    am.getMemoryInfo(miBefore);
+                    beforeAvail = miBefore.availMem;
 
-                android.content.pm.PackageManager pm = getContext().getPackageManager();
-                Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-                mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-                List<ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
-                String selfPkg = getContext().getPackageName();
-                for (ResolveInfo info : resolvedInfos) {
-                    String pkg = info.activityInfo.packageName;
-                    if (pkg != null && !pkg.equals(selfPkg)) {
-                        try {
-                            am.killBackgroundProcesses(pkg);
-                        } catch (Exception ignored) {}
+                    android.content.pm.PackageManager pm = getContext().getPackageManager();
+                    Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
+                    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                    List<ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
+                    String selfPkg = getContext().getPackageName();
+                    for (ResolveInfo info : resolvedInfos) {
+                        String pkg = info.activityInfo.packageName;
+                        if (pkg != null && !pkg.equals(selfPkg)) {
+                            try {
+                                am.killBackgroundProcesses(pkg);
+                                killedCount++;
+                            } catch (Exception ignored) {}
+                        }
                     }
                 }
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        try {
+                            if (getBridge() != null && getBridge().getWebView() != null) {
+                                getBridge().getWebView().clearCache(false);
+                            }
+                        } catch (Exception ignored) {}
+                    });
+                }
+                Runtime.getRuntime().gc();
+                System.runFinalization();
+                try {
+                    Thread.sleep(150);
+                } catch (InterruptedException ignored) {}
+
+                long freedMb = 0L;
+                if (am != null) {
+                    android.app.ActivityManager.MemoryInfo miAfter = new android.app.ActivityManager.MemoryInfo();
+                    am.getMemoryInfo(miAfter);
+                    long diff = miAfter.availMem - beforeAvail;
+                    freedMb = diff > 0 ? Math.round(diff / (1024.0 * 1024.0)) : 0L;
+                }
+                JSObject ret = new JSObject();
+                ret.put("freedMb", freedMb);
+                ret.put("killedPackages", killedCount);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Failed to optimize memory: " + e.getMessage());
             }
-            System.gc();
-            long freedMb = 0L;
-            if (am != null) {
-                android.app.ActivityManager.MemoryInfo miAfter = new android.app.ActivityManager.MemoryInfo();
-                am.getMemoryInfo(miAfter);
-                long diff = miAfter.availMem - beforeAvail;
-                freedMb = diff > 0 ? Math.max(12L, diff / (1024L * 1024L)) : 24L;
-            }
-            JSObject ret = new JSObject();
-            ret.put("freedMb", freedMb);
-            call.resolve(ret);
-        } catch (Exception e) {
-            call.reject("Failed to optimize memory: " + e.getMessage());
-        }
+        }).start();
     }
 
     @PluginMethod

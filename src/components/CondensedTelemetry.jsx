@@ -184,7 +184,7 @@ export default function CondensedTelemetry({
             {purging ? 'sync' : purged ? 'check_circle' : 'memory'}
           </span>
           <span className="font-mono-data text-[7px] font-bold tracking-wider">
-            {purging ? 'CLEAN' : purged ? (freedMb > 0 ? `+${freedMb}M` : 'FREED') : 'BOOST'}
+            {purging ? 'CLEAN' : purged ? (freedMb > 0 ? `+${freedMb}M` : 'OPTIMAL') : 'BOOST'}
           </span>
         </button>
 
