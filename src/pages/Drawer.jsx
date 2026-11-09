@@ -179,19 +179,28 @@ export default function Drawer({
 
     const triggerSmoothClose = () => {
       swipeStartPos.current = null
-      const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
+      const { pageTransitionEasing, pageTransitionSpeed } = useThemeStore.getState()
+      const ease = pageTransitionEasing === 'SPRING'
+        ? 'cubic-bezier(0.32, 1.28, 0.42, 1)'
+        : pageTransitionEasing === 'CRISP'
+          ? 'cubic-bezier(0, 0, 0.2, 1)'
+          : 'cubic-bezier(0.22, 1, 0.36, 1)'
+      const closeSpeed = Math.max(150, Math.round((Number(pageTransitionSpeed) || 260) * 0.85))
       if (drawerSheetRef?.current) {
         drawerSheetRef.current.dataset.drawerOpen = 'false'
-        drawerSheetRef.current.style.transition = `transform 175ms ${fastEase}`
+        drawerSheetRef.current.style.transition = `transform ${closeSpeed}ms ${ease}`
         drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
         drawerSheetRef.current.style.pointerEvents = 'none'
       }
       if (mainRef?.current) {
+        mainRef.current.dataset.fadedOnSwipe = 'false'
+        mainRef.current.style.transition = 'opacity 140ms ease-out'
+        mainRef.current.style.opacity = '1'
         mainRef.current.style.pointerEvents = 'auto'
       }
       setTimeout(() => {
         onNavigateRef.current('home')
-      }, 180)
+      }, closeSpeed + 5)
     }
 
     const onTouchStart = (e) => {

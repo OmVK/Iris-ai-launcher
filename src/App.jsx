@@ -87,30 +87,38 @@ export default function App() {
     const sheetEl = drawerSheetRef.current
     const mainEl = mainRef.current
     if (!sheetEl) return
-    const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
+    const ease = pageTransitionEasing === 'SPRING'
+      ? 'cubic-bezier(0.32, 1.28, 0.42, 1)'
+      : pageTransitionEasing === 'CRISP'
+        ? 'cubic-bezier(0, 0, 0.2, 1)'
+        : 'cubic-bezier(0.22, 1, 0.36, 1)'
+    const speed = Number(pageTransitionSpeed) || 260
     if (activePage === 'drawer') {
       if (sheetEl.dataset.drawerOpen !== 'true') {
         sheetEl.dataset.drawerOpen = 'true'
-        sheetEl.style.transition = `transform 185ms ${fastEase}`
+        sheetEl.style.transition = `transform ${speed}ms ${ease}`
         sheetEl.style.transform = 'translate3d(0, 0, 0)'
       }
       sheetEl.style.pointerEvents = 'auto'
       if (mainEl) {
+        mainEl.style.transition = 'opacity 140ms ease-out'
+        mainEl.style.opacity = '0'
         mainEl.style.pointerEvents = 'none'
       }
     } else {
       if (sheetEl.dataset.drawerOpen !== 'false') {
         sheetEl.dataset.drawerOpen = 'false'
-        sheetEl.style.transition = `transform 175ms ${fastEase}`
+        sheetEl.style.transition = `transform ${Math.max(150, Math.round(speed * 0.85))}ms ${ease}`
         sheetEl.style.transform = 'translate3d(0, 100%, 0)'
       }
       sheetEl.style.pointerEvents = 'none'
       if (mainEl) {
+        mainEl.style.transition = 'opacity 140ms ease-out'
         mainEl.style.opacity = '1'
         mainEl.style.pointerEvents = 'auto'
       }
     }
-  }, [activePage])
+  }, [activePage, pageTransitionEasing, pageTransitionSpeed])
 
   const handleUnlockSuccess = () => {
     setIsVaultUnlocked(true); setShowChronoLock(false)
@@ -270,8 +278,12 @@ export default function App() {
         </div>
         {(warmPages.widgets || activePage === 'widgets') && (
           <div
-            className="flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden"
-            style={{ display: activePage === 'widgets' ? 'flex' : 'none' }}
+            className={`flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden ${activePage === 'widgets' ? `page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}` : ''}`}
+            style={{
+              display: activePage === 'widgets' ? 'flex' : 'none',
+              '--page-transition-duration': `${pageTransitionSpeed}ms`,
+              '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.25, 1, 0.5, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.32, 1.28, 0.42, 1)' : 'cubic-bezier(0.25, 1, 0.5, 1)'
+            }}
           >
             <Suspense fallback={null}>
               <Widgets isAppActive={isAppActive && activePage === 'widgets'} activePage={activePage} powerSaveMode={powerSaveMode} />
@@ -280,8 +292,12 @@ export default function App() {
         )}
         {(warmPages.assistant || activePage === 'assistant') && (
           <div
-            className="flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden"
-            style={{ display: activePage === 'assistant' ? 'flex' : 'none' }}
+            className={`flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden ${activePage === 'assistant' ? `page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}` : ''}`}
+            style={{
+              display: activePage === 'assistant' ? 'flex' : 'none',
+              '--page-transition-duration': `${pageTransitionSpeed}ms`,
+              '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.25, 1, 0.5, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.32, 1.28, 0.42, 1)' : 'cubic-bezier(0.25, 1, 0.5, 1)'
+            }}
           >
             <Suspense fallback={null}>
               <Assistant
@@ -303,7 +319,7 @@ export default function App() {
           </div>
         )}
         {!isHomeOrDrawer && activePage !== 'widgets' && activePage !== 'assistant' && (
-          <div key={activePage} className={`page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.25, 1, 0.5, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.38, 0.64, 1)' : 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
+          <div key={activePage} className={`page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.25, 1, 0.5, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.32, 1.28, 0.42, 1)' : 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
             <Suspense fallback={null}>
               {renderSecondaryPage()}
             </Suspense>
@@ -312,7 +328,7 @@ export default function App() {
       </main>
       <div
         ref={drawerSheetRef}
-        className="fixed inset-0 z-30 translate-y-full pointer-events-none bg-[#020617]/95"
+        className="fixed inset-0 z-30 translate-y-full pointer-events-none bg-transparent"
         style={{ willChange: 'transform', backfaceVisibility: 'hidden', contain: 'layout paint style', transform: 'translate3d(0, 100%, 0)' }}
       >
         <Drawer

@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect } from 'react'
 import { expandNotificationPanel } from '../components/LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
 import { useAppStore } from '../stores/appStore'
+import { useThemeStore } from '../stores/themeStore'
 
 let contextMenuOpen = false
 let doubleTapTimerRef = null
@@ -213,6 +214,11 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
               const currentTranslate = Math.max(0, vh + deltaY)
               sheetEl.style.transition = 'none'
               sheetEl.style.transform = `translate3d(0, ${currentTranslate}px, 0)`
+              if (mainRef?.current && mainRef.current.dataset.fadedOnSwipe !== 'true') {
+                mainRef.current.dataset.fadedOnSwipe = 'true'
+                mainRef.current.style.transition = 'opacity 140ms ease-out'
+                mainRef.current.style.opacity = '0'
+              }
             })
           }
         }
@@ -224,7 +230,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       const dy = e.touches[0].clientY - e.touches[1].clientY
       currentPinchDistRef.current = Math.hypot(dx, dy)
     }
-  }, [activePage, drawerSheetRef])
+  }, [activePage, drawerSheetRef, mainRef])
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimerRef) { clearTimeout(longPressTimerRef); longPressTimerRef = null }
@@ -255,6 +261,9 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
         drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
         drawerSheetRef.current.style.pointerEvents = 'none'
         if (mainRef?.current) {
+          mainRef.current.dataset.fadedOnSwipe = 'false'
+          mainRef.current.style.transition = 'opacity 120ms ease-out'
+          mainRef.current.style.opacity = '1'
           mainRef.current.style.pointerEvents = 'auto'
         }
       } else {
@@ -262,23 +271,36 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
         if (swipeUpGesture?.action === 'open_drawer') {
           if (deltaY < -8 && absDeltaX < Math.abs(deltaY) * 1.5) {
             const velocity = Math.abs(deltaY) / Math.max(1, duration)
-            const fastEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
+            const { pageTransitionEasing, pageTransitionSpeed } = useThemeStore.getState()
+            const ease = pageTransitionEasing === 'SPRING'
+              ? 'cubic-bezier(0.32, 1.28, 0.42, 1)'
+              : pageTransitionEasing === 'CRISP'
+                ? 'cubic-bezier(0, 0, 0.2, 1)'
+                : 'cubic-bezier(0.22, 1, 0.36, 1)'
+            const speed = Number(pageTransitionSpeed) || 260
             if (deltaY < -38 || (velocity > 0.2 && deltaY < -14)) {
               HapticFeedback.light()
               drawerSheetRef.current.dataset.drawerOpen = 'true'
-              drawerSheetRef.current.style.transition = `transform 185ms ${fastEase}`
+              drawerSheetRef.current.style.transition = `transform ${speed}ms ${ease}`
               drawerSheetRef.current.style.transform = 'translate3d(0, 0, 0)'
               drawerSheetRef.current.style.pointerEvents = 'auto'
               if (mainRef?.current) {
+                mainRef.current.dataset.fadedOnSwipe = 'false'
+                mainRef.current.style.transition = 'opacity 140ms ease-out'
+                mainRef.current.style.opacity = '0'
                 mainRef.current.style.pointerEvents = 'none'
               }
-              setTimeout(() => setActivePage('drawer'), 190)
+              setTimeout(() => setActivePage('drawer'), speed + 10)
             } else {
+              const closeSpeed = Math.max(150, Math.round(speed * 0.8))
               drawerSheetRef.current.dataset.drawerOpen = 'false'
-              drawerSheetRef.current.style.transition = `transform 165ms ${fastEase}`
+              drawerSheetRef.current.style.transition = `transform ${closeSpeed}ms ${ease}`
               drawerSheetRef.current.style.transform = 'translate3d(0, 100%, 0)'
               drawerSheetRef.current.style.pointerEvents = 'none'
               if (mainRef?.current) {
+                mainRef.current.dataset.fadedOnSwipe = 'false'
+                mainRef.current.style.transition = 'opacity 140ms ease-out'
+                mainRef.current.style.opacity = '1'
                 mainRef.current.style.pointerEvents = 'auto'
               }
             }
