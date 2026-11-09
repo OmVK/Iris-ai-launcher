@@ -64,8 +64,9 @@ export default function Assistant({
     OLLAMA: getBackendStatus('OLLAMA'),
   }))
 
-  // Auto-check backends on mount + every 5 min
+  // Auto-check backends on mount + every 5 min when active
   useEffect(() => {
+    if (!_effectiveAppActive) return
     let mounted = true
     const check = async () => {
       try {
@@ -83,7 +84,7 @@ export default function Assistant({
     check()
     const interval = setInterval(check, 5 * 60 * 1000)
     return () => { mounted = false; clearInterval(interval) }
-  }, [])
+  }, [_effectiveAppActive])
 
   // Ollama fetch
   const fetchOllamaModels = useCallback(async () => {

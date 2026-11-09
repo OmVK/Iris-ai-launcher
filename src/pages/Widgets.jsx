@@ -665,6 +665,7 @@ export default function Widgets() {
             >
               <WidgetContentRenderer
                 id={id}
+                isAppActive={isAppActive && activePage === 'widgets'}
                 isEditMode={isEditMode}
                 onRemove={() => handleRemoveWidget(id)}
                 batteryLevel={batteryLevel}

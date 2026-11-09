@@ -157,7 +157,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
   const [isExpandedSearch, setIsExpandedSearch] = useState(() => {
     return localStorage.getItem('iris_expanded_search') === 'true'
   })
-  
+
   const toggleExpandedSearch = useCallback(() => {
     setIsExpandedSearch(prev => {
       const next = !prev
@@ -306,7 +306,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
 
   const searchContacts = useCallback(async (q, force = false) => {
     if (!q || (!isExpandedSearch && !force)) return []
-    
+
     const perm = await checkAndRequestPermission('READ_CONTACTS')
     if (!perm.granted) return []
 
@@ -318,7 +318,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
       sublabel: c.number,
       icon: 'contacts',
       score: fuzzyMatch(q, c.name) + 50,
-      action: () => {},
+      action: () => { },
       callAction: () => makeCall(c.number),
       messageAction: () => sendSMS(c.number)
     }))
@@ -334,14 +334,14 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
         path: '',
         directory: Directory.Documents
       }).catch(() => ({ files: [] }))
-      
+
       const downloads = await Filesystem.readdir({
         path: '',
         directory: Directory.ExternalStorage
       }).catch(() => ({ files: [] }))
 
       const allFiles = [...(result.files || []), ...(downloads.files || [])]
-      
+
       return allFiles
         .filter(f => fuzzyMatch(q, f.name) > 0)
         .map(f => ({
@@ -351,7 +351,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
           sublabel: f.uri,
           icon: 'description',
           score: fuzzyMatch(q, f.name),
-          action: () => {}
+          action: () => { }
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 5)
@@ -383,11 +383,11 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
       const parts = q.split(' ')
       const potentialCommand = parts[0].toLowerCase()
       const availableCommands = ['/shortcuts', '/contact', '/calculator', '/unit', '/files', '/search']
-      
+
       const isDirectCommand = availableCommands.includes(potentialCommand) && (
-        parts.length > 1 || 
-        q.endsWith(' ') || 
-        potentialCommand === '/calculator' || 
+        parts.length > 1 ||
+        q.endsWith(' ') ||
+        potentialCommand === '/calculator' ||
         potentialCommand === '/unit' ||
         potentialCommand === '/shortcuts'
       )
@@ -407,7 +407,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
             sublabel: 'ArcSearch Command',
             icon: cmd === '/shortcuts' ? 'bolt' : cmd === '/contact' ? 'contacts' : cmd === '/calculator' ? 'calculate' : cmd === '/unit' ? 'straighten' : cmd === '/files' ? 'folder' : 'search',
             score: 1000,
-            action: () => {}
+            action: () => { }
           }))
         setResults(suggestions)
         setCalculatorResult(null)
@@ -436,7 +436,30 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     const syncResults = []
     if (command === 'shortcuts') {
       syncResults.push(...searchShortcuts(actualQuery, true))
-      syncResults.push(...searchSettings(actualQuery))
+      if (actualQuery.trim()) {
+        syncResults.push(...searchSettings(actualQuery))
+      } else {
+        syncResults.push(
+          ...SETTINGS_DEEP_LINKS.slice(0, 6).map(s => ({
+            id: `setting_${s.id}`,
+            type: 'setting',
+            label: s.label,
+            sublabel: s.sublabel || 'Android System Setting',
+            icon: s.icon,
+            score: 80,
+            action: () => openSystemSettings(s.id),
+          })),
+          ...IRIS_INTERNAL_NODES.map(n => ({
+            id: n.id,
+            type: 'setting',
+            label: n.label,
+            sublabel: n.sublabel,
+            icon: n.icon,
+            score: 75,
+            action: () => onNavigateRef.current?.(n.page),
+          }))
+        )
+      }
     } else if (!command || command === 'all' || command === 'search') {
       syncResults.push(...searchApps(actualQuery))
       syncResults.push(...searchShortcuts(actualQuery, false))

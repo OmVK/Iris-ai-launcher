@@ -162,7 +162,7 @@ export default function AppIconsSection({ expandedSections, toggleSection, insta
           <div className="p-3 bg-black/25 rounded-lg border border-outline-variant/20 flex flex-col gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl glass-icon-container border border-primary-fixed-dim/35 flex items-center justify-center shrink-0">
-                {selectedIconApp.icon?.startsWith('data:') ? <img src={selectedIconApp.icon} className="w-6 h-6 object-contain rounded" alt="" /> : <span className="material-symbols-outlined text-lg text-primary-fixed-dim">{selectedIconApp.icon || 'rocket_launch'}</span>}
+                {selectedIconApp.icon && typeof selectedIconApp.icon === 'string' && (selectedIconApp.icon.startsWith('data:') || selectedIconApp.icon.startsWith('http') || selectedIconApp.icon.startsWith('/')) ? <img src={selectedIconApp.icon} className="w-6 h-6 object-contain rounded" alt="" /> : <span className="material-symbols-outlined text-lg text-primary-fixed-dim">{selectedIconApp.icon || 'rocket_launch'}</span>}
               </div>
               <div><h4 className="font-bold text-white text-xs">{selectedIconApp.label}</h4><p className="text-[7.5px] text-on-surface-variant/45">{selectedIconApp.packageId}</p></div>
             </div>

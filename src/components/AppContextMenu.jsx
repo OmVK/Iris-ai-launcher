@@ -26,7 +26,7 @@ export default function AppContextMenu({ activeContextMenu, onRemoveFromHome, on
       >
         {/* App Header Tag */}
         <div className="px-2 py-1.5 border-b border-white/5 flex items-center gap-2 text-on-surface-variant mb-1">
-          {app.icon && app.icon.startsWith('data:') ? (
+          {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? (
             <img src={app.icon} className="w-4 h-4 object-contain rounded" alt="" />
           ) : (
             <span className="material-symbols-outlined text-[12px] text-primary-fixed-dim">{app.icon}</span>

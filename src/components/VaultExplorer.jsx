@@ -35,7 +35,7 @@ export default function VaultExplorer({
                     <div key={app.packageId} className="flex items-center justify-between p-2.5 rounded border border-outline-variant/20 bg-surface-container/10 hover:bg-surface-container/20 hover:border-primary-fixed-dim/30 transition-all group">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded bg-primary-fixed-dim/10 border border-primary-fixed-dim/20 flex items-center justify-center flex-shrink-0">
-                          {app.icon?.startsWith('data:image') ? <img src={app.icon} alt={app.label} className="w-6 h-6 object-contain" /> : <span className="material-symbols-outlined text-sm text-primary-fixed-dim">{app.icon || 'rocket_launch'}</span>}
+                          {app.icon && typeof app.icon === 'string' && (app.icon.startsWith('data:') || app.icon.startsWith('http') || app.icon.startsWith('/')) ? <img src={app.icon} alt={app.label} className="w-6 h-6 object-contain" /> : <span className="material-symbols-outlined text-sm text-primary-fixed-dim">{app.icon || 'rocket_launch'}</span>}
                         </div>
                         <div className="min-w-0">
                           <h4 className="font-bold text-xs text-white truncate leading-tight">{app.label}</h4>

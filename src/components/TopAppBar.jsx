@@ -172,21 +172,21 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
     }
   }, [use24HourClock, isAppActive])
 
-  useEffect(() => {
+  const refreshSystemStats = useCallback(() => {
     getSystemStats().then(stats => {
       if (stats) setSysStats(stats)
     }).catch(() => { })
   }, [])
 
   useEffect(() => {
+    refreshSystemStats()
+  }, [refreshSystemStats])
+
+  useEffect(() => {
     if (!expanded) return
-    const timer = setTimeout(() => {
-      getSystemStats().then(stats => {
-        if (stats) setSysStats(stats)
-      }).catch(() => { })
-    }, 240)
+    const timer = setTimeout(refreshSystemStats, 240)
     return () => clearTimeout(timer)
-  }, [expanded])
+  }, [expanded, refreshSystemStats])
 
   const startCollapseTimer = useCallback(() => {
     if (collapseTimer.current) clearTimeout(collapseTimer.current)
@@ -602,6 +602,7 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
                       networkType={networkType}
                       sysStats={sysStats}
                       totalUnread={totalUnread}
+                      onRefreshStats={refreshSystemStats}
                     />
                   </div>
                 )}

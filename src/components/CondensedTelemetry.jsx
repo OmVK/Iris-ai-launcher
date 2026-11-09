@@ -30,11 +30,13 @@ export default function CondensedTelemetry({
   isCharging,
   networkType,
   sysStats,
-  totalUnread
+  totalUnread,
+  onRefreshStats
 }) {
   const [torchActive, setTorchActive] = useState(false)
   const [purging, setPurging] = useState(false)
   const [purged, setPurged] = useState(false)
+  const [freedMb, setFreedMb] = useState(0)
   const [ringerMode, setRingerMode] = useState('normal')
 
   useEffect(() => {
@@ -66,16 +68,21 @@ export default function CondensedTelemetry({
     HapticFeedback.light()
     setPurging(true)
     try {
-      await optimizeMemory()
+      const res = await optimizeMemory()
+      if (res && typeof res.freedMb === 'number') {
+        setFreedMb(res.freedMb)
+      }
+      onRefreshStats?.()
     } finally {
       setTimeout(() => {
         setPurging(false)
         setPurged(true)
+        onRefreshStats?.()
         HapticFeedback.light()
         setTimeout(() => setPurged(false), 2500)
-      }, 500)
+      }, 450)
     }
-  }, [purging])
+  }, [purging, onRefreshStats])
 
   const handleCycleRinger = useCallback(async (e) => {
     e.stopPropagation()
@@ -177,7 +184,7 @@ export default function CondensedTelemetry({
             {purging ? 'sync' : purged ? 'check_circle' : 'memory'}
           </span>
           <span className="font-mono-data text-[7px] font-bold tracking-wider">
-            {purging ? 'CLEAN' : purged ? 'FREED' : 'BOOST'}
+            {purging ? 'CLEAN' : purged ? (freedMb > 0 ? `+${freedMb}M` : 'FREED') : 'BOOST'}
           </span>
         </button>
 

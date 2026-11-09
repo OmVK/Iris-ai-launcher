@@ -10,10 +10,21 @@ import {
 } from './LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
 
+const INITIAL_NOTIF_RENDER_COUNT = 40
+
 export default function CondensedNotifLog({ onClose }) {
   const { history, clearHistory, deleteHistoryItem, syncNativeArchive, dismissActive } = useNotificationStore()
   const { notifPopupsEnabled, setNotifPopupsEnabled } = useThemeStore()
   const [hasPermission, setHasPermission] = useState(true)
+  const [renderLimit, setRenderLimit] = useState(INITIAL_NOTIF_RENDER_COUNT)
+
+  useEffect(() => {
+    if (history.length <= INITIAL_NOTIF_RENDER_COUNT) return
+    const rafId = requestAnimationFrame(() => {
+      setRenderLimit(history.length)
+    })
+    return () => cancelAnimationFrame(rafId)
+  }, [history.length])
 
   useEffect(() => {
     let cancelled = false
@@ -155,7 +166,7 @@ export default function CondensedNotifLog({ onClose }) {
             </p>
           </div>
         ) : (
-          history.map((item) => (
+          (history.length > renderLimit ? history.slice(0, renderLimit) : history).map((item) => (
             <div
               key={item.id}
               onClick={(e) => handleLaunch(e, item.packageId)}
