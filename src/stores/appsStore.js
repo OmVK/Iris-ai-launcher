@@ -109,29 +109,29 @@ function persistInstalledAppsDeferred(apps) {
 }
 
 const prewarmedIcons = new Set()
-export function prewarmAppIcons(apps, limit = 250) {
+export function prewarmAppIcons(apps, limit = 40) {
   if (typeof window === 'undefined' || !Array.isArray(apps)) return
-  const run = () => {
-    let count = 0
-    for (let i = 0; i < apps.length && count < limit; i++) {
-      const src = apps[i]?.customIcon || apps[i]?.icon
+  let idx = 0
+  let count = 0
+  const decodeNextBatch = () => {
+    let batchCount = 0
+    while (idx < apps.length && count < limit && batchCount < 6) {
+      const src = apps[idx]?.customIcon || apps[idx]?.icon
+      idx++
       if (src && typeof src === 'string' && (src.startsWith('http') || src.startsWith('data:')) && !prewarmedIcons.has(src)) {
         prewarmedIcons.add(src)
         const img = new Image()
         img.decoding = 'async'
         img.src = src
-        if (typeof img.decode === 'function') {
-          img.decode().catch(() => {})
-        }
         count++
+        batchCount++
       }
     }
+    if (idx < apps.length && count < limit) {
+      setTimeout(decodeNextBatch, 40)
+    }
   }
-  if (typeof window.requestIdleCallback === 'function') {
-    window.requestIdleCallback(run, { timeout: 1000 })
-  } else {
-    setTimeout(run, 120)
-  }
+  setTimeout(decodeNextBatch, 250)
 }
 
 export const useAppsStore = create((set, get) => ({

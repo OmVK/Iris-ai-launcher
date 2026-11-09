@@ -2,7 +2,7 @@ import React from 'react'
 import { getIconContainerStyle } from '../../utils/IconShapeMask'
 import { IRIS_ICON_PACK } from '../../utils/IrisIconPack'
 
-function DrawerIcon({ app, isLocked, size, iconTheme = 'DEFAULT' }) {
+function DrawerIcon({ app, isLocked, size, iconTheme = 'DEFAULT', lazy = false }) {
   const iconMaxPx = Math.round(size)
   const activeTheme = (iconTheme || 'DEFAULT').toUpperCase()
   const shapeStyle = getIconContainerStyle(activeTheme, iconMaxPx)
@@ -30,6 +30,7 @@ function DrawerIcon({ app, isLocked, size, iconTheme = 'DEFAULT' }) {
           src={app.icon}
           width={imgSizePx}
           height={imgSizePx}
+          loading={lazy ? 'lazy' : undefined}
           decoding="async"
           className="w-[65%] h-[65%] object-contain rounded-lg"
           alt=""

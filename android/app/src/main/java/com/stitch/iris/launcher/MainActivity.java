@@ -62,6 +62,19 @@ public class MainActivity extends BridgeActivity {
                     }
                     return super.shouldInterceptRequest(view, request);
                 }
+
+                @Override
+                public boolean onRenderProcessGone(android.webkit.WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                    if (view != null) {
+                        view.post(() -> {
+                            try {
+                                view.reload();
+                            } catch (Exception ignored) {}
+                        });
+                        return true;
+                    }
+                    return super.onRenderProcessGone(view, detail);
+                }
             });
         }
         

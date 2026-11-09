@@ -10,13 +10,22 @@ const DrawerGridItem = memo(function DrawerGridItem({
   showAppLabels,
   drawerTextSize,
   onContextMenu,
-  onAppClick
+  onAppClick,
+  lazy
 }) {
   return (
     <div
-      style={{
-        width: widthPercent,
-      }}
+      style={
+        lazy
+          ? {
+              width: widthPercent,
+              contentVisibility: 'auto',
+              containIntrinsicSize: '0 84px',
+            }
+          : {
+              width: widthPercent,
+            }
+      }
       className="p-1 box-border shrink-0"
     >
       <div
@@ -24,7 +33,7 @@ const DrawerGridItem = memo(function DrawerGridItem({
         onClick={(e) => onAppClick(e, app)}
         className="drawer-app-item flex flex-col items-center gap-1.5 p-1.5 rounded-xl cursor-pointer select-none active:scale-95"
       >
-        <DrawerIcon app={app} size={iconMaxPx} iconTheme={globalIconTheme} iconShape={iconShape} />
+        <DrawerIcon app={app} size={iconMaxPx} iconTheme={globalIconTheme} iconShape={iconShape} lazy={lazy} />
         {showAppLabels && (
           <span
             className="font-label-caps text-center leading-tight truncate w-full text-on-surface-variant block px-0.5"
@@ -55,7 +64,7 @@ function DrawerGrid({
 
   return (
     <div className="mt-4 px-1 flex flex-wrap w-full">
-      {filteredApps.map((app) => (
+      {filteredApps.map((app, index) => (
         <DrawerGridItem
           key={app.packageId}
           app={app}
@@ -67,6 +76,7 @@ function DrawerGrid({
           drawerTextSize={drawerTextSize}
           onContextMenu={onContextMenu}
           onAppClick={onAppClick}
+          lazy={index >= 35}
         />
       ))}
       {filteredApps.length === 0 && (

@@ -313,7 +313,7 @@ export default function App() {
       <div
         ref={drawerSheetRef}
         className="fixed inset-0 z-30 translate-y-full pointer-events-none bg-[#020617]/95"
-        style={{ willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 100%, 0)' }}
+        style={{ willChange: 'transform', backfaceVisibility: 'hidden', contain: 'layout paint style', transform: 'translate3d(0, 100%, 0)' }}
       >
         <Drawer
           onNavigate={setActivePage}
