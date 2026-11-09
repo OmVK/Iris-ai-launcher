@@ -700,6 +700,20 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
               <span>ALL</span>
             </button>
 
+            {/* SHORTCUTS & ACTIONS Chip */}
+            <button
+              onClick={() => handleModeClick('shortcuts')}
+              className={`flex items-center gap-1 text-[10px] font-mono-data px-2.5 py-1 rounded-full transition-all flex-shrink-0 active:scale-95 border ${
+                activeSource === 'shortcuts' || query.trim().startsWith('/shortcuts')
+                  ? 'bg-cyan-500/25 text-cyan-300 border-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.3)] font-semibold'
+                  : 'bg-white/[0.03] text-white/50 border-white/10 hover:bg-white/[0.08] hover:text-white'
+              }`}
+              title="Deep App & System Shortcuts"
+            >
+              <span className="material-symbols-outlined text-xs">bolt</span>
+              <span>SHORTCUTS</span>
+            </button>
+
             {/* CALCULATOR Chip */}
             <button
               onClick={() => handleModeClick('calculator')}
@@ -901,6 +915,7 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-primary-fixed/10 border border-primary-fixed/25 text-primary-fixed shadow-sm">
                       <span className={`material-symbols-outlined text-xl ${
                         res.type === 'web' ? 'text-primary-fixed' :
+                        res.type === 'shortcut' ? 'text-cyan-300' :
                         res.type === 'setting' ? 'text-yellow-400' :
                         res.type === 'contact' ? 'text-sky-400' :
                         res.type === 'file' ? 'text-amber-400' :
@@ -912,6 +927,21 @@ export default function ArcSearch({ isOpen, onClose, installedApps, launchApp, a
                     <span className={`text-sm font-medium truncate flex font-mono-data tracking-wider block ${i === 0 ? 'text-primary-fixed' : 'text-white/80'}`}>{res.label}</span>
                     {res.sublabel && <span className="text-[9px] text-white/30 font-mono-data block truncate">{res.sublabel}</span>}
                   </div>
+                  {res.type === 'app' && res.infoAction && (
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        res.infoAction()
+                        onClose()
+                      }}
+                      className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white/50 hover:text-primary-fixed transition-colors"
+                      title="Open App Info"
+                    >
+                      <span className="material-symbols-outlined text-sm">info</span>
+                    </span>
+                  )}
                   {i === 0 && <span className="text-[9px] font-bold text-[#0a0e17] bg-primary-fixed uppercase tracking-widest px-2 py-0.5 rounded shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]">ENTER</span>}
                 </button>
               )

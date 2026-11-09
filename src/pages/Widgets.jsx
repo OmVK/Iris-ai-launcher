@@ -34,10 +34,11 @@ const TRACKS = [
   },
 ]
 
-const DEFAULT_ACTIVE_IDS = ['performance', 'weather', 'stocks', 'media', 'tasks', 'ping', 'signal']
+const DEFAULT_ACTIVE_IDS = ['performance', 'screentime', 'weather', 'stocks', 'media', 'tasks', 'ping', 'signal']
 
 const DEFAULT_SPANS = {
   performance: 'col-span-1 md:col-span-2',
+  screentime: 'col-span-1 md:col-span-2',
   weather: 'col-span-1',
   stocks: 'col-span-1 md:col-span-3',
   media: 'col-span-1',
@@ -181,7 +182,19 @@ export default function Widgets() {
   const [activeWidgetIds, setActiveWidgetIds] = useState(() => {
     try {
       const saved = localStorage.getItem('iris_active_widgets')
-      return saved ? JSON.parse(saved) : DEFAULT_ACTIVE_IDS
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          if (!localStorage.getItem('iris_screentime_migrated')) {
+            localStorage.setItem('iris_screentime_migrated', 'true')
+            if (!parsed.includes('screentime')) {
+              return ['screentime', ...parsed]
+            }
+          }
+          return parsed
+        }
+      }
+      return DEFAULT_ACTIVE_IDS
     } catch {
       return DEFAULT_ACTIVE_IDS
     }

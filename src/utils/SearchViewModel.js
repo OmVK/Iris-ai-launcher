@@ -1,10 +1,22 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { lookupContactMultiple, makeCall, sendSMS, checkAndRequestPermission } from '../components/LauncherPlugin'
+import {
+  lookupContactMultiple,
+  makeCall,
+  sendSMS,
+  checkAndRequestPermission,
+  openSystemSettings,
+  openAppInfo,
+  toggleFlashlight,
+  cycleRingerMode,
+  optimizeMemory,
+  openCamera,
+} from '../components/LauncherPlugin'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { safeEvaluate } from './safeMath'
 
 const SEARCH_SOURCES = {
   apps: { label: 'Apps', icon: 'apps', enabled: true },
+  shortcuts: { label: 'Shortcuts', icon: 'bolt', enabled: true },
   contacts: { label: 'Contacts', icon: 'contacts', enabled: false },
   settings: { label: 'Settings', icon: 'settings', enabled: true },
   web: { label: 'Web', icon: 'language', enabled: true },
@@ -13,18 +25,33 @@ const SEARCH_SOURCES = {
 }
 
 const SETTINGS_DEEP_LINKS = [
-  { id: 'wifi', label: 'Wi-Fi Settings', icon: 'wifi', action: 'android.settings.WIFI_SETTINGS' },
-  { id: 'bluetooth', label: 'Bluetooth Settings', icon: 'bluetooth', action: 'android.settings.BLUETOOTH_SETTINGS' },
-  { id: 'display', label: 'Display Settings', icon: 'brightness_6', action: 'android.settings.DISPLAY_SETTINGS' },
-  { id: 'sound', label: 'Sound Settings', icon: 'volume_up', action: 'android.settings.SOUND_SETTINGS' },
-  { id: 'battery', label: 'Battery Settings', icon: 'battery_std', action: 'android.settings.BATTERY_USAGE_SETTINGS' },
-  { id: 'storage', label: 'Storage Settings', icon: 'sd_storage', action: 'android.settings.INTERNAL_STORAGE_SETTINGS' },
-  { id: 'apps', label: 'App Settings', icon: 'apps', action: 'android.settings.APPLICATION_SETTINGS' },
-  { id: 'location', label: 'Location Settings', icon: 'location_on', action: 'android.settings.LOCATION_SOURCE_SETTINGS' },
-  { id: 'security', label: 'Security Settings', icon: 'security', action: 'android.settings.SECURITY_SETTINGS' },
-  { id: 'developer', label: 'Developer Options', icon: 'code', action: 'android.settings.APPLICATION_DEVELOPMENT_SETTINGS' },
-  { id: 'accessibility', label: 'Accessibility', icon: 'accessibility_new', action: 'android.settings.ACCESSIBILITY_SETTINGS' },
-  { id: 'notifications', label: 'Notifications', icon: 'notifications', action: 'android.settings.NOTIFICATION_SETTINGS' },
+  { id: 'wifi', label: 'Wi-Fi Settings', icon: 'wifi', sublabel: 'Android Network Settings' },
+  { id: 'bluetooth', label: 'Bluetooth Settings', icon: 'bluetooth', sublabel: 'Android Connected Devices' },
+  { id: 'display', label: 'Display & 120Hz Settings', icon: 'brightness_6', sublabel: 'Android Display Settings' },
+  { id: 'sound', label: 'Sound & Vibration Settings', icon: 'volume_up', sublabel: 'Android Audio Settings' },
+  { id: 'battery', label: 'Battery & Power Settings', icon: 'battery_std', sublabel: 'Android Battery Saver' },
+  { id: 'storage', label: 'Storage Settings', icon: 'sd_storage', sublabel: 'Android Internal Storage' },
+  { id: 'apps', label: 'Installed Apps Manager', icon: 'apps', sublabel: 'Android Application Settings' },
+  { id: 'location', label: 'Location & GPS Settings', icon: 'location_on', sublabel: 'Android Location Services' },
+  { id: 'security', label: 'Security & Biometrics', icon: 'security', sublabel: 'Android Device Security' },
+  { id: 'developer', label: 'Developer Options & USB Debug', icon: 'code', sublabel: 'Android Developer Settings' },
+  { id: 'accessibility', label: 'Accessibility Services', icon: 'accessibility_new', sublabel: 'Android Accessibility' },
+  { id: 'notifications', label: 'Notification Settings', icon: 'notifications', sublabel: 'Android App Notifications' },
+]
+
+const IRIS_INTERNAL_NODES = [
+  { id: 'iris_settings', label: 'IRIS Core Settings', icon: 'tune', page: 'settings', sublabel: 'Launcher Theme, Layout & Keys' },
+  { id: 'iris_widgets', label: 'Screen Time & Widgets HUD', icon: 'space_dashboard', page: 'widgets', sublabel: 'Telemetry, Screen Time & Media' },
+  { id: 'iris_assistant', label: 'IRIS AI Voice & Chat', icon: 'neurology', page: 'assistant', sublabel: 'Neural Assistant Interface' },
+  { id: 'iris_tools', label: 'IRIS Cyber Security Tools', icon: 'shield_lock', page: 'iris_tools', sublabel: '12 Security & Network Utilities' },
+  { id: 'iris_vault', label: 'Private Encrypted Vault', icon: 'encrypted', page: 'private', sublabel: 'Protected Files & Apps' },
+]
+
+const SYSTEM_QUICK_SHORTCUTS = [
+  { id: 'sc_torch', label: 'Toggle Flashlight / Torch', sublabel: 'Quick Hardware Action', icon: 'flashlight_on', run: () => toggleFlashlight() },
+  { id: 'sc_ringer', label: 'Cycle Ringer Mode (Ring / Vibrate / Silent)', sublabel: 'Quick Audio Action', icon: 'vibration', run: () => cycleRingerMode() },
+  { id: 'sc_ram', label: 'Purge System RAM & Boost Memory', sublabel: 'Quick Kernel Action', icon: 'memory', run: () => optimizeMemory() },
+  { id: 'sc_camera', label: 'Launch Camera Instant Capture', sublabel: 'Quick App Action', icon: 'photo_camera', run: () => openCamera() },
 ]
 
 const UNIT_CONVERSIONS = {
@@ -187,6 +214,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
           icon: app.icon,
           score,
           action: () => onLaunchAppRef.current?.(app),
+          infoAction: () => openAppInfo(app.packageId),
         })
       }
     }
@@ -196,20 +224,72 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
 
   const searchSettings = useCallback((q) => {
     if (!q) return []
-    return SETTINGS_DEEP_LINKS
-      .filter(s => fuzzyMatch(q, s.label) > 0)
+    const sysMatches = SETTINGS_DEEP_LINKS
+      .filter(s => fuzzyMatch(q, s.label) > 0 || fuzzyMatch(q, s.id) > 0)
       .map(s => ({
         id: `setting_${s.id}`,
         type: 'setting',
         label: s.label,
-        sublabel: 'System Setting',
+        sublabel: s.sublabel || 'Android System Setting',
         icon: s.icon,
-        score: fuzzyMatch(q, s.label),
-        action: () => onNavigateRef.current?.('settings'),
+        score: Math.max(fuzzyMatch(q, s.label), fuzzyMatch(q, s.id)),
+        action: () => openSystemSettings(s.id),
       }))
+    const irisMatches = IRIS_INTERNAL_NODES
+      .filter(n => fuzzyMatch(q, n.label) > 0 || fuzzyMatch(q, n.sublabel) > 0)
+      .map(n => ({
+        id: n.id,
+        type: 'setting',
+        label: n.label,
+        sublabel: n.sublabel,
+        icon: n.icon,
+        score: Math.max(fuzzyMatch(q, n.label), fuzzyMatch(q, n.sublabel) * 0.8),
+        action: () => onNavigateRef.current?.(n.page),
+      }))
+    return [...sysMatches, ...irisMatches]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
+      .slice(0, 4)
   }, [])
+
+  const searchShortcuts = useCallback((q, forceAll = false) => {
+    const trimmed = (q || '').trim()
+    if (!trimmed && !forceAll) return []
+
+    const matchedSystem = SYSTEM_QUICK_SHORTCUTS
+      .filter(s => forceAll && !trimmed ? true : (fuzzyMatch(trimmed, s.label) > 0 || fuzzyMatch(trimmed, s.sublabel) > 0))
+      .map(s => ({
+        id: s.id,
+        type: 'shortcut',
+        label: s.label,
+        sublabel: s.sublabel,
+        icon: s.icon,
+        score: trimmed ? Math.max(fuzzyMatch(trimmed, s.label), 95) : 100,
+        action: s.run,
+      }))
+
+    const matchedAppShortcuts = []
+    if (trimmed.length >= 2) {
+      const qLower = trimmed.toLowerCase()
+      for (let i = 0; i < indexedApps.length && matchedAppShortcuts.length < 3; i++) {
+        const { app, labelLower } = indexedApps[i]
+        if (labelLower.includes(qLower) || qLower.includes(labelLower)) {
+          matchedAppShortcuts.push({
+            id: `app_info_${app.packageId}`,
+            type: 'shortcut',
+            label: `${app.label} → App Info & Permissions`,
+            sublabel: `Deep Shortcut • ${app.packageId}`,
+            icon: 'settings_applications',
+            score: 88,
+            action: () => openAppInfo(app.packageId),
+          })
+        }
+      }
+    }
+
+    return [...matchedSystem, ...matchedAppShortcuts]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+  }, [indexedApps])
 
   const searchWeb = useCallback((q) => {
     if (!q) return []
@@ -302,13 +382,14 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     if (q.startsWith('/')) {
       const parts = q.split(' ')
       const potentialCommand = parts[0].toLowerCase()
-      const availableCommands = ['/contact', '/calculator', '/unit', '/files', '/search']
+      const availableCommands = ['/shortcuts', '/contact', '/calculator', '/unit', '/files', '/search']
       
       const isDirectCommand = availableCommands.includes(potentialCommand) && (
         parts.length > 1 || 
         q.endsWith(' ') || 
         potentialCommand === '/calculator' || 
-        potentialCommand === '/unit'
+        potentialCommand === '/unit' ||
+        potentialCommand === '/shortcuts'
       )
 
       if (isDirectCommand) {
@@ -324,7 +405,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
             type: 'command',
             label: cmd,
             sublabel: 'ArcSearch Command',
-            icon: cmd === '/contact' ? 'contacts' : cmd === '/calculator' ? 'calculate' : cmd === '/unit' ? 'straighten' : cmd === '/files' ? 'folder' : 'search',
+            icon: cmd === '/shortcuts' ? 'bolt' : cmd === '/contact' ? 'contacts' : cmd === '/calculator' ? 'calculate' : cmd === '/unit' ? 'straighten' : cmd === '/files' ? 'folder' : 'search',
             score: 1000,
             action: () => {}
           }))
@@ -353,15 +434,19 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
     setUnitResult(unitRes)
 
     const syncResults = []
-    if (!command || command === 'all' || command === 'search') {
+    if (command === 'shortcuts') {
+      syncResults.push(...searchShortcuts(actualQuery, true))
+      syncResults.push(...searchSettings(actualQuery))
+    } else if (!command || command === 'all' || command === 'search') {
       syncResults.push(...searchApps(actualQuery))
+      syncResults.push(...searchShortcuts(actualQuery, false))
       syncResults.push(...searchSettings(actualQuery))
       if (command === 'search' || isExpandedSearch) {
         syncResults.push(...searchWeb(actualQuery))
       }
     }
     syncResults.sort((a, b) => b.score - a.score)
-    setResults(syncResults.slice(0, 8))
+    setResults(syncResults.slice(0, 10))
 
     const needsContacts = (command === 'contact' || ((!command || command === 'all') && isExpandedSearch)) && actualQuery.trim().length > 0
     const needsFiles = command === 'files' && actualQuery.trim().length > 0
@@ -401,7 +486,7 @@ export function useSearchViewModel({ installedApps = [], onLaunchApp, onNavigate
         }
       }
     }, 100)
-  }, [searchApps, searchSettings, searchWeb, searchContacts, isExpandedSearch, searchFiles])
+  }, [searchApps, searchShortcuts, searchSettings, searchWeb, searchContacts, isExpandedSearch, searchFiles])
 
   performSearchRef.current = performSearch
 

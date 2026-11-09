@@ -46,8 +46,17 @@ export default function App() {
   const { installedApps, setInstalledApps, loadNativeApps, resetToDefaults } = useAppsStore()
   const { powerSaveMode, setPowerSaveMode } = usePowerStore()
   const [showFeatureTour, setShowFeatureTour] = useState(false)
+  const [warmPages, setWarmPages] = useState({ widgets: false, assistant: false })
   const drawerSheetRef = useRef(null)
   const mainRef = useRef(null)
+
+  useEffect(() => {
+    if (activePage === 'widgets' && !warmPages.widgets) {
+      setWarmPages(prev => ({ ...prev, widgets: true }))
+    } else if (activePage === 'assistant' && !warmPages.assistant) {
+      setWarmPages(prev => ({ ...prev, assistant: true }))
+    }
+  }, [activePage, warmPages.widgets, warmPages.assistant])
 
   const voiceEngine = useVoiceEngine()
   const aiBackend = useAIBackend(voiceEngine.speakText)
@@ -116,26 +125,15 @@ export default function App() {
     setChronoTarget(null)
   }
 
-  const renderActivePage = () => {
+  const isHomeOrDrawer = activePage === 'home' || activePage === 'drawer'
+
+  const renderSecondaryPage = () => {
     switch (activePage) {
       case 'home':
       case 'drawer':
-        return <Home onNavigate={setActivePage} onTriggerVault={handleTriggerVault}
-          onTriggerChronoLock={handleTriggerChronoLock} isVaultUnlocked={isVaultUnlocked}
-          installedApps={installedApps} setInstalledApps={setInstalledApps} lockedApps={lockedApps} onToggleAppLock={toggleAppLock}
-          use24HourClock={use24HourClock} showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} isAppActive={isAppActive && activePage === 'home'} powerSaveMode={powerSaveMode} />
       case 'widgets':
-        return <Widgets isAppActive={isAppActive} activePage={activePage} powerSaveMode={powerSaveMode} />
       case 'assistant':
-        return <Assistant
-          autoTriggerLive={useAppStore.getState().showArcSearch} setAutoTriggerLive={() => {}}
-          onNavigate={setActivePage}
-          startVoiceInput={voiceEngine.startVoiceInput} stopVoiceInput={voiceEngine.stopVoiceInput}
-          speakText={voiceEngine.speakText} stopSpeaking={voiceEngine.stopSpeaking}
-          submitPrompt={aiBackend.submitPrompt}
-          handleSaveLiveConfig={voiceEngine.handleSaveLiveConfig} handleOpenLiveMode={voiceEngine.handleOpenLiveMode}
-          handleExitLiveModeOnly={voiceEngine.handleExitLiveModeOnly} handleStopLiveModeCompletely={voiceEngine.handleStopLiveModeCompletely}
-          isAppActive={isAppActive} />
+        return null
       case 'settings':
         return <Settings geminiKey={geminiKey} setGeminiKey={useAIStore.getState().setGeminiKey} geminiModel={geminiModel} setGeminiModel={useAIStore.getState().setGeminiModel}
           groqKey={groqKey} setGroqKey={useAIStore.getState().setGroqKey} isVaultUnlocked={isVaultUnlocked} onResetVault={() => { setIsVaultUnlocked(false); setShowVaultExplorer(false) }}
@@ -156,7 +154,6 @@ export default function App() {
           onTriggerFeatureTour={() => setShowFeatureTour(true)} />
       case 'iris_tools':
         return <IrisTools onNavigate={setActivePage} onTriggerChronoLock={handleTriggerChronoLock} onTriggerVault={handleTriggerVault} />
-
       case 'private':
         if (!isVaultUnlocked) {
           return (
@@ -173,12 +170,7 @@ export default function App() {
       case 'zero_screen':
         return <ZeroScreen onNavigate={setActivePage} isAppActive={isAppActive} />
       default:
-        return <Home onNavigate={setActivePage} isAppActive={isAppActive}
-          onTriggerChronoLock={handleTriggerChronoLock}
-          onTriggerVault={handleTriggerVault}
-          isVaultUnlocked={isVaultUnlocked}
-          installedApps={installedApps} setInstalledApps={setInstalledApps} lockedApps={lockedApps} onToggleAppLock={toggleAppLock}
-          use24HourClock={use24HourClock} showAppLabels={showAppLabels} globalIconTheme={globalIconTheme} powerSaveMode={powerSaveMode} />
+        return null
     }
   }
 
@@ -257,11 +249,67 @@ export default function App() {
       <TaskAlarmOverlay setActivePage={setActivePage} />
       <TopAppBar title={activePage === 'home' ? 'IRIS-SYSTEM-OS' : `IRIS // ${activePage.toUpperCase()}`} activePage={activePage} use24HourClock={use24HourClock} isAppActive={isAppActive} powerSaveMode={powerSaveMode} onNavigate={setActivePage} />
       <main ref={mainRef} className="flex-1 flex flex-col overflow-hidden min-h-0 relative z-10" style={{ backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
-        <div key={activePage === 'drawer' ? 'home' : activePage} className={`page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.25, 1, 0.5, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.38, 0.64, 1)' : 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
-          <Suspense fallback={null}>
-            {renderActivePage()}
-          </Suspense>
+        <div
+          className="flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden"
+          style={{ display: isHomeOrDrawer ? 'flex' : 'none' }}
+        >
+          <Home
+            onNavigate={setActivePage}
+            onTriggerVault={handleTriggerVault}
+            onTriggerChronoLock={handleTriggerChronoLock}
+            isVaultUnlocked={isVaultUnlocked}
+            installedApps={installedApps}
+            setInstalledApps={setInstalledApps}
+            lockedApps={lockedApps}
+            onToggleAppLock={toggleAppLock}
+            use24HourClock={use24HourClock}
+            showAppLabels={showAppLabels}
+            globalIconTheme={globalIconTheme}
+            isAppActive={isAppActive && activePage === 'home'}
+            powerSaveMode={powerSaveMode}
+          />
         </div>
+        {(warmPages.widgets || activePage === 'widgets') && (
+          <div
+            className="flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden"
+            style={{ display: activePage === 'widgets' ? 'flex' : 'none' }}
+          >
+            <Suspense fallback={null}>
+              <Widgets isAppActive={isAppActive && activePage === 'widgets'} activePage={activePage} powerSaveMode={powerSaveMode} />
+            </Suspense>
+          </div>
+        )}
+        {(warmPages.assistant || activePage === 'assistant') && (
+          <div
+            className="flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden"
+            style={{ display: activePage === 'assistant' ? 'flex' : 'none' }}
+          >
+            <Suspense fallback={null}>
+              <Assistant
+                autoTriggerLive={useAppStore.getState().showArcSearch}
+                setAutoTriggerLive={() => {}}
+                onNavigate={setActivePage}
+                startVoiceInput={voiceEngine.startVoiceInput}
+                stopVoiceInput={voiceEngine.stopVoiceInput}
+                speakText={voiceEngine.speakText}
+                stopSpeaking={voiceEngine.stopSpeaking}
+                submitPrompt={aiBackend.submitPrompt}
+                handleSaveLiveConfig={voiceEngine.handleSaveLiveConfig}
+                handleOpenLiveMode={voiceEngine.handleOpenLiveMode}
+                handleExitLiveModeOnly={voiceEngine.handleExitLiveModeOnly}
+                handleStopLiveModeCompletely={voiceEngine.handleStopLiveModeCompletely}
+                isAppActive={isAppActive && activePage === 'assistant'}
+              />
+            </Suspense>
+          </div>
+        )}
+        {!isHomeOrDrawer && activePage !== 'widgets' && activePage !== 'assistant' && (
+          <div key={activePage} className={`page-transition-container effect-${PowerSaveManager.shouldDisable('pageTransitions') ? 'none' : pageTransitionEffect.toLowerCase()}`} style={{ '--page-transition-duration': `${pageTransitionSpeed}ms`, '--page-transition-easing': pageTransitionEasing === 'SMOOTH' ? 'cubic-bezier(0.25, 1, 0.5, 1)' : pageTransitionEasing === 'CRISP' ? 'cubic-bezier(0, 0, 0.2, 1)' : pageTransitionEasing === 'SPRING' ? 'cubic-bezier(0.34, 1.38, 0.64, 1)' : 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
+            <Suspense fallback={null}>
+              {renderSecondaryPage()}
+            </Suspense>
+          </div>
+        )}
       </main>
       <div
         ref={drawerSheetRef}

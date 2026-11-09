@@ -900,10 +900,51 @@ export async function setFlashlight(enable = true) {
 export async function openSystemSettings(type = 'main') {
   if (!isNative) return false
   try {
-    await NativeLauncher.openSystemSettings({ type })
+    await NativeLauncher.openSystemSettings({ setting: type, type })
     return true
   } catch {
     return false
+  }
+}
+
+export async function getRingerMode() {
+  if (!isNative) return 'normal'
+  try {
+    const res = await NativeLauncher.getRingerMode()
+    return res?.mode || 'normal'
+  } catch {
+    return 'normal'
+  }
+}
+
+export async function cycleRingerMode() {
+  if (!isNative) return 'vibrate'
+  try {
+    const res = await NativeLauncher.cycleRingerMode()
+    return res?.mode || 'normal'
+  } catch {
+    return 'normal'
+  }
+}
+
+export async function getScreenTimeStats() {
+  if (!isNative) {
+    return {
+      granted: true,
+      totalScreenTimeMs: 13320000,
+      apps: [
+        { packageId: 'com.whatsapp', label: 'WhatsApp', usageMs: 5400000, minutes: 90, percentage: 41, icon: 'chat' },
+        { packageId: 'com.google.android.youtube', label: 'YouTube', usageMs: 4200000, minutes: 70, percentage: 32, icon: 'play_circle' },
+        { packageId: 'com.android.chrome', label: 'Chrome', usageMs: 2400000, minutes: 40, percentage: 18, icon: 'globe' },
+        { packageId: 'com.spotify.music', label: 'Spotify', usageMs: 1320000, minutes: 22, percentage: 9, icon: 'music_note' },
+      ],
+    }
+  }
+  try {
+    const res = await NativeLauncher.getScreenTimeStats()
+    return res || { granted: false, totalScreenTimeMs: 0, apps: [] }
+  } catch {
+    return { granted: false, totalScreenTimeMs: 0, apps: [] }
   }
 }
 

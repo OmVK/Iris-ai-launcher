@@ -7,6 +7,7 @@ import MediaWidget from './MediaWidget'
 import TasksWidget from './TasksWidget'
 import PingWidget from './PingWidget'
 import SignalWidget from './SignalWidget'
+import ScreenTimeWidget from './ScreenTimeWidget'
 import CustomWidget from './CustomWidget'
 import {
   ClockWidget,
@@ -18,6 +19,7 @@ import {
 
 export const WIDGET_CATALOG = {
   performance: { label: 'Kernel Telemetry', icon: 'memory' },
+  screentime: { label: 'Screen Time HUD', icon: 'timelapse' },
   weather: { label: 'Meteo Station', icon: 'cloud' },
   stocks: { label: 'Market Feeds', icon: 'show_chart' },
   media: { label: 'Media Core', icon: 'graphic_eq' },
@@ -186,6 +188,8 @@ const WidgetContentRenderer = memo(function WidgetContentRenderer({
       )
     case 'signal':
       return <SignalWidget />
+    case 'screentime':
+      return <ScreenTimeWidget />
     case 'clock':
       return (
         <div className="iris-card border border-white/10 rounded-2xl p-4 relative h-full flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.45)]">

@@ -56,6 +56,68 @@ public class LauncherPlugin extends Plugin {
     private volatile android.speech.SpeechRecognizer currentRecognizer = null;
     private volatile android.media.MediaPlayer mediaPlayer = null;
     private volatile PluginCall currentSpeechCall;
+    private static final java.util.concurrent.ConcurrentHashMap<String, byte[]> iconMemoryCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static byte[] getOrCreateAppIconBytes(Context context, String packageId) {
+        if (context == null || packageId == null || packageId.isEmpty()) return null;
+        byte[] cachedMem = iconMemoryCache.get(packageId);
+        if (cachedMem != null && cachedMem.length > 0) return cachedMem;
+
+        File iconDir = new File(context.getFilesDir(), "app_icons_v2");
+        if (!iconDir.exists()) {
+            iconDir.mkdirs();
+        }
+        String safeName = packageId.replaceAll("[^a-zA-Z0-9._-]", "_");
+        File iconFile = new File(iconDir, safeName + ".img");
+        if (iconFile.exists() && iconFile.length() > 0) {
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(iconFile)) {
+                byte[] diskBytes = new byte[(int) iconFile.length()];
+                int read = fis.read(diskBytes);
+                if (read > 0) {
+                    iconMemoryCache.put(packageId, diskBytes);
+                    return diskBytes;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        try {
+            PackageManager pm = context.getPackageManager();
+            Drawable iconDrawable = pm.getApplicationIcon(packageId);
+            if (iconDrawable != null) {
+                int width = iconDrawable.getIntrinsicWidth() > 0 ? iconDrawable.getIntrinsicWidth() : 128;
+                int height = iconDrawable.getIntrinsicHeight() > 0 ? iconDrawable.getIntrinsicHeight() : 128;
+                if (width > 256 || height > 256) {
+                    width = 256;
+                    height = 256;
+                }
+                Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                iconDrawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+                iconDrawable.draw(canvas);
+
+                Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true);
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    resizedBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 86, outputStream);
+                } else {
+                    resizedBitmap.compress(Bitmap.CompressFormat.PNG, 86, outputStream);
+                }
+                byte[] bytes = outputStream.toByteArray();
+                bitmap.recycle();
+                if (resizedBitmap != bitmap) {
+                    resizedBitmap.recycle();
+                }
+                if (bytes.length > 0) {
+                    iconMemoryCache.put(packageId, bytes);
+                    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(iconFile)) {
+                        fos.write(bytes);
+                    } catch (Exception ignored) {}
+                    return bytes;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
 
     @Override
     public void load() {
@@ -414,8 +476,8 @@ public class LauncherPlugin extends Plugin {
                 }
                 String currentSignature = signatureBuilder.toString();
                 
-                java.io.File cacheFile = new java.io.File(getContext().getFilesDir(), "iris_apps_cache.json");
-                java.io.File sigFile = new java.io.File(getContext().getFilesDir(), "iris_apps_cache.sig");
+                java.io.File cacheFile = new java.io.File(getContext().getFilesDir(), "iris_apps_cache_v2.json");
+                java.io.File sigFile = new java.io.File(getContext().getFilesDir(), "iris_apps_cache_v2.sig");
                 
                 boolean useCache = false;
                 if (cacheFile.exists() && sigFile.exists()) {
@@ -455,48 +517,9 @@ public class LauncherPlugin extends Plugin {
                     appObj.put("label", label);
                     appObj.put("packageId", packageId);
 
-                    // Extract native app icon drawable, compress, and encode to Base64
-                    String iconBase64 = null;
-                    try {
-                        Drawable iconDrawable = info.loadIcon(pm);
-                        if (iconDrawable != null) {
-                            int width = iconDrawable.getIntrinsicWidth() > 0 ? iconDrawable.getIntrinsicWidth() : 64;
-                            int height = iconDrawable.getIntrinsicHeight() > 0 ? iconDrawable.getIntrinsicHeight() : 64;
-                            
-                            // Limit drawing size to prevent massive temporary memory pressure
-                            if (width > 256 || height > 256) {
-                                width = 256;
-                                height = 256;
-                            }
-                            
-                            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-                            Canvas canvas = new Canvas(bitmap);
-                            iconDrawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-                            iconDrawable.draw(canvas);
-                            
-                            // Downscale to 128x128 with WebP compression for crisp rendering and 60% memory savings
-                            Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true);
-                            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                                resizedBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, outputStream);
-                                iconBase64 = "data:image/webp;base64," + Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP);
-                            } else {
-                                resizedBitmap.compress(Bitmap.CompressFormat.PNG, 85, outputStream);
-                                iconBase64 = "data:image/png;base64," + Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP);
-                            }
-                            
-                            // Safely release native memory immediately
-                            bitmap.recycle();
-                            if (resizedBitmap != bitmap) {
-                                resizedBitmap.recycle();
-                            }
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-
-                    if (iconBase64 != null) {
-                        appObj.put("icon", iconBase64);
+                    byte[] iconBytes = getOrCreateAppIconBytes(getContext(), packageId);
+                    if (iconBytes != null && iconBytes.length > 0) {
+                        appObj.put("icon", "https://localhost/__iris_icon__/" + packageId);
                     } else {
                         // Assign highly descriptive matching Material Symbol icons dynamically based on package signatures as fallback
                         String icon = "apps";
@@ -754,7 +777,7 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void openSystemSettings(PluginCall call) {
-        String setting = call.getString("setting", "wifi");
+        String setting = call.getString("setting", call.getString("type", "wifi"));
         try {
             Intent intent;
             switch (setting) {
@@ -776,8 +799,31 @@ public class LauncherPlugin extends Plugin {
                 case "battery":
                     intent = new Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS);
                     break;
+                case "storage":
+                    intent = new Intent(android.provider.Settings.ACTION_INTERNAL_STORAGE_SETTINGS);
+                    break;
+                case "apps":
+                    intent = new Intent(android.provider.Settings.ACTION_APPLICATION_SETTINGS);
+                    break;
                 case "location":
                     intent = new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                    break;
+                case "security":
+                    intent = new Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS);
+                    break;
+                case "developer":
+                    intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS);
+                    break;
+                case "accessibility":
+                    intent = new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    break;
+                case "notifications":
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        intent = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                        intent.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+                    } else {
+                        intent = new Intent(android.provider.Settings.ACTION_SETTINGS);
+                    }
                     break;
                 case "app":
                     String pkg = call.getString("package", getContext().getPackageName());
@@ -794,6 +840,152 @@ public class LauncherPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("Failed to open settings: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void getRingerMode(PluginCall call) {
+        try {
+            android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
+            JSObject ret = new JSObject();
+            if (audioManager != null) {
+                int ringer = audioManager.getRingerMode();
+                String mode = ringer == android.media.AudioManager.RINGER_MODE_SILENT
+                        ? "silent"
+                        : ringer == android.media.AudioManager.RINGER_MODE_VIBRATE ? "vibrate" : "normal";
+                ret.put("mode", mode);
+            } else {
+                ret.put("mode", "normal");
+            }
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to get ringer mode: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void cycleRingerMode(PluginCall call) {
+        try {
+            android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
+            JSObject ret = new JSObject();
+            if (audioManager != null) {
+                int ringer = audioManager.getRingerMode();
+                String nextMode;
+                if (ringer == android.media.AudioManager.RINGER_MODE_NORMAL) {
+                    audioManager.setRingerMode(android.media.AudioManager.RINGER_MODE_VIBRATE);
+                    nextMode = "vibrate";
+                } else if (ringer == android.media.AudioManager.RINGER_MODE_VIBRATE) {
+                    try {
+                        audioManager.setRingerMode(android.media.AudioManager.RINGER_MODE_SILENT);
+                        nextMode = "silent";
+                    } catch (SecurityException se) {
+                        audioManager.setRingerMode(android.media.AudioManager.RINGER_MODE_NORMAL);
+                        nextMode = "normal";
+                    }
+                } else {
+                    audioManager.setRingerMode(android.media.AudioManager.RINGER_MODE_NORMAL);
+                    nextMode = "normal";
+                }
+                ret.put("mode", nextMode);
+            } else {
+                ret.put("mode", "normal");
+            }
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to cycle ringer mode: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getScreenTimeStats(PluginCall call) {
+        new Thread(() -> {
+            JSObject ret = new JSObject();
+            try {
+                boolean enabled = PermissionManager.getInstance(getContext()).isUsageStatsEnabled();
+                ret.put("granted", enabled);
+                if (!enabled) {
+                    ret.put("totalScreenTimeMs", 0);
+                    ret.put("apps", new JSArray());
+                    call.resolve(ret);
+                    return;
+                }
+
+                android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager) getContext().getSystemService(Context.USAGE_STATS_SERVICE);
+                if (usm == null) {
+                    ret.put("totalScreenTimeMs", 0);
+                    ret.put("apps", new JSArray());
+                    call.resolve(ret);
+                    return;
+                }
+
+                java.util.Calendar cal = java.util.Calendar.getInstance();
+                long now = System.currentTimeMillis();
+                cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
+                cal.set(java.util.Calendar.MINUTE, 0);
+                cal.set(java.util.Calendar.SECOND, 0);
+                cal.set(java.util.Calendar.MILLISECOND, 0);
+                long startOfDay = cal.getTimeInMillis();
+
+                java.util.Map<String, android.app.usage.UsageStats> statsMap = usm.queryAndAggregateUsageStats(startOfDay, now);
+                if (statsMap == null || statsMap.isEmpty()) {
+                    statsMap = usm.queryAndAggregateUsageStats(now - 24 * 60 * 60 * 1000L, now);
+                }
+
+                PackageManager pm = getContext().getPackageManager();
+                String selfPkg = getContext().getPackageName();
+                java.util.List<org.json.JSONObject> entries = new java.util.ArrayList<>();
+                long totalMs = 0L;
+
+                if (statsMap != null) {
+                    for (java.util.Map.Entry<String, android.app.usage.UsageStats> entry : statsMap.entrySet()) {
+                        String pkg = entry.getKey();
+                        android.app.usage.UsageStats us = entry.getValue();
+                        if (pkg == null || us == null) continue;
+                        if (pkg.equals(selfPkg) || pkg.equals("com.android.systemui") || pkg.equals("android")) continue;
+                        long fgMs = us.getTotalTimeInForeground();
+                        if (fgMs < 60000L) continue;
+                        if (pm.getLaunchIntentForPackage(pkg) == null) continue;
+
+                        String label = pkg;
+                        try {
+                            android.content.pm.ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+                            CharSequence cs = pm.getApplicationLabel(ai);
+                            if (cs != null) label = cs.toString();
+                        } catch (Exception ignored) {}
+
+                        totalMs += fgMs;
+                        org.json.JSONObject item = new org.json.JSONObject();
+                        item.put("packageId", pkg);
+                        item.put("label", label);
+                        item.put("usageMs", fgMs);
+                        item.put("minutes", Math.round(fgMs / 60000f));
+                        item.put("icon", "https://localhost/__iris_icon__/" + pkg);
+                        entries.add(item);
+                    }
+                }
+
+                java.util.Collections.sort(entries, (a, b) -> Long.compare(b.optLong("usageMs", 0L), a.optLong("usageMs", 0L)));
+
+                JSArray topApps = new JSArray();
+                long safeTotal = Math.max(1L, totalMs);
+                for (int i = 0; i < Math.min(6, entries.size()); i++) {
+                    org.json.JSONObject obj = entries.get(i);
+                    int pct = (int) Math.min(100L, Math.round((obj.optLong("usageMs", 0L) * 100.0) / safeTotal));
+                    JSObject jsItem = new JSObject(obj.toString());
+                    jsItem.put("percentage", pct);
+                    topApps.put(jsItem);
+                }
+
+                ret.put("totalScreenTimeMs", totalMs);
+                ret.put("apps", topApps);
+                call.resolve(ret);
+            } catch (Exception e) {
+                Log.e(TAG, "Error fetching screen time stats", e);
+                ret.put("granted", false);
+                ret.put("totalScreenTimeMs", 0);
+                ret.put("apps", new JSArray());
+                call.resolve(ret);
+            }
+        }).start();
     }
 
     @PluginMethod

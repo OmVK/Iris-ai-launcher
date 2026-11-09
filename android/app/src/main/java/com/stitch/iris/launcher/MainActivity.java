@@ -29,9 +29,40 @@ public class MainActivity extends BridgeActivity {
         // Request battery optimization exemption so the OS doesn't kill us
         requestBatteryOptimizationExemption();
         
-        // Disable WebView user gesture requirement for audio playback
+        // Disable WebView user gesture requirement for audio playback & boost renderer priority
         if (bridge != null && bridge.getWebView() != null) {
-            bridge.getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
+            android.webkit.WebView webView = bridge.getWebView();
+            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                webView.setRendererPriorityPolicy(android.webkit.WebView.RENDERER_PRIORITY_IMPORTANT, false);
+            }
+            webView.setWebViewClient(new com.getcapacitor.BridgeWebViewClient(bridge) {
+                @Override
+                public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView view, android.webkit.WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null) {
+                        String path = request.getUrl().getPath();
+                        if (path != null && path.startsWith("/__iris_icon__/")) {
+                            String pkg = path.substring("/__iris_icon__/".length()).trim();
+                            byte[] iconBytes = LauncherPlugin.getOrCreateAppIconBytes(MainActivity.this, pkg);
+                            if (iconBytes != null && iconBytes.length > 0) {
+                                String mime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ? "image/webp" : "image/png";
+                                java.util.Map<String, String> headers = new java.util.HashMap<>();
+                                headers.put("Cache-Control", "public, max-age=604800, immutable");
+                                headers.put("Access-Control-Allow-Origin", "*");
+                                return new android.webkit.WebResourceResponse(
+                                    mime,
+                                    null,
+                                    200,
+                                    "OK",
+                                    headers,
+                                    new java.io.ByteArrayInputStream(iconBytes)
+                                );
+                            }
+                        }
+                    }
+                    return super.shouldInterceptRequest(view, request);
+                }
+            });
         }
         
         // Enable display cutout mode to draw behind notch (API 28+)
@@ -42,26 +73,7 @@ public class MainActivity extends BridgeActivity {
         }
             
         // Request high refresh rate (120hz / 90hz)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            WindowManager.LayoutParams lpRefresh = getWindow().getAttributes();
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                android.view.Display display = getDisplay();
-                if (display != null) {
-                    android.view.Display.Mode[] modes = display.getSupportedModes();
-                    for (android.view.Display.Mode mode : modes) {
-                        if (mode.getRefreshRate() >= 119.0f) {
-                            lpRefresh.preferredDisplayModeId = mode.getModeId();
-                            break;
-                        } else if (mode.getRefreshRate() >= 89.0f && lpRefresh.preferredDisplayModeId == 0) {
-                            lpRefresh.preferredDisplayModeId = mode.getModeId();
-                        }
-                    }
-                }
-            } else {
-                lpRefresh.preferredRefreshRate = 120.0f;
-            }
-            getWindow().setAttributes(lpRefresh);
-        }
+        enforceHighRefreshRate();
 
         // Enforce ADJUST_PAN to allow WebView to resize with keyboard
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
@@ -134,10 +146,49 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    private void enforceHighRefreshRate() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                WindowManager.LayoutParams lpRefresh = getWindow().getAttributes();
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    android.view.Display display = getDisplay();
+                    if (display != null) {
+                        android.view.Display.Mode[] modes = display.getSupportedModes();
+                        float bestRate = 0f;
+                        int bestModeId = 0;
+                        for (android.view.Display.Mode mode : modes) {
+                            if (mode.getRefreshRate() > bestRate) {
+                                bestRate = mode.getRefreshRate();
+                                bestModeId = mode.getModeId();
+                            }
+                        }
+                        if (bestModeId != 0 && lpRefresh.preferredDisplayModeId != bestModeId) {
+                            lpRefresh.preferredDisplayModeId = bestModeId;
+                            getWindow().setAttributes(lpRefresh);
+                        }
+                    }
+                } else {
+                    lpRefresh.preferredRefreshRate = 120.0f;
+                    getWindow().setAttributes(lpRefresh);
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bridge != null && bridge.getWebView() != null) {
+                bridge.getWebView().setRendererPriorityPolicy(android.webkit.WebView.RENDERER_PRIORITY_IMPORTANT, false);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        enforceHighRefreshRate();
+    }
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
+            enforceHighRefreshRate();
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 final android.view.WindowInsetsController insetsController = getWindow().getInsetsController();
                 if (insetsController != null) {

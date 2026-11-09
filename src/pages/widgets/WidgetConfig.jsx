@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 const DEFAULT_WIDGETS = [
   { id: 'performance', label: 'Kernel Performance Metrics', icon: 'memory' },
+  { id: 'screentime', label: 'Screen Time & Wellbeing HUD', icon: 'timelapse' },
   { id: 'weather', label: 'Weather Forecast Node', icon: 'cloud' },
   { id: 'stocks', label: 'Stock & Crypto Candlestick Cores', icon: 'show_chart' },
   { id: 'media', label: 'Third-Party & Stream Media Core', icon: 'graphic_eq' },

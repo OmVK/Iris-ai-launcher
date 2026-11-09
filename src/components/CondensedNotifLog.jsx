@@ -161,7 +161,9 @@ export default function CondensedNotifLog({ onClose }) {
               onClick={(e) => handleLaunch(e, item.packageId)}
               className="group relative flex items-start gap-2.5 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/5 hover:border-white/20 transition-colors cursor-pointer"
               style={{
-                boxShadow: `inset 2px 0 0 ${item.color || '#00f2ff'}`
+                boxShadow: `inset 2px 0 0 ${item.color || '#00f2ff'}`,
+                contentVisibility: 'auto',
+                containIntrinsicSize: '0 76px',
               }}
             >
               {/* App / Category Icon */}

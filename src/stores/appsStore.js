@@ -103,7 +103,7 @@ export function prewarmAppIcons(apps, limit = 40) {
     let count = 0
     for (let i = 0; i < apps.length && count < limit; i++) {
       const src = apps[i]?.customIcon || apps[i]?.icon
-      if (src && typeof src === 'string' && src.startsWith('data:') && !prewarmedIcons.has(src)) {
+      if (src && typeof src === 'string' && (src.startsWith('http') || src.startsWith('data:')) && !prewarmedIcons.has(src)) {
         prewarmedIcons.add(src)
         const img = new Image()
         img.decoding = 'async'
@@ -178,12 +178,13 @@ export const useAppsStore = create((set, get) => ({
     let updated = filtered.map(app => {
       const existing = existingMap.get(app.packageId)
       if (existing) {
+        const nextIcon = existing.customIcon || app.icon || existing.icon
         return {
           ...app,
           isHome: existing.isHome ?? false,
           customIcon: existing.customIcon,
           customLabel: existing.customLabel,
-          icon: existing.icon || app.icon
+          icon: nextIcon
         }
       }
       return app
@@ -207,7 +208,7 @@ export const useAppsStore = create((set, get) => ({
           a.isHome !== b.isHome ||
           a.customLabel !== b.customLabel ||
           a.customIcon !== b.customIcon ||
-          Boolean(a.icon) !== Boolean(b.icon)
+          a.icon !== b.icon
         ) {
           identical = false
           break
