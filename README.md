@@ -11,7 +11,7 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 - **Virtual Filesystem**: Explore and manage files with drag-and-drop functionality and an eval-free calculator in search.
 - **Power Save Manager**: Smart 4-mode resource optimization (AUTO, HIGH, MEDIUM, LOW) with 21 feature presets per tier based on device capabilities.
 - **Global ArcSearch**: Unified search across installed apps, files, web, and LLM.
-- **Custom Widget Dashboard**: Includes 10 widget types (Performance, Weather, Stock, Media, Tasks, Ping, Signal, Custom + built-ins) with a CyberSynth ambient audio engine.
+- **Custom Widget Dashboard**: Includes 11 widget types (Screen Time, Performance, Weather, Stock, Media, Tasks, Ping, Signal, Custom + built-ins) with live telemetry.
 - **Security Toolkit**: 12 built-in cybersecurity tools including port scanner, DNS lookup, WHOIS, and traceroute, plus a threat monitoring dashboard.
 - **Backup & Restore**: Local on-device app state backup and restore (cloud backup disabled for privacy).
 - **Offline-First**: On-device silent speech recognition, battery-optimized polling, and graceful feature degradation on low-end devices.
@@ -33,22 +33,24 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
 
-## ⚡ v5.6.0 iPhone-Grade Fluid Spring Physics, Camera-Safe Notch, Bidirectional Swiping & Gesture Optimization
+## ⚡ v5.6.0 Native Icon Engine, 120Hz High-Refresh Pipeline, 5-Pill Notch Control Center & Screen Time Telemetry
 
-IRIS v5.6.0 introduces fluid iOS-grade Dynamic Island spring physics, an unobstructed punch-hole camera safe notification bay, bidirectional continuous notch swiping, Samsung One UI gesture navigation protections, and lag-free settings rendering:
-- **iPhone-Grade Dynamic Island Spring Physics**:
-  - Unified iOS momentum curves (`cubic-bezier(0.32, 1.34, 0.42, 1)` expand, `cubic-bezier(0.25, 1, 0.5, 1)` collapse) across the top notch island, bottom dock, and app drawer sheet.
-  - Zero-lag GPU compositing (`transform: translate3d(0, 0, 0)` with layout/paint containment) eliminates frame drops on 90Hz/120Hz displays.
-- **Camera Punch-Hole Safe Split-Wing Notification Bay**:
-  - Re-architected notch notifications with a 30px top sensor bridge flanking the center camera cutout and a 64px message bay positioned cleanly beneath the hole.
-  - Text, icons, and sender headers are never obscured by physical camera punch-holes.
-- **Bidirectional Notch Swipe & Archive Fix**:
-  - Smooth circular wrap-around swiping (Telemetry ↔ Zero Screen ↔ Archive) with removed container-level swipe locks.
-  - Permanent archive clear fix prevents old status bar notifications from re-populating cleared history.
-- **Samsung One UI Gesture Navigation Safety & Zero-Lag Gestures Settings**:
-  - Added bottom 32px gesture exclusion zone and lifted dock to prevent conflict with Android system Recent Apps gesture on devices like the Galaxy S24 Ultra.
-  - Added dedicated `Dock Hold Assistant` toggle in Settings -> Gestures.
-  - Replaced nested backdrop blur layers with hardware-accelerated translucent styling and CSS layout containment, ensuring 120fps scrolling in the Gestures settings menu.
+IRIS v5.6.0 delivers a major 120Hz performance and feature upgrade across the entire launcher, including a zero-Base64 native icon streaming engine, Keep-Warm tab caching, a 5-pill Notch Control Center, Screen Time telemetry, and ArcSearch deep shortcuts:
+- **Zero-Base64 Native Icon URL Streaming (`https://localhost/__iris_icon__/<pkg>`)**:
+  - Replaced ~3.5 MB of Base64 icon strings in `localStorage` and Capacitor bridge JSON payloads with a custom native `WebViewClient.shouldInterceptRequest` binary WebP/PNG streaming endpoint backed by an in-memory `LruCache` and disk cache (`app_icons_v2`).
+  - Staggered micro-batch icon pre-warming and viewport-bounded eager rendering (`index < 35`) with zero per-icon GPU `drop-shadow` overdraw ensure butter-smooth 120Hz App Drawer pull-ups without exhausting WebView Vulkan texture memory.
+- **Native 120Hz Display Mode Lock & Keep-Warm Page Caching**:
+  - `MainActivity.enforceHighRefreshRate()` queries `Display.getSupportedModes()` and locks the window to the highest supported refresh rate (120Hz/90Hz) alongside `WebView.RENDERER_PRIORITY_IMPORTANT`.
+  - `Home`, `Drawer`, `Widgets`, and `Assistant` stay warm in memory once visited, eliminating unmount/remount lag when switching tabs.
+- **5-Pill Notch Control Center & Real Kernel RAM Boost**:
+  - Upgraded the Dynamic Island `SYS TELEMETRY` action bar into a 5-pill Control Center: **`TORCH`**, **`RINGER`** (cycles `Normal` → `Vibrate` → `Silent`), **`BOOST`** (native `KILL_BACKGROUND_PROCESSES` + WebView cache purge + GC with real kernel `availMem` delta reporting), **`WI-FI`**, and **`BT`**.
+- **Digital Wellbeing & Screen Time Widget (`ScreenTimeWidget.jsx`)**:
+  - Added an 11th built-in widget powered by Android `UsageStatsManager` (`PACKAGE_USAGE_STATS`), displaying total daily screen time and top 4 most-used apps with usage bars and 1-tap permission grant.
+- **ArcSearch Deep Shortcuts & Silent Notification Archive Mode**:
+  - Added instant deep actions in `ArcSearch` (direct WhatsApp chat, Google Maps navigation, YouTube search, Android system sub-settings, and inline math/unit copy pills).
+  - Added a **Notch Notification Popups** toggle in Settings -> Dynamic Island (`notifPopupsEnabled`) to silence top-bar popups while continuing to archive all incoming notifications (including deleted messages) in the background, plus fixed individual notification deletion in `NOTIF LOG`.
+- **iPhone-Grade Dynamic Island Spring Physics, Camera-Safe Notch & S24 Ultra Protections**:
+  - Unified iOS momentum curves (`cubic-bezier(0.32, 1.34, 0.42, 1)`), 30px punch-hole camera bridge, circular bidirectional notch swiping, bottom 64px gesture exclusion zone for Samsung One UI Recent Apps swipes, and Android 13+ Restricted Settings Accessibility guide.
 
 ## ⚡ v5.5.0 Native Message Archive, 60fps Dashboard & Deep Battery Optimization
 
