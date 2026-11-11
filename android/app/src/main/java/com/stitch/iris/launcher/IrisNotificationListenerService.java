@@ -28,6 +28,10 @@ public class IrisNotificationListenerService extends NotificationListenerService
     public static final String KEY_DELETED_ARCHIVE_IDS = "iris_notif_deleted_ids";
     private static final int MAX_ARCHIVE_SIZE = 100;
     private static final java.util.concurrent.ConcurrentHashMap<String, String> appLabelCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, Notification.Action> replyActions = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.regex.Pattern OTP_PATTERN = java.util.regex.Pattern.compile(
+            "(?i)(?:otp|code|pin|verification|passcode|security\\s+code|auth|login|is|use)[^0-9]{0,20}\\b(\\d{4,8})\\b|\\b(\\d{4,8})\\b[^0-9]{0,20}(?:is\\s+your|verification|otp|code|passcode)"
+    );
     private static IrisNotificationListenerService instance;
 
     @Override
@@ -240,7 +244,8 @@ public class IrisNotificationListenerService extends NotificationListenerService
         try {
             JSONObject obj = new JSONObject();
             long postTime = sbn.getPostTime() > 0 ? sbn.getPostTime() : System.currentTimeMillis();
-            obj.put("id", postTime + "_" + Math.abs((pkg + title + text).hashCode()));
+            String recordId = postTime + "_" + Math.abs((pkg + title + text).hashCode());
+            obj.put("id", recordId);
             obj.put("sbnId", sbn.getId());
             obj.put("key", sbn.getKey());
             obj.put("packageId", pkg);
@@ -251,9 +256,67 @@ public class IrisNotificationListenerService extends NotificationListenerService
             obj.put("timestamp", System.currentTimeMillis());
             obj.put("deletedBySender", isDeletedPlaceholderText(text));
             obj.put("dismissedFromSystem", false);
+
+            // Detect inline reply RemoteInput action
+            boolean canReply = false;
+            if (n.actions != null) {
+                for (Notification.Action action : n.actions) {
+                    if (action != null && action.actionIntent != null && action.getRemoteInputs() != null && action.getRemoteInputs().length > 0) {
+                        canReply = true;
+                        if (sbn.getKey() != null) replyActions.put(sbn.getKey(), action);
+                        replyActions.put(recordId, action);
+                        replyActions.put(pkg, action);
+                        break;
+                    }
+                }
+            }
+            obj.put("canReply", canReply);
+
+            // Detect 4-8 digit OTP / verification code
+            String otpCode = extractOtpCode(title + " " + text);
+            if (otpCode != null && !otpCode.isEmpty()) {
+                obj.put("otpCode", otpCode);
+            }
+
             return obj;
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    public static String extractOtpCode(String combined) {
+        if (combined == null || combined.isEmpty()) return null;
+        try {
+            java.util.regex.Matcher m = OTP_PATTERN.matcher(combined);
+            if (m.find()) {
+                String g1 = m.group(1);
+                String g2 = m.group(2);
+                return g1 != null ? g1 : g2;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    public static boolean sendInlineReply(Context context, String keyOrId, String replyText) {
+        if (context == null || keyOrId == null || replyText == null || replyText.trim().isEmpty()) {
+            return false;
+        }
+        Notification.Action action = replyActions.get(keyOrId);
+        if (action == null || action.actionIntent == null || action.getRemoteInputs() == null) {
+            return false;
+        }
+        try {
+            android.content.Intent intent = new android.content.Intent();
+            Bundle bundle = new Bundle();
+            for (android.app.RemoteInput remoteInput : action.getRemoteInputs()) {
+                bundle.putCharSequence(remoteInput.getResultKey(), replyText.trim());
+            }
+            android.app.RemoteInput.addResultsToIntent(action.getRemoteInputs(), intent, bundle);
+            action.actionIntent.send(context, 0, intent);
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to send inline reply", e);
+            return false;
         }
     }
 

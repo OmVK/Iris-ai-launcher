@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, addNotificationPostedListener, getArchivedNotifications, dismissNotification, addPackageChangeListener } from '../components/LauncherPlugin'
+import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, addNotificationPostedListener, getArchivedNotifications, dismissNotification, addPackageChangeListener, addHomePressedListener } from '../components/LauncherPlugin'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { useAppStore } from '../stores/appStore'
 import { useAppsStore, prewarmAppIcons } from '../stores/appsStore'
@@ -8,6 +8,10 @@ import { useNotificationStore } from '../stores/notificationStore'
 
 export default function useAppEffects({ isAppActive, setIsAppActive, setShowChronoLock, setShowVaultExplorer, setIsVaultUnlocked, setShowLiveConfigModal, setActivePage, loadNativeApps, lockedApps, fullscreenActive, isVaultUnlocked, powerSaveMode }) {
   useEffect(() => { setVaultPackages(lockedApps) }, [lockedApps])
+
+  useEffect(() => {
+    PowerSaveManager.startFrameGovernor()
+  }, [])
 
   useEffect(() => {
     setFullscreen(fullscreenActive)
@@ -35,9 +39,20 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
           }
         })
       })
+      const homeHandle = addHomePressedListener(() => {
+        setShowChronoLock(false)
+        setShowVaultExplorer(false)
+        setShowLiveConfigModal(false)
+        useAppStore.getState().setShowArcSearch(false)
+        useAppStore.getState().setShowVpnBrowser(false)
+        const cur = useAppStore.getState().activePage
+        if (cur !== 'home') setActivePage('home')
+      })
       return () => {
         isMounted = false
         backHandle?.then(h => h.remove()); stateHandle?.then(h => h.remove())
+        if (homeHandle && typeof homeHandle.remove === 'function') homeHandle.remove()
+        else if (homeHandle && typeof homeHandle.then === 'function') homeHandle.then(h => h?.remove?.())
       }
     }
   }, [fullscreenActive, loadNativeApps, setActivePage, setIsAppActive, setIsVaultUnlocked, setShowChronoLock, setShowLiveConfigModal, setShowVaultExplorer])

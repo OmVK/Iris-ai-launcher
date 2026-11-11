@@ -64,6 +64,15 @@ function isDeletedMessageText(text) {
   )
 }
 
+const OTP_REGEX = /(?:otp|code|pin|verification|passcode|security\s+code|auth|login|is|use)[^0-9]{0,20}\b(\d{4,8})\b|\b(\d{4,8})\b[^0-9]{0,20}(?:is\s+your|verification|otp|code|passcode)/i
+
+export function extractOtpFromText(str) {
+  if (!str) return null
+  const m = String(str).match(OTP_REGEX)
+  if (!m) return null
+  return m[1] || m[2] || null
+}
+
 function formatRecord(notif, installedApps = []) {
   const pkg = notif.packageId || notif.packageName || ''
   const matchedApp = installedApps.find(a => a.packageId === pkg || a.id === pkg)
@@ -73,6 +82,7 @@ function formatRecord(notif, installedApps = []) {
   const dt = new Date(ts)
   const rawTitle = (notif.title || '').trim()
   const rawText = (notif.text || notif.message || '').trim()
+  const otpCode = notif.otpCode || extractOtpFromText(`${rawTitle} ${rawText}`)
 
   return {
     id: notif.id || `${ts}_${Math.random().toString(36).substring(2, 7)}`,
@@ -91,6 +101,8 @@ function formatRecord(notif, installedApps = []) {
     icon: theme.icon,
     deletedBySender: !!notif.deletedBySender,
     dismissedFromSystem: !!notif.dismissedFromSystem,
+    canReply: !!notif.canReply,
+    otpCode: otpCode || null,
   }
 }
 

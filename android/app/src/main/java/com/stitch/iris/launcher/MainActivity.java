@@ -58,6 +58,21 @@ public class MainActivity extends BridgeActivity {
                                     new java.io.ByteArrayInputStream(iconBytes)
                                 );
                             }
+                        } else if (path != null && path.startsWith("/__iris_wallpaper__")) {
+                            byte[] wpBytes = LauncherPlugin.getWallpaperBytes(MainActivity.this);
+                            if (wpBytes != null && wpBytes.length > 0) {
+                                java.util.Map<String, String> headers = new java.util.HashMap<>();
+                                headers.put("Cache-Control", "public, max-age=3600");
+                                headers.put("Access-Control-Allow-Origin", "*");
+                                return new android.webkit.WebResourceResponse(
+                                    "image/jpeg",
+                                    null,
+                                    200,
+                                    "OK",
+                                    headers,
+                                    new java.io.ByteArrayInputStream(wpBytes)
+                                );
+                            }
                         }
                     }
                     return super.shouldInterceptRequest(view, request);
@@ -189,6 +204,16 @@ public class MainActivity extends BridgeActivity {
                 bridge.getWebView().setRendererPriorityPolicy(android.webkit.WebView.RENDERER_PRIORITY_IMPORTANT, false);
             }
         } catch (Exception ignored) {}
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && Intent.ACTION_MAIN.equals(intent.getAction())
+                && intent.hasCategory(Intent.CATEGORY_HOME)) {
+            LauncherPlugin.onHomeIntentReceived();
+        }
     }
 
     @Override

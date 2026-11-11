@@ -7,6 +7,7 @@ import {
   isNotificationAccessGranted,
   requestNotificationAccess,
   getArchivedNotifications,
+  replyToNotification,
 } from './LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
 
@@ -17,6 +18,10 @@ export default function CondensedNotifLog({ onClose }) {
   const { notifPopupsEnabled, setNotifPopupsEnabled } = useThemeStore()
   const [hasPermission, setHasPermission] = useState(true)
   const [renderLimit, setRenderLimit] = useState(INITIAL_NOTIF_RENDER_COUNT)
+  const [replyingId, setReplyingId] = useState(null)
+  const [replyText, setReplyText] = useState('')
+  const [copiedOtpId, setCopiedOtpId] = useState(null)
+  const [sentReplyId, setSentReplyId] = useState(null)
 
   useEffect(() => {
     if (history.length <= INITIAL_NOTIF_RENDER_COUNT) return
@@ -212,6 +217,93 @@ export default function CondensedNotifLog({ onClose }) {
                 <p className="text-[9px] text-white/85 line-clamp-2 leading-relaxed break-words font-sans">
                   {item.text}
                 </p>
+
+                {(item.otpCode || item.canReply) && (
+                  <div className="flex items-center flex-wrap gap-1.5 mt-1.5" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                    {item.otpCode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          HapticFeedback.light()
+                          navigator.clipboard?.writeText?.(item.otpCode)
+                          setCopiedOtpId(item.id)
+                          setTimeout(() => setCopiedOtpId(null), 2000)
+                        }}
+                        className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/70 text-emerald-300 text-[8px] font-mono-data font-bold tracking-wider hover:bg-emerald-500/30 transition-all"
+                      >
+                        {copiedOtpId === item.id ? 'COPIED OTP!' : `COPY OTP: ${item.otpCode}`}
+                      </button>
+                    )}
+                    {item.canReply && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          HapticFeedback.selection()
+                          setReplyingId(replyingId === item.id ? null : item.id)
+                          setReplyText('')
+                        }}
+                        className="px-2 py-0.5 rounded bg-primary-fixed-dim/15 border border-primary-fixed-dim/40 text-primary-fixed-dim text-[8px] font-mono-data font-bold tracking-wider hover:bg-primary-fixed-dim/25 transition-all flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[10px]">reply</span>
+                        <span>{sentReplyId === item.id ? 'SENT!' : 'REPLY'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {replyingId === item.id && (
+                  <div className="mt-2 pt-1.5 border-t border-white/10 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1">
+                      {['👍', 'On my way', 'In a meeting, will text soon'].map((quick) => (
+                        <button
+                          key={quick}
+                          type="button"
+                          onClick={async () => {
+                            HapticFeedback.light()
+                            const res = await replyToNotification(item.key || item.id || item.packageId, quick)
+                            if (res?.success) {
+                              setSentReplyId(item.id)
+                              setReplyingId(null)
+                              setTimeout(() => setSentReplyId(null), 2000)
+                            }
+                          }}
+                          className="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/15 border border-white/10 text-[7.5px] text-white/80 font-mono-data truncate"
+                        >
+                          {quick}
+                        </button>
+                      ))}
+                    </div>
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault()
+                        if (!replyText.trim()) return
+                        HapticFeedback.light()
+                        const res = await replyToNotification(item.key || item.id || item.packageId, replyText.trim())
+                        if (res?.success) {
+                          setSentReplyId(item.id)
+                          setReplyingId(null)
+                          setReplyText('')
+                          setTimeout(() => setSentReplyId(null), 2000)
+                        }
+                      }}
+                      className="flex items-center gap-1"
+                    >
+                      <input
+                        type="text"
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder={`Reply to ${item.title}...`}
+                        className="flex-1 bg-black/50 border border-white/15 rounded px-2 py-1 text-[9px] text-white outline-none focus:border-primary-fixed-dim"
+                      />
+                      <button
+                        type="submit"
+                        className="px-2 py-1 rounded bg-primary-fixed-dim text-black font-bold text-[8px] font-mono-data uppercase"
+                      >
+                        SEND
+                      </button>
+                    </form>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between mt-1 pt-1 border-t border-white/5">
                   <div className="flex items-center gap-1.5">

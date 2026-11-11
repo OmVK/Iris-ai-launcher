@@ -1,4 +1,4 @@
-export function routeAppClick(app, { onNavigate, launchApp, onTriggerChronoLock, lockedApps = [], isVaultUnlocked = false }) {
+export function routeAppClick(app, { onNavigate, launchApp, onTriggerChronoLock, lockedApps = [], isVaultUnlocked = false }, rect = null) {
   if (!app) return false
   if (app.path) {
     onNavigate(app.path)
@@ -7,7 +7,7 @@ export function routeAppClick(app, { onNavigate, launchApp, onTriggerChronoLock,
     if (isLocked && !isVaultUnlocked && onTriggerChronoLock) {
       onTriggerChronoLock(app)
     } else {
-      launchApp(app.packageId, app.label)
+      launchApp(app.packageId, app.label, rect || app._clickRect || null)
     }
   }
   return true

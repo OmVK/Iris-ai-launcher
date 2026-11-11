@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { getLS, getLSNum, getLSBool } from '../utils/storage'
-import { getSystemWallpaper, isNative } from '../components/LauncherPlugin'
+import { getSystemWallpaper, saveCustomWallpaperNative, isNative } from '../components/LauncherPlugin'
 
-const shouldSyncWallpaper = (getLS('wallpaper', 'SYSTEM') === 'VOID' || getLS('wallpaper', 'SYSTEM') === 'SYSTEM') && !localStorage.getItem('custom_wallpaper')
+const currentWpMode = getLS('wallpaper', 'SYSTEM')
+const existingCustomWp = getLS('custom_wallpaper', '')
+const shouldSyncWallpaper = (currentWpMode === 'VOID' || currentWpMode === 'SYSTEM') && (!existingCustomWp || existingCustomWp.startsWith('data:image/'))
 
 export const useThemeStore = create((set, get) => ({
   themeColor: getLS('theme_color', 'cyan'),
@@ -141,4 +143,11 @@ export const useThemeStore = create((set, get) => ({
 if (shouldSyncWallpaper) {
   const { syncSystemWallpaper } = useThemeStore.getState()
   syncSystemWallpaper()
+} else if (isNative && existingCustomWp.startsWith('data:image/')) {
+  saveCustomWallpaperNative(existingCustomWp).then((url) => {
+    if (url) {
+      try { localStorage.setItem('custom_wallpaper', url) } catch {}
+      useThemeStore.setState({ hasCustomWallpaper: true })
+    }
+  }).catch(() => {})
 }

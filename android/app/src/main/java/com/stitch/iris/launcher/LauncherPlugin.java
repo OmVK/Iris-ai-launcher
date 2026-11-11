@@ -350,6 +350,18 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
+    public static void onHomeIntentReceived() {
+        if (instance != null) {
+            try {
+                JSObject data = new JSObject();
+                data.put("timestamp", System.currentTimeMillis());
+                instance.notifyListeners("onHomePressed", data);
+            } catch (Exception e) {
+                android.util.Log.e("IrisLauncher", "Error notifying home intent", e);
+            }
+        }
+    }
+
     private static long vaultAuthTimestamp = 0;
     private static String currentVaultToken = null;
     private static int failedVaultAttempts = 0;
@@ -617,7 +629,25 @@ public class LauncherPlugin extends Plugin {
             PackageManager pm = getContext().getPackageManager();
             Intent intent = pm.getLaunchIntentForPackage(packageId);
             if (intent != null) {
-                // Launch using the foreground Activity context to ensure compatibility
+                int x = call.getInt("x", -1);
+                int y = call.getInt("y", -1);
+                int width = call.getInt("width", 0);
+                int height = call.getInt("height", 0);
+
+                if (width > 0 && height > 0 && getBridge() != null && getBridge().getWebView() != null) {
+                    try {
+                        android.view.View webView = getBridge().getWebView();
+                        float density = getContext().getResources().getDisplayMetrics().density;
+                        int px = Math.max(0, Math.round(x * density));
+                        int py = Math.max(0, Math.round(y * density));
+                        int pw = Math.max(1, Math.round(width * density));
+                        int ph = Math.max(1, Math.round(height * density));
+                        android.app.ActivityOptions opts = android.app.ActivityOptions.makeScaleUpAnimation(webView, px, py, pw, ph);
+                        getActivity().startActivity(intent, opts.toBundle());
+                        call.resolve();
+                        return;
+                    } catch (Exception ignored) {}
+                }
                 getActivity().startActivity(intent);
                 call.resolve();
             } else {
@@ -1884,6 +1914,118 @@ public class LauncherPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void replyToNotification(PluginCall call) {
+        String key = call.getString("key", "");
+        String text = call.getString("text", "");
+        if (key.isEmpty() || text.trim().isEmpty()) {
+            call.reject("Missing key or text");
+            return;
+        }
+        boolean sent = IrisNotificationListenerService.sendInlineReply(getContext(), key, text);
+        JSObject ret = new JSObject();
+        ret.put("success", sent);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void performAccessibilityAction(PluginCall call) {
+        String action = call.getString("action", "lock_screen");
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        JSObject ret = new JSObject();
+        if (service == null) {
+            ret.put("success", false);
+            ret.put("needsPermission", true);
+            call.resolve(ret);
+            return;
+        }
+        boolean ok = false;
+        try {
+            switch (action) {
+                case "lock_screen":
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN);
+                    }
+                    break;
+                case "screenshot":
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT);
+                    }
+                    break;
+                case "recents":
+                    ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS);
+                    break;
+                case "split_screen":
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN);
+                    }
+                    break;
+                case "notifications":
+                    ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS);
+                    break;
+                case "quick_settings":
+                    ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS);
+                    break;
+                case "power_dialog":
+                    ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_POWER_DIALOG);
+                    break;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error performing accessibility action: " + action, e);
+        }
+        ret.put("success", ok);
+        ret.put("needsPermission", false);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void executeShellCommand(PluginCall call) {
+        String command = call.getString("command", "").trim();
+        if (command.isEmpty()) {
+            call.reject("Empty shell command");
+            return;
+        }
+        new Thread(() -> {
+            JSObject ret = new JSObject();
+            long startMs = System.currentTimeMillis();
+            try {
+                Process process = new ProcessBuilder("sh", "-c", command)
+                        .redirectErrorStream(true)
+                        .start();
+                java.io.InputStream is = process.getInputStream();
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                byte[] chunk = new byte[4096];
+                int nRead;
+                int maxBytes = 32768;
+                while ((nRead = is.read(chunk, 0, chunk.length)) != -1) {
+                    if (buffer.size() < maxBytes) {
+                        buffer.write(chunk, 0, Math.min(nRead, maxBytes - buffer.size()));
+                    } else {
+                        break;
+                    }
+                }
+                boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+                if (!finished) {
+                    process.destroyForcibly();
+                }
+                int exitCode = finished ? process.exitValue() : -1;
+                String output = buffer.toString("UTF-8");
+                if (!finished) {
+                    output += "\n[Timed out after 5s]";
+                }
+                ret.put("output", output);
+                ret.put("exitCode", exitCode);
+                ret.put("durationMs", System.currentTimeMillis() - startMs);
+                call.resolve(ret);
+            } catch (Exception e) {
+                ret.put("output", "Error: " + e.getMessage());
+                ret.put("exitCode", -1);
+                ret.put("durationMs", System.currentTimeMillis() - startMs);
+                call.resolve(ret);
+            }
+        }).start();
+    }
+
+    @PluginMethod
     public void expandNotificationPanel(PluginCall call) {
         try {
             Object statusBarService = getContext().getSystemService("statusbar");
@@ -2969,6 +3111,69 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
+    private static volatile byte[] cachedWallpaperBytes = null;
+
+    public static byte[] getWallpaperBytes(Context ctx) {
+        if (cachedWallpaperBytes != null && cachedWallpaperBytes.length > 0) {
+            return cachedWallpaperBytes;
+        }
+        if (ctx == null) return null;
+        try {
+            java.io.File wpFile = new java.io.File(ctx.getFilesDir(), "iris_wallpaper.jpg");
+            if (wpFile.exists() && wpFile.length() > 0) {
+                java.io.FileInputStream fis = new java.io.FileInputStream(wpFile);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream((int) wpFile.length());
+                byte[] buf = new byte[8192];
+                int r;
+                while ((r = fis.read(buf)) != -1) baos.write(buf, 0, r);
+                fis.close();
+                cachedWallpaperBytes = baos.toByteArray();
+                return cachedWallpaperBytes;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private static void saveWallpaperBytesToDisk(Context ctx, byte[] jpegBytes) {
+        if (ctx == null || jpegBytes == null || jpegBytes.length == 0) return;
+        cachedWallpaperBytes = jpegBytes;
+        try {
+            java.io.File wpFile = new java.io.File(ctx.getFilesDir(), "iris_wallpaper.jpg");
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(wpFile);
+            fos.write(jpegBytes);
+            fos.close();
+        } catch (Exception ignored) {}
+    }
+
+    @PluginMethod
+    public void saveCustomWallpaperNative(PluginCall call) {
+        String dataUri = call.getString("dataUri", "");
+        if (dataUri.isEmpty()) {
+            call.reject("Missing dataUri");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                String cleanBase64 = dataUri.contains(",") ? dataUri.substring(dataUri.indexOf(",") + 1) : dataUri;
+                byte[] rawBytes = Base64.decode(cleanBase64, Base64.DEFAULT);
+                Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.length);
+                byte[] outBytes = rawBytes;
+                if (bmp != null) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    bmp.compress(Bitmap.CompressFormat.JPEG, 85, baos);
+                    bmp.recycle();
+                    outBytes = baos.toByteArray();
+                }
+                saveWallpaperBytesToDisk(getContext(), outBytes);
+                JSObject ret = new JSObject();
+                ret.put("url", "https://localhost/__iris_wallpaper__?t=" + System.currentTimeMillis());
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Failed to save custom wallpaper: " + e.getMessage());
+            }
+        }).start();
+    }
+
     @PluginMethod
     public void getSystemWallpaper(PluginCall call) {
         try {
@@ -2998,12 +3203,13 @@ public class LauncherPlugin extends Plugin {
             wallpaperDrawable.setBounds(0, 0, width, height);
             wallpaperDrawable.draw(canvas);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 82, baos);
             bitmap.recycle();
-            String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
-            String dataUri = "data:image/jpeg;base64," + base64;
+            byte[] jpegBytes = baos.toByteArray();
+            saveWallpaperBytesToDisk(getContext(), jpegBytes);
+            String streamUrl = "https://localhost/__iris_wallpaper__?t=" + System.currentTimeMillis();
             JSObject result = new JSObject();
-            result.put("wallpaper", dataUri);
+            result.put("wallpaper", streamUrl);
             result.put("width", width);
             result.put("height", height);
             call.resolve(result);

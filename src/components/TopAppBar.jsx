@@ -437,9 +437,25 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
                 </div>
 
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <span className="text-[10.5px] font-bold text-white/95 truncate leading-tight">
-                    {activeNotification.title}
-                  </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10.5px] font-bold text-white/95 truncate leading-tight">
+                      {activeNotification.title}
+                    </span>
+                    {activeNotification.otpCode && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          HapticFeedback.light()
+                          navigator.clipboard?.writeText?.(activeNotification.otpCode)
+                          dismissActive()
+                        }}
+                        className="px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400 text-emerald-300 text-[8.5px] font-mono-data font-bold tracking-wider shrink-0 shadow-[0_0_10px_rgba(16,185,129,0.35)] active:scale-95"
+                      >
+                        COPY OTP: {activeNotification.otpCode}
+                      </button>
+                    )}
+                  </div>
                   <p className="text-[10px] text-white/80 line-clamp-2 font-sans mt-0.5 leading-snug">
                     {activeNotification.text}
                   </p>

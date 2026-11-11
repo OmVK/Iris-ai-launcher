@@ -5,6 +5,7 @@ import {
   getRingerMode,
   cycleRingerMode,
   openSystemSettings,
+  performAccessibilityAction,
 } from './LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
 
@@ -101,6 +102,15 @@ export default function CondensedTelemetry({
     openSystemSettings(setting)
   }, [])
 
+  const handleGlobalAction = useCallback(async (e, action) => {
+    e.stopPropagation()
+    HapticFeedback.light()
+    const res = await performAccessibilityAction(action)
+    if (res?.needsPermission) {
+      openSystemSettings('accessibility')
+    }
+  }, [])
+
   return (
     <div className="flex-1 flex flex-col justify-between h-full select-none">
       <div className="flex-1 grid grid-cols-3 gap-2">
@@ -190,20 +200,20 @@ export default function CondensedTelemetry({
 
         <button
           type="button"
-          onClick={(e) => handleOpenSetting(e, 'wifi')}
+          onClick={(e) => handleGlobalAction(e, 'screenshot')}
           className="py-1.5 px-1 rounded-lg flex flex-col items-center justify-center gap-0.5 border bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition-all"
         >
-          <span className="material-symbols-outlined text-[13px]">wifi</span>
-          <span className="font-mono-data text-[7px] font-bold tracking-wider">WI-FI</span>
+          <span className="material-symbols-outlined text-[13px]">screenshot_region</span>
+          <span className="font-mono-data text-[7px] font-bold tracking-wider">SHOT</span>
         </button>
 
         <button
           type="button"
-          onClick={(e) => handleOpenSetting(e, 'bluetooth')}
+          onClick={(e) => handleGlobalAction(e, 'lock_screen')}
           className="py-1.5 px-1 rounded-lg flex flex-col items-center justify-center gap-0.5 border bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition-all"
         >
-          <span className="material-symbols-outlined text-[13px]">bluetooth</span>
-          <span className="font-mono-data text-[7px] font-bold tracking-wider">BT</span>
+          <span className="material-symbols-outlined text-[13px]">lock</span>
+          <span className="font-mono-data text-[7px] font-bold tracking-wider">LOCK</span>
         </button>
       </div>
 

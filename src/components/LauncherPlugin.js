@@ -88,12 +88,28 @@ export async function getInstalledApps() {
   }
 }
 
-export async function launchApp(packageId, label = null) {
+export async function launchApp(packageId, label = null, rect = null) {
   const displayLabel = label || packageId
 
   if (isNative) {
     try {
-      await NativeLauncher.launchApp({ packageId })
+      let launchRect = rect
+      if (!launchRect && typeof window !== 'undefined' && window.event) {
+        const targetEl = window.event.currentTarget?.getBoundingClientRect
+          ? window.event.currentTarget
+          : window.event.target?.closest?.('.app-icon-item, button')
+        if (targetEl?.getBoundingClientRect) {
+          launchRect = targetEl.getBoundingClientRect()
+        }
+      }
+      const payload = { packageId }
+      if (launchRect && launchRect.width > 0 && launchRect.height > 0) {
+        payload.x = Math.round(launchRect.left ?? launchRect.x ?? 0)
+        payload.y = Math.round(launchRect.top ?? launchRect.y ?? 0)
+        payload.width = Math.round(launchRect.width)
+        payload.height = Math.round(launchRect.height)
+      }
+      await NativeLauncher.launchApp(payload)
       logNotification('APP_LAUNCH', `Successfully booted: ${displayLabel}`, 'success')
       return true
     } catch (e) {
@@ -1216,5 +1232,61 @@ export async function getDeviceSecurityPosture() {
   } catch (e) {
     console.warn('getDeviceSecurityPosture failed:', e)
     return null
+  }
+}
+
+export async function replyToNotification(key, text) {
+  if (!isNative || !key || !text) return { success: false }
+  try {
+    return await NativeLauncher.replyToNotification({ key, text })
+  } catch (e) {
+    console.warn('replyToNotification failed:', e)
+    return { success: false }
+  }
+}
+
+export async function performAccessibilityAction(action = 'lock_screen') {
+  if (!isNative) return { success: true, simulated: true }
+  try {
+    return await NativeLauncher.performAccessibilityAction({ action })
+  } catch (e) {
+    console.warn('performAccessibilityAction failed:', e)
+    return { success: false, needsPermission: true }
+  }
+}
+
+export async function executeShellCommand(command) {
+  if (!command || !command.trim()) return { output: '', exitCode: 0, durationMs: 0 }
+  if (!isNative) {
+    return {
+      output: `[Web Simulation] $ ${command}\nLinux iris-cyber-node 6.1.75-android14 #1 SMP PREEMPT\nuid=10294(u0_a294) gid=10294(u0_a294) groups=3003(inet)`,
+      exitCode: 0,
+      durationMs: 12
+    }
+  }
+  try {
+    return await NativeLauncher.executeShellCommand({ command })
+  } catch (e) {
+    return { output: `Error: ${e.message || 'Shell execution failed'}`, exitCode: -1, durationMs: 0 }
+  }
+}
+
+export async function saveCustomWallpaperNative(dataUri) {
+  if (!isNative || !dataUri) return null
+  try {
+    const res = await NativeLauncher.saveCustomWallpaperNative({ dataUri })
+    return res?.url || null
+  } catch (e) {
+    console.warn('saveCustomWallpaperNative failed:', e)
+    return null
+  }
+}
+
+export function addHomePressedListener(callback) {
+  if (!isNative) return { remove: () => {} }
+  try {
+    return NativeLauncher.addListener('onHomePressed', callback)
+  } catch {
+    return { remove: () => {} }
   }
 }

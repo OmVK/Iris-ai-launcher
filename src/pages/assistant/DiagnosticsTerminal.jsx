@@ -2,15 +2,26 @@ import { useState, useEffect } from 'react'
 import { useAIStore } from '../../stores/aiStore'
 import { SecureStorage } from '../../utils/secureStorage'
 import { GenAI } from '../../components/GenAIPlugin'
+import { executeShellCommand } from '../../components/LauncherPlugin'
 import { checkAllBackends, getBackendStatus } from '../../utils/AIProviderManager'
 
 const BACKEND_NAMES = { ONDEVICE: 'Gemini Nano', GEMINI: 'Google Gemini', GROQ: 'Groq LPU', NVIDIA: 'NVIDIA NIM', OLLAMA: 'Ollama Local' }
+const QUICK_SHELL_CMDS = [
+  { label: 'CPU TOP', cmd: 'top -n 1 | head -n 18' },
+  { label: 'BATTERY', cmd: 'dumpsys battery' },
+  { label: 'STORAGE', cmd: 'df -h' },
+  { label: 'NET IP', cmd: 'ip -4 addr show' },
+  { label: 'PING DNS', cmd: 'ping -c 3 8.8.8.8' },
+  { label: 'SYS PROP', cmd: 'getprop | grep -E "ro.product.model|ro.build.version.release|ro.hardware"' },
+]
 
 export default function DiagnosticsTerminal({ onClose }) {
   const [diagRunning, setDiagRunning] = useState(false)
   const [diagLogs, setDiagLogs] = useState([])
   const [diagMetrics, setDiagMetrics] = useState({ ttft: 0, speed: 0, status: 'AWAITING_TRIGGER' })
   const [backendHealth, setBackendHealth] = useState(null)
+  const [shellInput, setShellInput] = useState('')
+  const [shellRunning, setShellRunning] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -96,6 +107,22 @@ export default function DiagnosticsTerminal({ onClose }) {
     setDiagRunning(false)
   }
 
+  const runShellCmd = async (cmdToRun) => {
+    const cmd = (cmdToRun ?? shellInput).trim()
+    if (!cmd || shellRunning) return
+    setShellRunning(true)
+    setShellInput('')
+    setDiagLogs(prev => [...prev, `\n$ ${cmd}`])
+    const res = await executeShellCommand(cmd)
+    const outLines = (res?.output || '(no output)').split('\n').slice(0, 60)
+    setDiagLogs(prev => [
+      ...prev,
+      ...outLines,
+      `[METRIC] Exit=${res?.exitCode ?? 0} | Duration=${res?.durationMs ?? 0}ms`
+    ])
+    setShellRunning(false)
+  }
+
   return (
     <div className="pb-3 shrink-0 animate-in slide-in-from-top duration-300">
       <div className="glass-surface border border-[#00f2ff]/40 rounded-xl p-4 font-mono-data text-[10px] space-y-3 shadow-[0_0_20px_rgba(0,242,255,0.15)] bg-[#020617]/95 relative overflow-hidden">
@@ -124,14 +151,51 @@ export default function DiagnosticsTerminal({ onClose }) {
             ))}
           </div>
         )}
-        <div className="bg-black/50 border border-white/5 rounded p-2.5 h-28 overflow-y-auto scroll-container font-mono text-[8px] text-[#dfe2ef]/80 space-y-1">
+        <div className="bg-black/50 border border-white/5 rounded p-2.5 h-32 overflow-y-auto scroll-container font-mono text-[8px] text-[#dfe2ef]/80 space-y-1 whitespace-pre-wrap">
+          {diagLogs.length === 0 && !diagRunning && (
+            <div className="text-white/30">Ready. Run health diagnostics or execute a native Android Linux shell command below.</div>
+          )}
           {diagLogs.map((log, i) => (
-            <div key={i} className={log.includes('[ERROR]') ? 'text-error font-bold' : log.includes('[METRIC]') ? 'text-[#00f2ff] font-bold' : log.includes('[SYSTEM_CHECK]') ? 'text-green-400 font-bold' : ''}>{log}</div>
+            <div key={i} className={log.includes('[ERROR]') ? 'text-error font-bold' : log.includes('[METRIC]') || log.startsWith('\n$ ') ? 'text-[#00f2ff] font-bold' : log.includes('[SYSTEM_CHECK]') ? 'text-green-400 font-bold' : ''}>{log}</div>
           ))}
-          {diagRunning && <div className="text-[#00f2ff] animate-pulse">&gt; GENERATING TELEMETRY SAMPLES...</div>}
+          {(diagRunning || shellRunning) && <div className="text-[#00f2ff] animate-pulse">&gt; EXECUTING...</div>}
         </div>
+        <div className="flex flex-wrap gap-1 pt-0.5">
+          {QUICK_SHELL_CMDS.map((q) => (
+            <button
+              key={q.label}
+              type="button"
+              onClick={() => runShellCmd(q.cmd)}
+              disabled={shellRunning}
+              className="px-2 py-0.5 rounded bg-white/5 hover:bg-[#00f2ff]/15 border border-white/10 hover:border-[#00f2ff]/40 text-[7.5px] text-white/75 hover:text-[#00f2ff] font-bold transition-colors"
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
+        <form
+          onSubmit={(e) => { e.preventDefault(); runShellCmd() }}
+          className="flex items-center gap-1.5"
+        >
+          <span className="text-[#00f2ff] font-bold text-[10px]">$</span>
+          <input
+            type="text"
+            value={shellInput}
+            onChange={(e) => setShellInput(e.target.value)}
+            placeholder="sh -c (e.g. dumpsys battery, ps -A, df -h, ping -c 2 1.1.1.1)..."
+            className="flex-1 bg-black/60 border border-white/15 rounded px-2.5 py-1 text-[9px] text-white outline-none focus:border-[#00f2ff]"
+          />
+          <button
+            type="submit"
+            disabled={shellRunning || !shellInput.trim()}
+            className="px-2.5 py-1 rounded bg-[#00f2ff]/20 border border-[#00f2ff]/40 text-[#00f2ff] font-bold text-[8.5px] uppercase disabled:opacity-40"
+          >
+            EXEC
+          </button>
+        </form>
         <div className="flex gap-2">
           <button onClick={runSelfDiagnostics} disabled={diagRunning} className="flex-grow py-1.5 bg-[#00f2ff]/10 border border-[#00f2ff]/30 text-[#00f2ff] font-bold rounded hover:bg-[#00f2ff]/20 active:scale-[0.98] transition-all">RE-RUN HEALTH DIAGNOSTIC</button>
+          <button onClick={() => setDiagLogs([])} className="px-2.5 py-1.5 bg-white/5 border border-white/10 text-white/60 hover:text-white rounded text-[9px] font-bold">CLEAR</button>
           <button onClick={onClose} className="px-3.5 py-1.5 bg-[#00f2ff]/5 border border-[#00f2ff]/15 text-[#00f2ff]/60 hover:text-[#00f2ff] rounded text-[9px] font-bold">CLOSE</button>
         </div>
       </div>

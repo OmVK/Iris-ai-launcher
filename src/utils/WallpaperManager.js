@@ -1,3 +1,5 @@
+import { saveCustomWallpaperNative, isNative } from '../components/LauncherPlugin'
+
 const WALLPAPER_KEY = 'wallpaper'
 const CUSTOM_WALLPAPER_KEY = 'custom_wallpaper'
 const WALLPAPER_BLUR_KEY = 'wallpaper_blur'
@@ -41,6 +43,13 @@ function setCustomWallpaper(dataUrl) {
   try {
     if (dataUrl && dataUrl.length > 5000000) return false
     if (dataUrl) {
+      if (isNative && typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
+        saveCustomWallpaperNative(dataUrl).then((streamUrl) => {
+          if (streamUrl) {
+            try { localStorage.setItem(CUSTOM_WALLPAPER_KEY, streamUrl) } catch {}
+          }
+        }).catch(() => {})
+      }
       localStorage.setItem(CUSTOM_WALLPAPER_KEY, dataUrl)
     } else {
       localStorage.removeItem(CUSTOM_WALLPAPER_KEY)

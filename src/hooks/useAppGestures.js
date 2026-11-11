@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react'
-import { expandNotificationPanel } from '../components/LauncherPlugin'
+import { expandNotificationPanel, performAccessibilityAction, openSystemSettings, logNotification } from '../components/LauncherPlugin'
 import HapticFeedback from '../utils/HapticFeedback'
 import { useAppStore } from '../stores/appStore'
 import { useThemeStore } from '../stores/themeStore'
@@ -60,6 +60,9 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
   const currentPinchDistRef = useRef(0)
   const rafRef = useRef(null)
   const swipeUpActiveRef = useRef(false)
+  const lastSampleYRef = useRef(null)
+  const lastSampleTimeRef = useRef(0)
+  const releaseVelocityYRef = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -91,11 +94,42 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       case 'open_folder': break
       case 'notifications': expandNotificationPanel(); break
       case 'open_search': setShowArcSearch(true); break
-      case 'recents': setActivePage('recents'); break
+      case 'recents':
+        performAccessibilityAction('recents').then((res) => {
+          if (res?.needsPermission) {
+            logNotification('ACCESSIBILITY', 'Enable IRIS Accessibility Service for Recents gesture', 'warning')
+            openSystemSettings('accessibility')
+          }
+        })
+        break
       case 'launch_app': if (actionData && launchApp) launchApp(actionData); break
-      case 'quick_settings': setActivePage('settings'); break
-      case 'screen_lock': break
-      case 'last_app': break
+      case 'quick_settings':
+        performAccessibilityAction('quick_settings').then((res) => {
+          if (!res?.success) setActivePage('settings')
+        })
+        break
+      case 'screen_lock':
+        performAccessibilityAction('lock_screen').then((res) => {
+          if (res?.needsPermission) {
+            logNotification('ACCESSIBILITY', 'Enable IRIS Accessibility Service for Instant Screen Lock', 'warning')
+            openSystemSettings('accessibility')
+          }
+        })
+        break
+      case 'screenshot':
+        performAccessibilityAction('screenshot').then((res) => {
+          if (res?.needsPermission) {
+            logNotification('ACCESSIBILITY', 'Enable IRIS Accessibility Service for Screenshot gesture', 'warning')
+            openSystemSettings('accessibility')
+          }
+        })
+        break
+      case 'split_screen':
+        performAccessibilityAction('split_screen')
+        break
+      case 'last_app':
+        performAccessibilityAction('recents')
+        break
       default: break
     }
   }, [setActivePage, setShowArcSearch, launchApp])
@@ -141,6 +175,9 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
     touchStartTime.current = Date.now()
+    lastSampleYRef.current = e.touches[0].clientY
+    lastSampleTimeRef.current = performance.now()
+    releaseVelocityYRef.current = 0
 
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX
@@ -184,6 +221,14 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
 
     touchEndX.current = e.touches[0].clientX
     touchEndY.current = e.touches[0].clientY
+    const nowPerf = performance.now()
+    const dtSample = nowPerf - lastSampleTimeRef.current
+    if (dtSample >= 8 && lastSampleYRef.current !== null) {
+      const instVel = Math.abs(touchEndY.current - lastSampleYRef.current) / dtSample
+      releaseVelocityYRef.current = releaseVelocityYRef.current * 0.35 + instVel * 0.65
+      lastSampleYRef.current = touchEndY.current
+      lastSampleTimeRef.current = nowPerf
+    }
 
     if (touchStartX.current !== null && touchStartY.current !== null) {
       const dx = Math.abs(touchEndX.current - touchStartX.current)
@@ -270,7 +315,8 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
         const swipeUpGesture = getGestureAction('swipe_up')
         if (swipeUpGesture?.action === 'open_drawer') {
           if (deltaY < -8 && absDeltaX < Math.abs(deltaY) * 1.5) {
-            const velocity = Math.abs(deltaY) / Math.max(1, duration)
+            const avgVelocity = Math.abs(deltaY) / Math.max(1, duration)
+            const velocity = Math.max(avgVelocity, releaseVelocityYRef.current)
             const { pageTransitionEasing, pageTransitionSpeed } = useThemeStore.getState()
             const ease = pageTransitionEasing === 'SPRING'
               ? 'cubic-bezier(0.32, 1.28, 0.42, 1)'

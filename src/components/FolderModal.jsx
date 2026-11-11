@@ -69,7 +69,7 @@ export default function FolderModal({
       onClick={onClose}
     >
       <div 
-        className="glass-surface border border-primary-fixed-dim/40 rounded-[2rem] w-full max-w-sm m-6 p-6 shadow-[0_0_40px_rgba(var(--primary-rgb),0.2)] max-h-[70vh] flex flex-col"
+        className="glass-surface border border-primary-fixed-dim/40 rounded-[2rem] w-full max-w-sm m-6 p-6 shadow-[0_0_40px_rgba(var(--primary-rgb),0.2)] max-h-[70vh] flex flex-col transition-transform duration-200 ease-[cubic-bezier(0.32,1.28,0.42,1)] scale-100"
         onClick={e => e.stopPropagation()}
         onTouchStart={e => e.stopPropagation()}
         onTouchEnd={e => e.stopPropagation()}

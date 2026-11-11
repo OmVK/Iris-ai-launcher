@@ -5,6 +5,7 @@ import { searchRAG } from '../components/RagEngine'
 import { SecureStorage } from '../utils/secureStorage'
 import { GenAI } from '../components/GenAIPlugin'
 import { getBackendPriorityChain, getSanitizedOllamaEndpoint } from '../utils/AIProviderManager'
+import { executeDeviceAgentIntent } from '../utils/aiAgentTools'
 
 const SEARCH_KEYWORDS = [
   'search', 'what is', 'who is', 'how to', 'latest', 'news', 'weather',
@@ -307,7 +308,12 @@ export default function useAIBackend(speakTextFn) {
       try { searchContext = await fetchWebSearch(query) } catch { }
     }
 
-    const systemInstruction = SYSTEM_PROMPT_TEMPLATE(ragContext, searchContext)
+    let agentToolContext = ''
+    try {
+      agentToolContext = await executeDeviceAgentIntent(prompt)
+    } catch {}
+
+    const systemInstruction = SYSTEM_PROMPT_TEMPLATE(ragContext, searchContext + agentToolContext)
 
     try {
       const { geminiKey: geminiApiKey, groqKey: groqApiKey, llmBackend: activeBackend } = useAIStore.getState()
@@ -335,6 +341,12 @@ export default function useAIBackend(speakTextFn) {
       let chain = getBackendPriorityChain().filter(hasKey)
       if (activeBackend) {
         if (!hasKey(activeBackend)) {
+          if (agentToolContext) {
+            responseText = agentToolContext.replace('\n[REAL-TIME DEVICE OS ACTIONS EXECUTED BY IRIS]:\n', '').replace('\nConfirm these completed hardware/OS actions clearly and concisely in your response.', '')
+            setChatLog(prev => prev.map(item => item.id === loadingId ? { ...item, text: responseText, loading: false } : item))
+            isGeneratingRef.current = false
+            return
+          }
           throw new Error(`Please configure your API key for ${activeBackend} in Settings.`)
         }
         if (activeBackend !== 'ONDEVICE') {

@@ -42,8 +42,21 @@ IRIS v5.6.0 delivers a major 120Hz performance and feature upgrade across the en
 - **Native 120Hz Display Mode Lock & Keep-Warm Page Caching**:
   - `MainActivity.enforceHighRefreshRate()` queries `Display.getSupportedModes()` and locks the window to the highest supported refresh rate (120Hz/90Hz) alongside `WebView.RENDERER_PRIORITY_IMPORTANT`.
   - `Home`, `Drawer`, `Widgets`, and `Assistant` stay warm in memory once visited, eliminating unmount/remount lag when switching tabs.
-- **5-Pill Notch Control Center & Real Kernel RAM Boost**:
-  - Upgraded the Dynamic Island `SYS TELEMETRY` action bar into a 5-pill Control Center: **`TORCH`**, **`RINGER`** (cycles `Normal` → `Vibrate` → `Silent`), **`BOOST`** (native `KILL_BACKGROUND_PROCESSES` + WebView cache purge + GC with real kernel `availMem` delta reporting), **`WI-FI`**, and **`BT`**.
+- **5-Pill Notch Control Center, Accessibility God-Mode & Real Kernel RAM Boost**:
+  - Upgraded the Dynamic Island `SYS TELEMETRY` action bar into a 5-pill Control Center: **`TORCH`**, **`RINGER`** (cycles `Normal` → `Vibrate` → `Silent`), **`BOOST`** (native `KILL_BACKGROUND_PROCESSES` + WebView cache purge + GC with real kernel `availMem` delta reporting), **`SHOT`** (instant screenshot via `IrisAccessibilityService`), and **`LOCK`** (instant hardware screen lock without wearing the power button).
+  - Wired gesture actions (`screen_lock`, `recents`, `screenshot`, `split_screen`) directly to Android `AccessibilityService.performGlobalAction`.
+- **Direct Inline Notification Reply (`RemoteInput`) & Live OTP Auto-Copy Pill**:
+  - Reply to WhatsApp, Telegram, Instagram, Signal, and SMS messages directly from the Dynamic Island Notification Archive (`CondensedNotifLog.jsx`) using native Android `RemoteInput` + 1-tap quick-reply chips (`👍`, `On my way`, `In a meeting, will text soon`).
+  - Automatically detects 4–8 digit verification/OTP codes in incoming notifications and renders a glowing 1-tap **`COPY OTP: 123456`** pill in both the Dynamic Island banner and archive.
+- **Native Binary Wallpaper Streaming (`https://localhost/__iris_wallpaper__`) & Frame-Time Adaptive Governor**:
+  - System and custom wallpapers are cached natively to disk (`iris_wallpaper.jpg`) and streamed via `WebViewClient.shouldInterceptRequest`, eliminating multi-megabyte Base64 strings from `localStorage`.
+  - Auto-FPS Frame Governor in `PowerSaveManager` monitors frame deltas during touch gestures and temporarily throttles heavy canvas effects on budget devices when frame time exceeds 24ms.
+- **Hardware Scale-Up App Launch Morph, Zero-Reload Home Intent & Multi-Sample Flick Physics**:
+  - Launched apps morph smoothly out of the tapped icon's exact screen coordinates via `ActivityOptions.makeScaleUpAnimation`.
+  - Pressing the Android Home button (`onNewIntent`) smoothly collapses open drawers/modals back to `'home'` with zero WebView reload, and drawer pull gestures respect Global Skin `Spring` / `Smooth` / `Crisp` easing and `Transition Speed`.
+- **AI OS Agent Tool Execution & Real Android Linux Shell Terminal**:
+  - `aiAgentTools.js` equips the IRIS AI Assistant to execute real hardware/OS actions (`toggle_flashlight`, `set_ringer_mode`, `optimize_memory`, `lock_screen`, `take_screenshot`, `get_screen_time`, `get_recent_notifications`, `launch_app`, `run_shell_command`).
+  - `DiagnosticsTerminal.jsx` now includes an interactive `sh -c` Android Linux Shell executor with quick-command chips (`CPU TOP`, `BATTERY`, `STORAGE`, `NET IP`, `PING DNS`, `SYS PROP`).
 - **Digital Wellbeing & Screen Time Widget (`ScreenTimeWidget.jsx`)**:
   - Added an 11th built-in widget powered by Android `UsageStatsManager` (`PACKAGE_USAGE_STATS`), displaying total daily screen time and top 4 most-used apps with usage bars and 1-tap permission grant.
 - **ArcSearch Deep Shortcuts & Silent Notification Archive Mode**:

@@ -16,8 +16,8 @@ export default function AppContextMenu({ activeContextMenu, onRemoveFromHome, on
 
       {/* Context Menu */}
       <div
-        style={{ position: 'fixed', left: `${x}px`, top: `${y}px` }}
-        className="bg-[#020617]/95 border border-primary-fixed-dim/40 rounded-xl p-1.5 z-50 shadow-[0_0_25px_rgba(var(--primary-rgb),0.35)] w-44 font-mono-data text-[10px] animate-in fade-in zoom-in-95 duration-100"
+        style={{ position: 'fixed', left: `${x}px`, top: `${y}px`, transition: 'transform 180ms cubic-bezier(0.32, 1.28, 0.42, 1), opacity 140ms ease-out' }}
+        className="bg-[#020617]/95 border border-primary-fixed-dim/40 rounded-xl p-1.5 z-50 shadow-[0_0_25px_rgba(var(--primary-rgb),0.35)] w-44 font-mono-data text-[10px] animate-in fade-in zoom-in-95 duration-150"
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}

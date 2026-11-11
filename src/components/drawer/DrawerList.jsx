@@ -4,17 +4,18 @@ import DrawerIcon from './DrawerIcon'
 function DrawerList({ filteredApps, drawerIconSize, drawerTextSize, globalIconTheme, onContextMenu, onAppClick, iconShape = 'system' }) {
   return (
     <div className="max-w-xl mx-auto mt-6 flex flex-col gap-2 bg-transparent rounded-xl border border-outline-variant/15 p-2 font-mono-data">
-      {filteredApps.map((app) => {
+      {filteredApps.map((app, index) => {
         const iconSize = 40 * (drawerIconSize / 100)
         return (
           <div
             key={app.packageId}
             onContextMenu={(e) => onContextMenu(e, app)}
             onClick={(e) => onAppClick(e, app)}
+            style={index >= 25 ? { contentVisibility: 'auto', containIntrinsicSize: '0 64px' } : undefined}
             className="drawer-app-item app-icon-item flex items-center justify-between p-3 rounded-lg border transition-colors cursor-pointer border-transparent hover:border-primary-fixed-dim/20 hover:bg-primary-fixed-dim/5"
           >
             <div className="flex items-center gap-3">
-              <DrawerIcon app={app} size={iconSize} iconTheme={globalIconTheme} iconShape={iconShape} />
+              <DrawerIcon app={app} size={iconSize} iconTheme={globalIconTheme} iconShape={iconShape} lazy={index >= 25} />
               <div className="flex flex-col">
                 <span
                   className="font-bold text-white"

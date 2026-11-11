@@ -212,6 +212,40 @@ class PowerSaveManager {
     }
   }
 
+  startFrameGovernor() {
+    if (this._governorActive || typeof window === 'undefined') return
+    this._governorActive = true
+    this._slowFrameStreak = 0
+    this._throttledUntil = 0
+
+    const sampleBurst = () => {
+      if (document.hidden) return
+      let framesLeft = 10
+      let lastTs = performance.now()
+      const step = (now) => {
+        const dt = now - lastTs
+        lastTs = now
+        if (dt > 24 && dt < 250) {
+          this._slowFrameStreak++
+          if (this._slowFrameStreak >= 3) {
+            this._throttledUntil = Date.now() + 6000
+            document.body?.classList?.add('power-save-mode')
+          }
+        } else {
+          this._slowFrameStreak = Math.max(0, this._slowFrameStreak - 1)
+          if (this._throttledUntil > 0 && Date.now() > this._throttledUntil && !this.isEnabled()) {
+            this._throttledUntil = 0
+            document.body?.classList?.remove('power-save-mode')
+          }
+        }
+        if (--framesLeft > 0) requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+    }
+
+    window.addEventListener('touchstart', sampleBurst, { passive: true })
+  }
+
 }
 
 const instance = new PowerSaveManager()
