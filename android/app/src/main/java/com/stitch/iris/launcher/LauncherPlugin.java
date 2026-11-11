@@ -2026,6 +2026,102 @@ public class LauncherPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getScreenContext(PluginCall call) {
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        JSObject ret = new JSObject();
+        if (service == null) {
+            ret.put("success", false);
+            ret.put("needsPermission", true);
+            call.resolve(ret);
+            return;
+        }
+
+        IrisFloatingCopilot.ScreenContextData data = service.getCurrentScreenData();
+        if (data == null) {
+            ret.put("success", false);
+            ret.put("error", "No active window found");
+            call.resolve(ret);
+            return;
+        }
+
+        ret.put("success", true);
+        ret.put("packageName", data.packageName);
+        ret.put("appName", data.appName);
+        ret.put("currentDraft", data.currentDraft);
+        ret.put("hasInput", data.hasInput);
+
+        com.getcapacitor.JSArray textArr = new com.getcapacitor.JSArray();
+        for (String t : data.texts) {
+            textArr.put(t);
+        }
+        ret.put("texts", textArr);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void injectTextToActiveInput(PluginCall call) {
+        String text = call.getString("text", "");
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        JSObject ret = new JSObject();
+        if (service == null) {
+            ret.put("success", false);
+            ret.put("needsPermission", true);
+            call.resolve(ret);
+            return;
+        }
+
+        boolean injected = service.injectTextToInput(text);
+        ret.put("success", true);
+        ret.put("injected", injected);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void toggleFloatingCopilot(PluginCall call) {
+        boolean enable = call.getBoolean("enable", true);
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        JSObject ret = new JSObject();
+        if (service != null) {
+            service.setCopilotEnabled(enable);
+            ret.put("enabled", enable);
+        } else {
+            // Persist preference directly
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences("iris_copilot_prefs", android.content.Context.MODE_PRIVATE);
+            prefs.edit().putBoolean("copilot_enabled", enable).apply();
+            ret.put("enabled", enable);
+            ret.put("needsAccessibility", true);
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void isFloatingCopilotEnabled(PluginCall call) {
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        JSObject ret = new JSObject();
+        if (service != null) {
+            ret.put("enabled", service.isCopilotEnabled());
+            ret.put("serviceRunning", true);
+        } else {
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences("iris_copilot_prefs", android.content.Context.MODE_PRIVATE);
+            ret.put("enabled", prefs.getBoolean("copilot_enabled", true));
+            ret.put("serviceRunning", false);
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void syncAIConfig(PluginCall call) {
+        String backend = call.getString("backend", "GEMINI");
+        String apiKey = call.getString("apiKey", "");
+        String model = call.getString("model", "gemini-2.5-flash");
+
+        IrisFloatingCopilot.syncConfig(getContext(), backend, apiKey, model);
+        JSObject ret = new JSObject();
+        ret.put("success", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void expandNotificationPanel(PluginCall call) {
         try {
             Object statusBarService = getContext().getSystemService("statusbar");

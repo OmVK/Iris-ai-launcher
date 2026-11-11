@@ -1290,3 +1290,48 @@ export function addHomePressedListener(callback) {
     return { remove: () => {} }
   }
 }
+
+export async function getScreenContext() {
+  if (!isNative) return { success: false, error: 'Web environment' }
+  try {
+    return await NativeLauncher.getScreenContext()
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function injectTextToActiveInput(text) {
+  if (!isNative || !text) return { success: false }
+  try {
+    return await NativeLauncher.injectTextToActiveInput({ text })
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function toggleFloatingCopilot(enable) {
+  if (!isNative) return { enabled: enable }
+  try {
+    return await NativeLauncher.toggleFloatingCopilot({ enable })
+  } catch (e) {
+    return { enabled: enable, error: e.message }
+  }
+}
+
+export async function isFloatingCopilotEnabled() {
+  if (!isNative) return { enabled: true, serviceRunning: false }
+  try {
+    return await NativeLauncher.isFloatingCopilotEnabled()
+  } catch (e) {
+    return { enabled: true, serviceRunning: false }
+  }
+}
+
+export async function syncAIConfig(backend, apiKey, model) {
+  if (!isNative) return { success: true }
+  try {
+    return await NativeLauncher.syncAIConfig({ backend, apiKey, model })
+  } catch (e) {
+    return { success: false }
+  }
+}

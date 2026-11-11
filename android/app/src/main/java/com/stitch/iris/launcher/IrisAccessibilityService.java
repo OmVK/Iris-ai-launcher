@@ -20,12 +20,16 @@ public class IrisAccessibilityService extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.isPassword()) return;
-        // Track window content changes for recents task switching
+        // Track window content changes for recents task switching & floating copilot
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             try {
                 CharSequence pkg = event.getPackageName();
                 if (pkg != null && !pkg.toString().equals(getPackageName())) {
                     broadcastWindowChanged(pkg.toString());
+                    IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+                    if (copilot != null) {
+                        copilot.onPackageChanged(pkg.toString());
+                    }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error tracking window change", e);
@@ -48,20 +52,53 @@ public class IrisAccessibilityService extends AccessibilityService {
         if (info == null) {
             info = new AccessibilityServiceInfo();
         }
-        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
+        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                | AccessibilityEvent.TYPE_VIEW_FOCUSED
+                | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
+        info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                | AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
         info.notificationTimeout = 100;
         setServiceInfo(info);
+
+        try {
+            IrisFloatingCopilot.initialize(this);
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing floating copilot", e);
+        }
     }
 
     @Override
     public void onDestroy() {
+        IrisFloatingCopilot.destroy();
         instance = null;
         super.onDestroy();
     }
 
     public static IrisAccessibilityService getInstance() {
         return instance;
+    }
+
+    public IrisFloatingCopilot.ScreenContextData getCurrentScreenData() {
+        IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+        return copilot != null ? copilot.extractScreenContext() : null;
+    }
+
+    public boolean injectTextToInput(String text) {
+        IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+        return copilot != null && copilot.injectText(text);
+    }
+
+    public void setCopilotEnabled(boolean enabled) {
+        IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+        if (copilot != null) copilot.setEnabled(enabled);
+    }
+
+    public boolean isCopilotEnabled() {
+        IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+        return copilot != null && copilot.isEnabled();
     }
 
     public void performGlobalActionCompat(int action) {

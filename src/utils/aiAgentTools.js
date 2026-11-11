@@ -9,6 +9,9 @@ import {
   performAccessibilityAction,
   getScreenTimeStats,
   executeShellCommand,
+  getScreenContext,
+  injectTextToActiveInput,
+  toggleFloatingCopilot,
 } from '../components/LauncherPlugin'
 import { useAppsStore } from '../stores/appsStore'
 import { useNotificationStore } from '../stores/notificationStore'
@@ -89,6 +92,29 @@ export async function executeDeviceAgentIntent(prompt) {
           ? `Live Notification Archive (${recent.length} most recent):\n${recent.join('\n')}`
           : 'Live Notification Archive: No notifications recorded yet.'
       )
+    }
+
+    if (/\b(read\s+(my\s+|the\s+)?screen|what('s|\s+is)\s+on\s+(my\s+|the\s+)?screen|analyze\s+(the\s+|my\s+)?screen|summarize\s+(the\s+|my\s+)?screen)\b/.test(lower)) {
+      const screen = await getScreenContext()
+      if (screen?.success && Array.isArray(screen.texts) && screen.texts.length > 0) {
+        executedLogs.push(`Live Screen Context (${screen.appName || screen.packageName}):\n- Draft in input: "${screen.currentDraft || '(none)'}"\n- Visible elements: ${screen.texts.slice(0, 15).join(' | ')}`)
+      } else {
+        executedLogs.push('Screen context is currently unavailable (requires IRIS Accessibility Service enabled).')
+      }
+    }
+
+    if (/\b(enable|turn\s+on|activate|start)\s+(floating\s+)?copilot\b/.test(lower)) {
+      await toggleFloatingCopilot(true)
+      executedLogs.push('Floating Screen Copilot activated (displays edge assistant pill in other apps).')
+    } else if (/\b(disable|turn\s+off|deactivate|stop)\s+(floating\s+)?copilot\b/.test(lower)) {
+      await toggleFloatingCopilot(false)
+      executedLogs.push('Floating Screen Copilot deactivated.')
+    }
+
+    const typeMatch = prompt.match(/(?:type|insert|write)\s+["']([^"']+)["']\s+(?:in|into)\s+(?:the\s+)?(?:screen|input|app)/i)
+    if (typeMatch && typeMatch[1]) {
+      const res = await injectTextToActiveInput(typeMatch[1])
+      executedLogs.push(res?.injected ? `Inserted "${typeMatch[1]}" into active input box.` : `Copied "${typeMatch[1]}" to clipboard for pasting.`)
     }
 
     const shellMatch = prompt.match(/(?:run\s+shell|execute\s+command|sh\s+-c)\s+[`"']?([^`"'\n]+)[`"']?/i)
