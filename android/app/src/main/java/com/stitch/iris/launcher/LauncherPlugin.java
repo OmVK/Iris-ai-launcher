@@ -2113,9 +2113,11 @@ public class LauncherPlugin extends Plugin {
     public void syncAIConfig(PluginCall call) {
         String backend = call.getString("backend", "GEMINI");
         String apiKey = call.getString("apiKey", "");
+        String geminiKey = call.getString("geminiKey", "");
+        String groqKey = call.getString("groqKey", "");
         String model = call.getString("model", "gemini-2.5-flash");
 
-        IrisFloatingCopilot.syncConfig(getContext(), backend, apiKey, model);
+        IrisFloatingCopilot.syncConfig(getContext(), backend, apiKey, geminiKey, groqKey, model);
         JSObject ret = new JSObject();
         ret.put("success", true);
         call.resolve(ret);

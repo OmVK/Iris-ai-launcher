@@ -5,7 +5,7 @@ import { syncAIConfig } from '../components/LauncherPlugin'
 
 function syncToNative(backend, geminiKey, groqKey, model) {
   const key = backend === 'GROQ' ? groqKey : geminiKey
-  syncAIConfig(backend, key, model).catch(() => {})
+  syncAIConfig(backend, key, model, geminiKey, groqKey).catch(() => {})
 }
 
 export const useAIStore = create((set, get) => ({
