@@ -106,7 +106,12 @@ public class IrisFloatingCopilot {
     private LinearLayout resultsContainer;
     private LinearLayout quickActionsBar;
     private LinearLayout askLayout;
+    private LinearLayout toneBar;
     private EditText customQuestionInput;
+    private Button askSendBtn;
+    private String inputMode = "ASK";
+    private String composeTone = "AUTO";
+    private final List<TextView> toneChipViews = new ArrayList<>();
     private View loadingIndicator;
 
     private AccessibilityNodeInfo lastTargetInputNode;
@@ -454,19 +459,50 @@ public class IrisFloatingCopilot {
         quickActionsBar.setOrientation(LinearLayout.HORIZONTAL);
 
         quickActionsBar.addView(createActionPill("⚡ SMART REPLY", v -> executeAction("REPLY")));
+        quickActionsBar.addView(createActionPill("✍️ COMPOSE", v -> openInputMode("COMPOSE")));
         quickActionsBar.addView(createActionPill("📝 SUMMARIZE", v -> executeAction("SUMMARIZE")));
         quickActionsBar.addView(createActionPill("✨ REWRITE", v -> executeAction("REWRITE")));
         quickActionsBar.addView(createActionPill("🔍 EXPLAIN", v -> executeAction("EXPLAIN")));
-        quickActionsBar.addView(createActionPill("💬 ASK AI", v -> toggleAskInput()));
+        quickActionsBar.addView(createActionPill("💬 ASK AI", v -> openInputMode("ASK")));
 
         actionsScroll.addView(quickActionsBar);
         layout.addView(actionsScroll);
 
-        // Ask Input Area (Hidden by default)
+        // Ask / Compose Input Area (Hidden by default)
         askLayout = new LinearLayout(service);
-        askLayout.setOrientation(LinearLayout.HORIZONTAL);
+        askLayout.setOrientation(LinearLayout.VERTICAL);
         askLayout.setPadding(0, dpToPx(8), 0, 0);
         askLayout.setVisibility(View.GONE);
+
+        // Tone Selector Bar (Shown in COMPOSE mode)
+        toneBar = new LinearLayout(service);
+        toneBar.setOrientation(LinearLayout.HORIZONTAL);
+        toneBar.setPadding(0, 0, 0, dpToPx(6));
+        String[] tones = new String[]{"AUTO", "PRO", "CASUAL", "SHORT"};
+        toneChipViews.clear();
+        for (String t : tones) {
+            TextView chip = new TextView(service);
+            chip.setText(t);
+            chip.setTag(t);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+            chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+            chip.setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3));
+            LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            chipLp.setMargins(0, 0, dpToPx(6), 0);
+            chip.setLayoutParams(chipLp);
+            chip.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                composeTone = t;
+                refreshToneChips();
+            });
+            toneChipViews.add(chip);
+            toneBar.addView(chip);
+        }
+        refreshToneChips();
+        askLayout.addView(toneBar);
+
+        LinearLayout inputRow = new LinearLayout(service);
+        inputRow.setOrientation(LinearLayout.HORIZONTAL);
 
         customQuestionInput = new EditText(service);
         customQuestionInput.setHint("Ask about this screen...");
@@ -477,9 +513,9 @@ public class IrisFloatingCopilot {
         customQuestionInput.setPadding(dpToPx(10), dpToPx(7), dpToPx(10), dpToPx(7));
         customQuestionInput.setSingleLine(true);
         LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        askLayout.addView(customQuestionInput, editLp);
+        inputRow.addView(customQuestionInput, editLp);
 
-        Button askSendBtn = new Button(service);
+        askSendBtn = new Button(service);
         askSendBtn.setText("ASK");
         askSendBtn.setTextColor(Color.BLACK);
         askSendBtn.setBackgroundColor(Color.parseColor("#00F2FF"));
@@ -490,10 +526,15 @@ public class IrisFloatingCopilot {
             if (!q.isEmpty()) {
                 hideSoftKeyboard();
                 restoreNotFocusable();
-                executeAction("ASK:" + q);
+                if ("COMPOSE".equals(inputMode)) {
+                    executeAction("COMPOSE:" + composeTone + ":" + q);
+                } else {
+                    executeAction("ASK:" + q);
+                }
             }
         });
-        askLayout.addView(askSendBtn);
+        inputRow.addView(askSendBtn);
+        askLayout.addView(inputRow);
         layout.addView(askLayout);
 
         // Loading Indicator
@@ -573,28 +614,50 @@ public class IrisFloatingCopilot {
         return tv;
     }
 
-    private void toggleAskInput() {
+    private void refreshToneChips() {
+        for (TextView chip : toneChipViews) {
+            boolean active = composeTone.equals(chip.getTag());
+            GradientDrawable chipBg = new GradientDrawable();
+            chipBg.setShape(GradientDrawable.RECTANGLE);
+            chipBg.setCornerRadius(dpToPx(8));
+            chipBg.setColor(active ? Color.parseColor("#3300F2FF") : Color.parseColor("#11FFFFFF"));
+            chipBg.setStroke(dpToPx(1), active ? Color.parseColor("#00F2FF") : Color.parseColor("#33FFFFFF"));
+            chip.setBackground(chipBg);
+            chip.setTextColor(active ? Color.parseColor("#00F2FF") : Color.parseColor("#99FFFFFF"));
+        }
+    }
+
+    private void openInputMode(String mode) {
         if (askLayout == null || customQuestionInput == null) return;
-        boolean makeVisible = (askLayout.getVisibility() != View.VISIBLE);
-        askLayout.setVisibility(makeVisible ? View.VISIBLE : View.GONE);
+        boolean sameMode = mode.equals(inputMode);
+        boolean currentlyVisible = (askLayout.getVisibility() == View.VISIBLE);
 
-        if (makeVisible) {
-            // Enable window focus so soft keyboard opens
-            cardParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-            if (isCardAttached) windowManager.updateViewLayout(cardView, cardParams);
-
-            customQuestionInput.requestFocus();
-            if (autoKeyboard) {
-                mainHandler.postDelayed(() -> {
-                    InputMethodManager imm = (InputMethodManager) service.getSystemService(Context.INPUT_METHOD_SERVICE);
-                    if (imm != null) {
-                        imm.showSoftInput(customQuestionInput, InputMethodManager.SHOW_IMPLICIT);
-                    }
-                }, 100);
-            }
-        } else {
+        if (currentlyVisible && sameMode) {
+            askLayout.setVisibility(View.GONE);
             hideSoftKeyboard();
             restoreNotFocusable();
+            return;
+        }
+
+        inputMode = mode;
+        boolean isCompose = "COMPOSE".equals(mode);
+        if (toneBar != null) toneBar.setVisibility(isCompose ? View.VISIBLE : View.GONE);
+        if (askSendBtn != null) askSendBtn.setText(isCompose ? "DRAFT" : "ASK");
+        customQuestionInput.setHint(isCompose ? "What to write? (e.g. tell boss 15m late)" : "Ask about this screen...");
+        customQuestionInput.setText("");
+
+        askLayout.setVisibility(View.VISIBLE);
+        cardParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        if (isCardAttached) windowManager.updateViewLayout(cardView, cardParams);
+
+        customQuestionInput.requestFocus();
+        if (autoKeyboard) {
+            mainHandler.postDelayed(() -> {
+                InputMethodManager imm = (InputMethodManager) service.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.showSoftInput(customQuestionInput, InputMethodManager.SHOW_IMPLICIT);
+                }
+            }, 100);
         }
     }
 
@@ -809,6 +872,17 @@ public class IrisFloatingCopilot {
                 } else if ("EXPLAIN".equals(action)) {
                     systemPrompt = "You are Iris Copilot. Explain the core concept, error, message, or content visible on this screen in simple, direct, clear terms in 2-3 sentences.";
                     userPrompt = lastExtractedContext + "\nExplain what is on this screen:";
+                } else if (action.startsWith("COMPOSE:")) {
+                    String rest = action.substring("COMPOSE:".length());
+                    int colonIdx = rest.indexOf(':');
+                    String tone = colonIdx > 0 ? rest.substring(0, colonIdx) : "AUTO";
+                    String instruction = colonIdx > 0 ? rest.substring(colonIdx + 1) : rest;
+                    String toneDesc = "PRO".equals(tone) ? "polished and professional"
+                            : "CASUAL".equals(tone) ? "warm, casual, and friendly"
+                            : "SHORT".equals(tone) ? "concise and direct"
+                            : "natural and fitting for the app";
+                    systemPrompt = "You are Iris Copilot, a sharp message composer. Based on the user's instruction, target tone (" + toneDesc + "), and active app/screen context, generate 3 ready-to-send message drafts. Return ONLY a JSON array of 3 strings: [\"draft1\", \"draft2\", \"draft3\"]. No markdown wrapper, no filler.";
+                    userPrompt = lastExtractedContext + "\nCompose a message for this instruction: " + instruction;
                 } else if (action.startsWith("ASK:")) {
                     String question = action.substring("ASK:".length());
                     userPrompt = lastExtractedContext + "\nUser Question: " + question;
@@ -854,7 +928,7 @@ public class IrisFloatingCopilot {
         } catch (Exception ignored) {}
 
         // 2. If JSON parsing found nothing, try line-by-line bullet or numbered list
-        if (items.isEmpty() && ("REPLY".equals(action) || "REWRITE".equals(action) || raw.contains("\n1.") || raw.contains("\n- "))) {
+        if (items.isEmpty() && ("REPLY".equals(action) || "REWRITE".equals(action) || action.startsWith("COMPOSE:") || raw.contains("\n1.") || raw.contains("\n- "))) {
             String[] lines = raw.split("\n");
             for (String line : lines) {
                 String trimmed = line.trim();
