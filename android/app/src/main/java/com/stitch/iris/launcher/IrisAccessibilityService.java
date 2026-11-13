@@ -20,20 +20,33 @@ public class IrisAccessibilityService extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.isPassword()) return;
-        // Track window content changes for recents task switching & floating copilot
-        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        int eventType = event.getEventType();
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             try {
                 CharSequence pkg = event.getPackageName();
-                if (pkg != null && !pkg.toString().equals(getPackageName())) {
-                    broadcastWindowChanged(pkg.toString());
+                if (pkg != null) {
+                    String pkgStr = pkg.toString();
+                    if (!pkgStr.equals(getPackageName())) {
+                        broadcastWindowChanged(pkgStr);
+                    }
                     IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
                     if (copilot != null) {
-                        copilot.onPackageChanged(pkg.toString());
+                        copilot.onPackageChanged(pkgStr);
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error tracking window change", e);
             }
+        } else if (eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED || eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            try {
+                IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+                if (copilot != null) {
+                    AccessibilityNodeInfo src = event.getSource();
+                    if (src != null && src.isEditable()) {
+                        copilot.onUserInputActive();
+                    }
+                }
+            } catch (Exception ignored) {}
         }
     }
 

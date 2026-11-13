@@ -2102,10 +2102,51 @@ public class LauncherPlugin extends Plugin {
             ret.put("enabled", service.isCopilotEnabled());
             ret.put("serviceRunning", true);
         } else {
-            android.content.SharedPreferences prefs = getContext().getSharedPreferences("iris_copilot_prefs", android.content.Context.MODE_PRIVATE);
-            ret.put("enabled", prefs.getBoolean("copilot_enabled", true));
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences(IrisFloatingCopilot.PREFS_NAME, android.content.Context.MODE_PRIVATE);
+            ret.put("enabled", prefs.getBoolean(IrisFloatingCopilot.KEY_ENABLED, true));
             ret.put("serviceRunning", false);
         }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getCopilotSettings(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences(IrisFloatingCopilot.PREFS_NAME, android.content.Context.MODE_PRIVATE);
+        JSObject ret = new JSObject();
+        ret.put("enabled", prefs.getBoolean(IrisFloatingCopilot.KEY_ENABLED, true));
+        ret.put("opacity", prefs.getInt(IrisFloatingCopilot.KEY_OPACITY, 55));
+        ret.put("timeoutSec", prefs.getInt(IrisFloatingCopilot.KEY_TIMEOUT_SEC, 3));
+        ret.put("showOnHome", prefs.getBoolean(IrisFloatingCopilot.KEY_SHOW_ON_HOME, true));
+        ret.put("pillSize", prefs.getString(IrisFloatingCopilot.KEY_PILL_SIZE, "NORMAL"));
+        ret.put("edgeSide", prefs.getString(IrisFloatingCopilot.KEY_EDGE_SIDE, "RIGHT"));
+        ret.put("autoKeyboard", prefs.getBoolean(IrisFloatingCopilot.KEY_AUTO_KEYBOARD, true));
+        ret.put("onlyWhenTyping", prefs.getBoolean(IrisFloatingCopilot.KEY_ONLY_TYPING, false));
+        ret.put("serviceRunning", IrisAccessibilityService.getInstance() != null);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void updateCopilotSettings(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences(IrisFloatingCopilot.PREFS_NAME, android.content.Context.MODE_PRIVATE);
+        android.content.SharedPreferences.Editor editor = prefs.edit();
+        if (call.hasOption("enabled")) editor.putBoolean(IrisFloatingCopilot.KEY_ENABLED, call.getBoolean("enabled", true));
+        if (call.hasOption("opacity")) editor.putInt(IrisFloatingCopilot.KEY_OPACITY, call.getInt("opacity", 55));
+        if (call.hasOption("timeoutSec")) editor.putInt(IrisFloatingCopilot.KEY_TIMEOUT_SEC, call.getInt("timeoutSec", 3));
+        if (call.hasOption("showOnHome")) editor.putBoolean(IrisFloatingCopilot.KEY_SHOW_ON_HOME, call.getBoolean("showOnHome", true));
+        if (call.hasOption("pillSize")) editor.putString(IrisFloatingCopilot.KEY_PILL_SIZE, call.getString("pillSize", "NORMAL"));
+        if (call.hasOption("edgeSide")) editor.putString(IrisFloatingCopilot.KEY_EDGE_SIDE, call.getString("edgeSide", "RIGHT"));
+        if (call.hasOption("autoKeyboard")) editor.putBoolean(IrisFloatingCopilot.KEY_AUTO_KEYBOARD, call.getBoolean("autoKeyboard", true));
+        if (call.hasOption("onlyWhenTyping")) editor.putBoolean(IrisFloatingCopilot.KEY_ONLY_TYPING, call.getBoolean("onlyWhenTyping", false));
+        editor.apply();
+
+        IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+        if (copilot != null) {
+            copilot.reloadSettings();
+        }
+
+        JSObject ret = new JSObject();
+        ret.put("success", true);
+        ret.put("serviceRunning", IrisAccessibilityService.getInstance() != null);
         call.resolve(ret);
     }
 

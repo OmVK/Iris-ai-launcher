@@ -7,6 +7,7 @@ import TransitionsSection from './settings/TransitionsSection'
 import LLMBackendSection from './settings/LLMBackendSection'
 import VoiceSettingsSection from './settings/VoiceSettingsSection'
 import NeuralSkillsSection from './settings/NeuralSkillsSection'
+import CopilotSettingsSection from './settings/CopilotSettingsSection'
 import TweaksSection from './settings/TweaksSection'
 import LauncherEngineSection from './settings/LauncherEngineSection'
 import PowerSaveSection from './settings/PowerSaveSection'
@@ -47,7 +48,7 @@ export default function Settings({
   const [expandedSections, setExpandedSections] = useState({
     wallpaperTheme: false, apiKeys: false, layoutConfig: false,
     appIcons: false, transitions: false, llmBackend: false,
-    neuralSkills: false, tweaks: false, launcherEngine: false,
+    neuralSkills: false, irisCopilot: false, tweaks: false, launcherEngine: false,
     powerSave: false, factoryReset: false, vaultLock: true,
     voiceSettings: false, about: false,
     gestures: false, appLock: false, backupRestore: false, advanced: false,
@@ -70,6 +71,7 @@ export default function Settings({
       <LLMBackendSection expandedSections={expandedSections} toggleSection={toggleSection} llmBackend={llmBackend} setLlmBackend={setLlmBackend} geminiModel={geminiModel} setGeminiModel={setGeminiModel} />
       <VoiceSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} voicePitch={voicePitch} setVoicePitch={setVoicePitch} voiceRate={voiceRate} setVoiceRate={setVoiceRate} />
       <NeuralSkillsSection expandedSections={expandedSections} toggleSection={toggleSection} showDrawerSearch={showDrawerSearch} setShowDrawerSearch={setShowDrawerSearch} />
+      <CopilotSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <TweaksSection expandedSections={expandedSections} toggleSection={toggleSection} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} showAppLabels={showAppLabels} setShowAppLabels={setShowAppLabels} use24HourClock={use24HourClock} setUse24HourClock={setUse24HourClock} fullscreenActive={fullscreenActive} setFullscreenActive={setFullscreenActive} darkGlassTheme={darkGlassTheme} setDarkGlassTheme={setDarkGlassTheme} notifPopupsEnabled={notifPopupsEnabled} setNotifPopupsEnabled={setNotifPopupsEnabled} />
 
       <div className="border-t border-white/5 pt-4">

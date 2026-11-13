@@ -52,8 +52,15 @@ import java.util.concurrent.Executors;
 public class IrisFloatingCopilot {
 
     private static final String TAG = "IrisFloatingCopilot";
-    private static final String PREFS_NAME = "iris_copilot_prefs";
-    private static final String KEY_ENABLED = "copilot_enabled";
+    public static final String PREFS_NAME = "iris_copilot_prefs";
+    public static final String KEY_ENABLED = "copilot_enabled";
+    public static final String KEY_OPACITY = "copilot_opacity";
+    public static final String KEY_TIMEOUT_SEC = "copilot_timeout_sec";
+    public static final String KEY_SHOW_ON_HOME = "copilot_show_on_home";
+    public static final String KEY_PILL_SIZE = "copilot_pill_size";
+    public static final String KEY_EDGE_SIDE = "copilot_edge_side";
+    public static final String KEY_AUTO_KEYBOARD = "copilot_auto_keyboard";
+    public static final String KEY_ONLY_TYPING = "copilot_only_typing";
     private static final String KEY_BACKEND = "copilot_backend";
     private static final String KEY_API_KEY = "copilot_api_key";
     private static final String KEY_GEMINI_KEY = "copilot_gemini_key";
@@ -67,15 +74,32 @@ public class IrisFloatingCopilot {
     private final ExecutorService executor;
 
     private boolean isEnabled = true;
+    private int pillOpacity = 55;
+    private int timeoutSec = 3;
+    private boolean showOnHome = true;
+    private String pillSize = "NORMAL";
+    private String edgeSide = "RIGHT";
+    private boolean autoKeyboard = true;
+    private boolean onlyWhenTyping = false;
+
     private boolean isPillAttached = false;
     private boolean isCardAttached = false;
     private String currentPackage = "";
     private String currentAppLabel = "";
 
     private View pillView;
+    private TextView pillIconText;
+    private GradientDrawable pillBgDrawable;
     private WindowManager.LayoutParams pillParams;
     private View cardView;
+    private GradientDrawable cardBgDrawable;
     private WindowManager.LayoutParams cardParams;
+
+    private final Runnable autoHideRunnable = () -> {
+        if (!isCardAttached && isPillAttached && pillView != null) {
+            pillView.animate().alpha(0f).setDuration(260).withEndAction(this::hidePill).start();
+        }
+    };
 
     private TextView cardTitle;
     private TextView cardSubTitle;
@@ -111,23 +135,129 @@ public class IrisFloatingCopilot {
         this.mainHandler = new Handler(Looper.getMainLooper());
         this.executor = Executors.newSingleThreadExecutor();
 
-        SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        this.isEnabled = prefs.getBoolean(KEY_ENABLED, true);
-
+        loadSettingsFromPrefs();
         createPillView();
         createCardView();
+        updateVisualStyles();
+    }
+
+    private void loadSettingsFromPrefs() {
+        SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        this.isEnabled = prefs.getBoolean(KEY_ENABLED, true);
+        this.pillOpacity = Math.max(15, Math.min(95, prefs.getInt(KEY_OPACITY, 55)));
+        this.timeoutSec = Math.max(0, prefs.getInt(KEY_TIMEOUT_SEC, 3));
+        this.showOnHome = prefs.getBoolean(KEY_SHOW_ON_HOME, true);
+        this.pillSize = prefs.getString(KEY_PILL_SIZE, "NORMAL");
+        this.edgeSide = prefs.getString(KEY_EDGE_SIDE, "RIGHT");
+        this.autoKeyboard = prefs.getBoolean(KEY_AUTO_KEYBOARD, true);
+        this.onlyWhenTyping = prefs.getBoolean(KEY_ONLY_TYPING, false);
+    }
+
+    public void reloadSettings() {
+        mainHandler.post(() -> {
+            loadSettingsFromPrefs();
+            updateVisualStyles();
+            if (!isEnabled) {
+                hidePill();
+                hideCard();
+            } else if (currentPackage.equals(service.getPackageName())) {
+                if (!showOnHome) {
+                    hidePill();
+                    hideCard();
+                } else {
+                    showPill();
+                }
+            } else if (!currentPackage.isEmpty() && !onlyWhenTyping) {
+                showPill();
+            }
+        });
+    }
+
+    private int getPillSizeDp() {
+        if ("COMPACT".equalsIgnoreCase(pillSize)) return 36;
+        if ("LARGE".equalsIgnoreCase(pillSize)) return 52;
+        return 44;
+    }
+
+    private void updateVisualStyles() {
+        int pillAlpha = (int) (pillOpacity / 100.0f * 255);
+        int strokeAlpha = Math.min(255, pillAlpha + 65);
+        if (pillBgDrawable != null) {
+            pillBgDrawable.setColor(Color.argb(pillAlpha, 2, 6, 23));
+            pillBgDrawable.setStroke(dpToPx(1.5f), Color.argb(strokeAlpha, 0, 242, 255));
+        }
+        int cardOpacity = Math.max(60, Math.min(95, pillOpacity + 28));
+        int cardAlpha = (int) (cardOpacity / 100.0f * 255);
+        if (cardBgDrawable != null) {
+            cardBgDrawable.setColor(Color.argb(cardAlpha, 2, 6, 23));
+        }
+
+        if (pillParams != null) {
+            int sizePx = dpToPx(getPillSizeDp());
+            pillParams.width = sizePx;
+            pillParams.height = sizePx;
+            if ("LEFT".equalsIgnoreCase(edgeSide)) {
+                pillParams.gravity = Gravity.TOP | Gravity.START;
+                pillParams.x = dpToPx(12);
+            } else if ("RIGHT".equalsIgnoreCase(edgeSide)) {
+                pillParams.gravity = Gravity.TOP | Gravity.END;
+                pillParams.x = dpToPx(12);
+            }
+            if (isPillAttached && pillView != null) {
+                try {
+                    windowManager.updateViewLayout(pillView, pillParams);
+                } catch (Exception ignored) {}
+            }
+        }
+        if (pillIconText != null) {
+            pillIconText.setTextSize(TypedValue.COMPLEX_UNIT_SP, "COMPACT".equalsIgnoreCase(pillSize) ? 16 : "LARGE".equalsIgnoreCase(pillSize) ? 24 : 20);
+        }
+    }
+
+    private void scheduleAutoHide() {
+        mainHandler.removeCallbacks(autoHideRunnable);
+        if (timeoutSec > 0 && !isCardAttached && isPillAttached) {
+            mainHandler.postDelayed(autoHideRunnable, timeoutSec * 1000L);
+        }
+    }
+
+    private void cancelAutoHide() {
+        mainHandler.removeCallbacks(autoHideRunnable);
     }
 
     public void onPackageChanged(String newPackage) {
         if (newPackage == null) return;
         this.currentPackage = newPackage;
         mainHandler.post(() -> {
-            if (!isEnabled || newPackage.equals(service.getPackageName()) || newPackage.equals("com.android.systemui")) {
+            if (!isEnabled || newPackage.equals("com.android.systemui")) {
                 hidePill();
                 hideCard();
-            } else {
-                showPill();
+                return;
             }
+            boolean isHome = newPackage.equals(service.getPackageName());
+            if (isHome) {
+                if (!showOnHome) {
+                    hidePill();
+                    hideCard();
+                } else if (!onlyWhenTyping) {
+                    showPill();
+                }
+            } else {
+                if (onlyWhenTyping) {
+                    hidePill();
+                } else {
+                    showPill();
+                }
+            }
+        });
+    }
+
+    public void onUserInputActive() {
+        mainHandler.post(() -> {
+            if (!isEnabled) return;
+            boolean isHome = currentPackage.equals(service.getPackageName());
+            if (isHome && !showOnHome) return;
+            showPill();
         });
     }
 
@@ -139,7 +269,7 @@ public class IrisFloatingCopilot {
             if (!enabled) {
                 hidePill();
                 hideCard();
-            } else if (!currentPackage.equals(service.getPackageName()) && !currentPackage.isEmpty()) {
+            } else if (!currentPackage.isEmpty() && (!currentPackage.equals(service.getPackageName()) || showOnHome)) {
                 showPill();
             }
         });
@@ -175,24 +305,24 @@ public class IrisFloatingCopilot {
 
     private void createPillView() {
         FrameLayout frame = new FrameLayout(service);
-        int size = dpToPx(44);
+        int size = dpToPx(getPillSizeDp());
 
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.parseColor("#E6020617")); // dark glass
-        bg.setStroke(dpToPx(1.5f), Color.parseColor("#00F2FF")); // glowing cyan
-        frame.setBackground(bg);
+        pillBgDrawable = new GradientDrawable();
+        pillBgDrawable.setShape(GradientDrawable.OVAL);
+        pillBgDrawable.setColor(Color.argb((int) (pillOpacity / 100.0f * 255), 2, 6, 23));
+        pillBgDrawable.setStroke(dpToPx(1.5f), Color.parseColor("#00F2FF"));
+        frame.setBackground(pillBgDrawable);
 
-        TextView iconText = new TextView(service);
-        iconText.setText("◈");
-        iconText.setTextColor(Color.parseColor("#00F2FF"));
-        iconText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-        iconText.setGravity(Gravity.CENTER);
+        pillIconText = new TextView(service);
+        pillIconText.setText("◈");
+        pillIconText.setTextColor(Color.parseColor("#00F2FF"));
+        pillIconText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        pillIconText.setGravity(Gravity.CENTER);
         FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         );
-        frame.addView(iconText, textParams);
+        frame.addView(pillIconText, textParams);
 
         pillParams = new WindowManager.LayoutParams(
                 size, size,
@@ -202,7 +332,7 @@ public class IrisFloatingCopilot {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT
         );
-        pillParams.gravity = Gravity.TOP | Gravity.END;
+        pillParams.gravity = "LEFT".equalsIgnoreCase(edgeSide) ? (Gravity.TOP | Gravity.START) : (Gravity.TOP | Gravity.END);
         pillParams.x = dpToPx(12);
         pillParams.y = dpToPx(240);
 
@@ -215,6 +345,9 @@ public class IrisFloatingCopilot {
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        cancelAutoHide();
+                        v.animate().cancel();
+                        v.setAlpha(1f);
                         initialX = pillParams.x;
                         initialY = pillParams.y;
                         initialTouchX = event.getRawX();
@@ -223,7 +356,9 @@ public class IrisFloatingCopilot {
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
-                        pillParams.x = initialX - (int) (event.getRawX() - initialTouchX);
+                        int dx = (int) (event.getRawX() - initialTouchX);
+                        boolean isLeft = (pillParams.gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.START;
+                        pillParams.x = isLeft ? (initialX + dx) : (initialX - dx);
                         pillParams.y = initialY + (int) (event.getRawY() - initialTouchY);
                         if (isPillAttached) windowManager.updateViewLayout(pillView, pillParams);
                         return true;
@@ -237,9 +372,11 @@ public class IrisFloatingCopilot {
                             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                             toggleCard();
                         } else {
-                            // Snap to edge
-                            pillParams.x = dpToPx(12);
-                            if (isPillAttached) windowManager.updateViewLayout(pillView, pillParams);
+                            if (!"FREE".equalsIgnoreCase(edgeSide)) {
+                                pillParams.x = dpToPx(12);
+                                if (isPillAttached) windowManager.updateViewLayout(pillView, pillParams);
+                            }
+                            scheduleAutoHide();
                         }
                         return true;
                 }
@@ -255,12 +392,13 @@ public class IrisFloatingCopilot {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12));
 
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(dpToPx(18));
-        bg.setColor(Color.parseColor("#F5020617")); // 96% dark cyber glass
-        bg.setStroke(dpToPx(1.5f), Color.parseColor("#4400F2FF"));
-        layout.setBackground(bg);
+        cardBgDrawable = new GradientDrawable();
+        cardBgDrawable.setShape(GradientDrawable.RECTANGLE);
+        cardBgDrawable.setCornerRadius(dpToPx(18));
+        int cardOpacity = Math.max(60, Math.min(95, pillOpacity + 28));
+        cardBgDrawable.setColor(Color.argb((int) (cardOpacity / 100.0f * 255), 2, 6, 23));
+        cardBgDrawable.setStroke(dpToPx(1.5f), Color.parseColor("#4400F2FF"));
+        layout.setBackground(cardBgDrawable);
 
         // Header Row
         LinearLayout header = new LinearLayout(service);
@@ -446,12 +584,14 @@ public class IrisFloatingCopilot {
             if (isCardAttached) windowManager.updateViewLayout(cardView, cardParams);
 
             customQuestionInput.requestFocus();
-            mainHandler.postDelayed(() -> {
-                InputMethodManager imm = (InputMethodManager) service.getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (imm != null) {
-                    imm.showSoftInput(customQuestionInput, InputMethodManager.SHOW_IMPLICIT);
-                }
-            }, 100);
+            if (autoKeyboard) {
+                mainHandler.postDelayed(() -> {
+                    InputMethodManager imm = (InputMethodManager) service.getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) {
+                        imm.showSoftInput(customQuestionInput, InputMethodManager.SHOW_IMPLICIT);
+                    }
+                }, 100);
+            }
         } else {
             hideSoftKeyboard();
             restoreNotFocusable();
@@ -477,19 +617,29 @@ public class IrisFloatingCopilot {
     }
 
     public void showPill() {
+        cancelAutoHide();
+        if (pillView != null) {
+            pillView.animate().cancel();
+            pillView.setAlpha(1f);
+        }
         if (!isPillAttached && pillView != null) {
             try {
+                pillView.setAlpha(0f);
                 windowManager.addView(pillView, pillParams);
                 isPillAttached = true;
+                pillView.animate().alpha(1f).setDuration(180).start();
             } catch (Exception e) {
                 Log.e(TAG, "Error adding pill view", e);
             }
         }
+        scheduleAutoHide();
     }
 
     public void hidePill() {
+        cancelAutoHide();
         if (isPillAttached && pillView != null) {
             try {
+                pillView.animate().cancel();
                 windowManager.removeView(pillView);
                 isPillAttached = false;
             } catch (Exception e) {
@@ -507,6 +657,7 @@ public class IrisFloatingCopilot {
     }
 
     public void showCard() {
+        cancelAutoHide();
         if (!isCardAttached && cardView != null) {
             try {
                 refreshContext();
@@ -531,6 +682,7 @@ public class IrisFloatingCopilot {
                 Log.e(TAG, "Error removing card view", e);
             }
         }
+        scheduleAutoHide();
     }
 
     private void cleanup() {

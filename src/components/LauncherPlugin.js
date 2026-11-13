@@ -1335,3 +1335,33 @@ export async function syncAIConfig(backend, apiKey, model, geminiKey, groqKey) {
     return { success: false }
   }
 }
+
+export async function getCopilotSettings() {
+  if (!isNative) {
+    return {
+      enabled: true,
+      opacity: 55,
+      timeoutSec: 3,
+      showOnHome: true,
+      pillSize: 'NORMAL',
+      edgeSide: 'RIGHT',
+      autoKeyboard: true,
+      onlyWhenTyping: false,
+      serviceRunning: false,
+    }
+  }
+  try {
+    return await NativeLauncher.getCopilotSettings()
+  } catch (e) {
+    return { enabled: true, opacity: 55, timeoutSec: 3, showOnHome: true, pillSize: 'NORMAL', edgeSide: 'RIGHT', autoKeyboard: true, onlyWhenTyping: false, serviceRunning: false }
+  }
+}
+
+export async function updateCopilotSettings(options) {
+  if (!isNative) return { success: true }
+  try {
+    return await NativeLauncher.updateCopilotSettings(options)
+  } catch (e) {
+    return { success: false }
+  }
+}
