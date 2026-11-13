@@ -28,10 +28,22 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.7.0
+- **Version**: 5.8.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
+
+## ⚡ v5.8.0 Floating Edge Copilot, Compose Mode, Screen AI & Archive Fixes
+
+IRIS v5.8.0 introduces a system-wide **Floating Edge Copilot** that works across any Android app, along with transparent overlay customization, smart message composition, and notification archive improvements:
+- **System-Wide Floating Edge Copilot (`◈`)**:
+  - Translucent floating edge pill (`TYPE_ACCESSIBILITY_OVERLAY`) that reads active screen context across WhatsApp, Chrome, Brave, Gmail, Notes, and other apps while respecting password privacy fields.
+  - **6 Quick Neural Actions**: **`⚡ SMART REPLY`**, **`✍️ COMPOSE`** (with **`AUTO` / `PRO` / `CASUAL` / `SHORT`** tone chips), **`📝 SUMMARIZE`**, **`✨ REWRITE`**, **`🔍 EXPLAIN`**, and **`💬 ASK AI`**.
+  - **1-Tap `INSERT ↵` & Dynamic Soft Keyboard**: Injects generated replies or composed drafts directly into the active app's input field (`ACTION_SET_TEXT` / `ACTION_PASTE` + clipboard fallback), with dynamic `FLAG_NOT_FOCUSABLE` switching so the soft keyboard pops up reliably when composing or asking questions.
+- **Dedicated `IRIS COPILOT` Settings**:
+  - Configure **Pill & Card Opacity** (`15% – 95%`), **Auto-Hide Timeout** (`Never`, `3s`, `5s`, `10s`), **Pill Size** (`Compact`, `Normal`, `Large`), **Edge Dock Side** (`Right`, `Left`, `Free`), **Show on IRIS Home**, **Show Only When Typing**, and **Auto-Open Keyboard on Ask**.
+- **Top Notch Notification Archive Fixes**:
+  - Fixed individual message `CLEAR` button tap/hit-testing inside the Dynamic Island and prevented reusable Android notification key collisions when deleting individual archived messages.
 
 ## ⚡ v5.6.0 Native Icon Engine, 120Hz High-Refresh Pipeline, 5-Pill Notch Control Center & Screen Time Telemetry
 
