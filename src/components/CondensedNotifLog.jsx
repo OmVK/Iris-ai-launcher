@@ -178,8 +178,6 @@ export default function CondensedNotifLog({ onClose }) {
               className="group relative flex items-start gap-2.5 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/5 hover:border-white/20 transition-colors cursor-pointer"
               style={{
                 boxShadow: `inset 2px 0 0 ${item.color || '#00f2ff'}`,
-                contentVisibility: 'auto',
-                containIntrinsicSize: '0 76px',
               }}
             >
               {/* App / Category Icon */}
@@ -325,9 +323,9 @@ export default function CondensedNotifLog({ onClose }) {
                     data-notif-delete="true"
                     onMouseDown={(e) => e.stopPropagation()}
                     onTouchStart={(e) => e.stopPropagation()}
-                    onTouchEnd={(e) => handleDelete(e, item.id)}
+                    onTouchEnd={(e) => e.stopPropagation()}
                     onClick={(e) => handleDelete(e, item.id)}
-                    className="flex items-center gap-1 text-red-300/80 hover:text-red-300 active:scale-90 px-2.5 py-1 rounded-md bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 transition-all cursor-pointer shrink-0"
+                    className="relative z-10 flex items-center gap-1 text-red-300/90 hover:text-red-200 active:scale-90 px-2.5 py-1.5 rounded-md bg-red-500/20 hover:bg-red-500/30 border border-red-500/35 transition-all cursor-pointer shrink-0"
                     title="Delete log entry"
                   >
                     <span className="material-symbols-outlined text-[12px]">delete</span>

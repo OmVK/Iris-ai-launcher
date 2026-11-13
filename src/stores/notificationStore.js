@@ -14,7 +14,7 @@ function loadSavedHistory() {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed)) return parsed
     }
-  } catch {}
+  } catch { }
   return []
 }
 
@@ -47,7 +47,7 @@ function addDeletedSig(sig) {
     }
     const arr = Array.from(set).slice(-300)
     localStorage.setItem(DELETED_SIGS_KEY, JSON.stringify(arr))
-  } catch {}
+  } catch { }
 }
 
 function isDeletedMessageText(text) {
@@ -160,7 +160,6 @@ export const useNotificationStore = create((set, get) => ({
         deletedSigs.has(sig) ||
         deletedSigs.has(formattedSig) ||
         (raw.id && deletedSigs.has(raw.id)) ||
-        (raw.key && deletedSigs.has(raw.key)) ||
         deletedSigs.has(formatted.id)
       ) {
         continue
@@ -193,7 +192,7 @@ export const useNotificationStore = create((set, get) => ({
       const trimmed = merged.slice(0, MAX_HISTORY)
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
-      } catch {}
+      } catch { }
       set({ history: trimmed })
     }
   },
@@ -219,7 +218,7 @@ export const useNotificationStore = create((set, get) => ({
         updated[matchIdx] = { ...updated[matchIdx], deletedBySender: true }
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
-        } catch {}
+        } catch { }
         set({ history: updated })
         return
       }
@@ -234,7 +233,7 @@ export const useNotificationStore = create((set, get) => ({
         updated[duplicateIdx] = { ...updated[duplicateIdx], deletedBySender: true }
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
-        } catch {}
+        } catch { }
         set({ history: updated })
       }
       return
@@ -245,12 +244,12 @@ export const useNotificationStore = create((set, get) => ({
     const updated = [record, ...existing].slice(0, MAX_HISTORY)
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
-    } catch {}
+    } catch { }
 
     let popupsEnabled = true
     try {
       popupsEnabled = localStorage.getItem('iris_notif_popups_enabled') !== 'false'
-    } catch {}
+    } catch { }
 
     if (options?.popBanner !== false && popupsEnabled) {
       set({
@@ -280,26 +279,26 @@ export const useNotificationStore = create((set, get) => ({
   deleteHistoryItem: (id) => {
     if (!id) return
     const current = get().history
-    const target = current.find(item => item.id === id || item.key === id)
+    const target = current.find(item => item.id === id)
     const targetSig = target ? `${target.packageId}|${target.title}|${target.text}` : null
     const targetRawSig = target?.rawSig || null
 
     const next = current.filter(item => {
-      if (item.id === id || item.key === id) return false
+      if (item.id === id) return false
       if (targetSig && `${item.packageId}|${item.title}|${item.text}` === targetSig && Math.abs((item.timestamp || 0) - (target.timestamp || 0)) < 60000) return false
       return true
     })
 
     const active = get().activeNotification
-    const clearActive = active && (active.id === id || active.key === id)
+    const clearActive = active && active.id === id
     set(clearActive ? { history: next, activeNotification: null, activeGlow: null } : { history: next })
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    } catch {}
+    } catch { }
 
     if (target) {
-      addDeletedSig([id, target.id, target.key, targetSig, targetRawSig])
+      addDeletedSig([id, target.id, targetSig, targetRawSig])
       deleteArchivedNotification(target.id)
       if (targetRawSig && targetRawSig !== target.id) {
         deleteArchivedNotification(targetRawSig)
@@ -323,7 +322,7 @@ export const useNotificationStore = create((set, get) => ({
       localStorage.setItem(STORAGE_KEY, '[]')
       localStorage.setItem(CLEARED_AT_KEY, String(now))
       localStorage.setItem(DELETED_SIGS_KEY, '[]')
-    } catch {}
+    } catch { }
     set({ history: [], activeNotification: null, activeGlow: null })
     clearArchivedNotifications()
   }

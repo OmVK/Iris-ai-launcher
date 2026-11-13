@@ -352,13 +352,11 @@ public class IrisNotificationListenerService extends NotificationListenerService
     private static boolean isDeletedArchiveItem( java.util.Set<String> deletedIds, JSONObject item) {
         if (deletedIds == null || deletedIds.isEmpty() || item == null) return false;
         String id = item.optString("id", "");
-        String key = item.optString("key", "");
         String pkg = item.optString("packageId", "");
         String title = item.optString("title", "");
         String text = item.optString("text", "");
         String sig = pkg + "|" + title + "|" + text;
         return (!id.isEmpty() && deletedIds.contains(id))
-                || (!key.isEmpty() && deletedIds.contains(key))
                 || deletedIds.contains(sig);
     }
 
@@ -503,9 +501,8 @@ public class IrisNotificationListenerService extends NotificationListenerService
                 String itemText = item.optString("text", "");
                 String itemSig = itemPkg + "|" + itemTitle + "|" + itemText;
                 String itemAppSig = itemPkg + "|" + item.optString("appName", "") + "|" + itemText;
-                if (id.equals(itemId) || id.equals(itemKey) || id.equals(itemSig) || id.equals(itemAppSig)) {
+                if (id.equals(itemId) || id.equals(itemSig) || id.equals(itemAppSig)) {
                     if (!itemId.isEmpty()) deletedIds.add(itemId);
-                    if (!itemKey.isEmpty()) deletedIds.add(itemKey);
                     deletedIds.add(itemSig);
                 } else {
                     next.put(item);
