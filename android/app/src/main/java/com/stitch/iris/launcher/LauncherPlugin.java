@@ -2121,6 +2121,8 @@ public class LauncherPlugin extends Plugin {
         ret.put("edgeSide", prefs.getString(IrisFloatingCopilot.KEY_EDGE_SIDE, "RIGHT"));
         ret.put("autoKeyboard", prefs.getBoolean(IrisFloatingCopilot.KEY_AUTO_KEYBOARD, true));
         ret.put("onlyWhenTyping", prefs.getBoolean(IrisFloatingCopilot.KEY_ONLY_TYPING, false));
+        ret.put("userStyle", prefs.getString(IrisFloatingCopilot.KEY_USER_STYLE, "NATURAL"));
+        ret.put("clipboardTrigger", prefs.getBoolean(IrisFloatingCopilot.KEY_CLIPBOARD_TRIGGER, true));
         ret.put("serviceRunning", IrisAccessibilityService.getInstance() != null);
         call.resolve(ret);
     }
@@ -2137,6 +2139,8 @@ public class LauncherPlugin extends Plugin {
         if (call.hasOption("edgeSide")) editor.putString(IrisFloatingCopilot.KEY_EDGE_SIDE, call.getString("edgeSide", "RIGHT"));
         if (call.hasOption("autoKeyboard")) editor.putBoolean(IrisFloatingCopilot.KEY_AUTO_KEYBOARD, call.getBoolean("autoKeyboard", true));
         if (call.hasOption("onlyWhenTyping")) editor.putBoolean(IrisFloatingCopilot.KEY_ONLY_TYPING, call.getBoolean("onlyWhenTyping", false));
+        if (call.hasOption("userStyle")) editor.putString(IrisFloatingCopilot.KEY_USER_STYLE, call.getString("userStyle", "NATURAL"));
+        if (call.hasOption("clipboardTrigger")) editor.putBoolean(IrisFloatingCopilot.KEY_CLIPBOARD_TRIGGER, call.getBoolean("clipboardTrigger", true));
         editor.apply();
 
         IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
@@ -2147,6 +2151,23 @@ public class LauncherPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("success", true);
         ret.put("serviceRunning", IrisAccessibilityService.getInstance() != null);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void consumeCopilotSavedItems(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences(IrisFloatingCopilot.PREFS_NAME, android.content.Context.MODE_PRIVATE);
+        String rawTasks = prefs.getString("copilot_saved_tasks", "[]");
+        String rawNotes = prefs.getString("copilot_saved_notes", "[]");
+        prefs.edit().putString("copilot_saved_tasks", "[]").putString("copilot_saved_notes", "[]").apply();
+        JSObject ret = new JSObject();
+        try {
+            ret.put("tasks", new com.getcapacitor.JSArray(rawTasks));
+            ret.put("notes", new com.getcapacitor.JSArray(rawNotes));
+        } catch (Exception e) {
+            ret.put("tasks", new com.getcapacitor.JSArray());
+            ret.put("notes", new com.getcapacitor.JSArray());
+        }
         call.resolve(ret);
     }
 

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, addNotificationPostedListener, getArchivedNotifications, dismissNotification, addPackageChangeListener, addHomePressedListener } from '../components/LauncherPlugin'
+import { isNative, setFullscreen, restartKeepAlive, setVaultPackages, addNotificationListener, addNotificationPostedListener, getArchivedNotifications, dismissNotification, addPackageChangeListener, addHomePressedListener, consumeCopilotSavedItems } from '../components/LauncherPlugin'
 import PowerSaveManager from '../utils/PowerSaveManager'
 import { useAppStore } from '../stores/appStore'
 import { useAppsStore, prewarmAppIcons } from '../stores/appsStore'
@@ -173,6 +173,28 @@ export default function useAppEffects({ isAppActive, setIsAppActive, setShowChro
         if (Array.isArray(archived) && archived.length > 0) {
           const installed = useAppsStore?.getState?.()?.installedApps || []
           useNotificationStore.getState().syncNativeArchive(archived, installed)
+        }
+        const saved = await consumeCopilotSavedItems()
+        if (Array.isArray(saved?.tasks) && saved.tasks.length > 0) {
+          const existingTasks = JSON.parse(localStorage.getItem('iris_day_tasks') || '[]')
+          const now = Date.now()
+          const newTasks = saved.tasks.map((txt, idx) => ({
+            id: `copilot_${now}_${idx}`,
+            text: String(txt).slice(0, 140),
+            done: false,
+            time: '',
+          }))
+          localStorage.setItem('iris_day_tasks', JSON.stringify([...newTasks, ...existingTasks]))
+          window.dispatchEvent(new CustomEvent('TASKS_SYNCED_GLOBALLY'))
+        }
+        if (Array.isArray(saved?.notes) && saved.notes.length > 0) {
+          const existingNotes = JSON.parse(localStorage.getItem('iris_voice_notes') || '[]')
+          const nowStr = new Date().toLocaleString()
+          const newNotes = saved.notes.map((txt) => ({
+            text: String(txt),
+            time: nowStr,
+          }))
+          localStorage.setItem('iris_voice_notes', JSON.stringify([...newNotes, ...existingNotes]))
         }
       } catch {}
     }

@@ -1347,13 +1347,15 @@ export async function getCopilotSettings() {
       edgeSide: 'RIGHT',
       autoKeyboard: true,
       onlyWhenTyping: false,
+      userStyle: 'NATURAL',
+      clipboardTrigger: true,
       serviceRunning: false,
     }
   }
   try {
     return await NativeLauncher.getCopilotSettings()
   } catch (e) {
-    return { enabled: true, opacity: 55, timeoutSec: 3, showOnHome: true, pillSize: 'NORMAL', edgeSide: 'RIGHT', autoKeyboard: true, onlyWhenTyping: false, serviceRunning: false }
+    return { enabled: true, opacity: 55, timeoutSec: 3, showOnHome: true, pillSize: 'NORMAL', edgeSide: 'RIGHT', autoKeyboard: true, onlyWhenTyping: false, userStyle: 'NATURAL', clipboardTrigger: true, serviceRunning: false }
   }
 }
 
@@ -1363,5 +1365,14 @@ export async function updateCopilotSettings(options) {
     return await NativeLauncher.updateCopilotSettings(options)
   } catch (e) {
     return { success: false }
+  }
+}
+
+export async function consumeCopilotSavedItems() {
+  if (!isNative) return { tasks: [], notes: [] }
+  try {
+    return await NativeLauncher.consumeCopilotSavedItems()
+  } catch (e) {
+    return { tasks: [], notes: [] }
   }
 }

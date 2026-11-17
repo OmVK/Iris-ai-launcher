@@ -22,6 +22,13 @@ const EDGE_SIDE_OPTIONS = [
   { id: 'FREE', label: 'FREE DRAG' },
 ]
 
+const USER_STYLE_OPTIONS = [
+  { id: 'NATURAL', label: 'NATURAL' },
+  { id: 'CASUAL_LOWER', label: 'CASUAL LOWER' },
+  { id: 'EXECUTIVE_PRO', label: 'EXECUTIVE PRO' },
+  { id: 'DIRECT', label: 'DIRECT PUNCHY' },
+]
+
 export default function CopilotSettingsSection({ expandedSections, toggleSection }) {
   const [settings, setSettings] = useState({
     enabled: true,
@@ -32,6 +39,8 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
     edgeSide: 'RIGHT',
     autoKeyboard: true,
     onlyWhenTyping: false,
+    userStyle: 'NATURAL',
+    clipboardTrigger: true,
     serviceRunning: true,
   })
 
@@ -95,6 +104,19 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
         />
 
         <div className="space-y-1.5">
+          <p className="text-[10px]">Default Personal Writing Style</p>
+          <SettingOptionGrid
+            options={USER_STYLE_OPTIONS}
+            value={settings.userStyle}
+            onChange={(v) => applySetting({ userStyle: v })}
+            columns={2}
+          />
+          <p className="text-[7px] text-on-surface-variant/45">
+            Shapes how Smart Reply &amp; Compose sound by default across all apps
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
           <p className="text-[10px]">Auto-Hide Timeout</p>
           <SettingOptionGrid
             options={TIMEOUT_OPTIONS}
@@ -128,6 +150,14 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
         </div>
 
         <SettingToggle
+          label="Clipboard Smart Trigger"
+          sublabel="DETECT_COPIED_TEXT_FOR_AI_ACTIONS"
+          icon="content_paste"
+          value={settings.clipboardTrigger}
+          onChange={(v) => applySetting({ clipboardTrigger: v })}
+        />
+
+        <SettingToggle
           label="Show on IRIS Home"
           sublabel="FADES_AFTER_TIMEOUT_ON_HOME"
           icon="home"
@@ -154,4 +184,3 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
     </SettingsSection>
   )
 }
-

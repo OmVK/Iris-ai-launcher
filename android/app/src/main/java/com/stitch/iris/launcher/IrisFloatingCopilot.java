@@ -16,6 +16,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
@@ -45,11 +48,14 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -67,6 +73,8 @@ public class IrisFloatingCopilot {
     public static final String KEY_EDGE_SIDE = "copilot_edge_side";
     public static final String KEY_AUTO_KEYBOARD = "copilot_auto_keyboard";
     public static final String KEY_ONLY_TYPING = "copilot_only_typing";
+    public static final String KEY_USER_STYLE = "copilot_user_style";
+    public static final String KEY_CLIPBOARD_TRIGGER = "copilot_clipboard_trigger";
     private static final String KEY_BACKEND = "copilot_backend";
     private static final String KEY_API_KEY = "copilot_api_key";
     private static final String KEY_GEMINI_KEY = "copilot_gemini_key";
@@ -93,6 +101,8 @@ public class IrisFloatingCopilot {
     private String edgeSide = "RIGHT";
     private boolean autoKeyboard = true;
     private boolean onlyWhenTyping = false;
+    private String userStyle = "NATURAL";
+    private boolean clipboardTrigger = true;
 
     private boolean isPillAttached = false;
     private boolean isCardAttached = false;
@@ -121,21 +131,34 @@ public class IrisFloatingCopilot {
     private HorizontalScrollView entitiesScroll;
     private LinearLayout entitiesBar;
     private HorizontalScrollView draftToolsScroll;
+    private LinearLayout replyFilterLayout;
+    private LinearLayout replyToneRow;
     private LinearLayout resultsContainer;
     private LinearLayout quickActionsBar;
     private LinearLayout askLayout;
     private LinearLayout toneBar;
     private EditText customQuestionInput;
+    private TextView voiceMicBtn;
     private Button askSendBtn;
     private String inputMode = "ASK";
     private String composeTone = "AUTO";
+    private String replyLength = "AUTO";
+    private String replyTone = "AUTO";
+    private String lastActiveAction = "REPLY";
     private final List<TextView> toneChipViews = new ArrayList<>();
+    private final List<TextView> replyLengthChipViews = new ArrayList<>();
+    private final List<TextView> replyToneChipViews = new ArrayList<>();
     private View loadingIndicator;
 
     private AccessibilityNodeInfo lastTargetInputNode;
     private AccessibilityNodeInfo lastSendButtonNode;
     private String lastExtractedContext = "";
     private String lastAiResponse = "";
+    private String lastInternalClipboard = "";
+    private String latestExternalClipboard = "";
+    private final Set<String> deepScanBuffer = new LinkedHashSet<>();
+    private SpeechRecognizer speechRecognizer;
+    private boolean isVoiceListening = false;
 
     public static synchronized void initialize(AccessibilityService service) {
         if (instance == null) {
@@ -164,6 +187,29 @@ public class IrisFloatingCopilot {
         createPillView();
         createCardView();
         updateVisualStyles();
+        registerClipboardTrigger();
+    }
+
+    private void registerClipboardTrigger() {
+        try {
+            ClipboardManager cm = (ClipboardManager) service.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.addPrimaryClipChangedListener(() -> {
+                    if (!isEnabled || !clipboardTrigger) return;
+                    try {
+                        ClipData clip = cm.getPrimaryClip();
+                        if (clip != null && clip.getItemCount() > 0) {
+                            CharSequence cs = clip.getItemAt(0).getText();
+                            String copied = cs != null ? cs.toString().trim() : "";
+                            if (copied.length() > 2 && !copied.equals(lastInternalClipboard)) {
+                                latestExternalClipboard = copied;
+                                mainHandler.post(this::showPill);
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                });
+            }
+        } catch (Exception ignored) {}
     }
 
     private void loadSettingsFromPrefs() {
@@ -176,6 +222,8 @@ public class IrisFloatingCopilot {
         this.edgeSide = prefs.getString(KEY_EDGE_SIDE, "RIGHT");
         this.autoKeyboard = prefs.getBoolean(KEY_AUTO_KEYBOARD, true);
         this.onlyWhenTyping = prefs.getBoolean(KEY_ONLY_TYPING, false);
+        this.userStyle = prefs.getString(KEY_USER_STYLE, "NATURAL");
+        this.clipboardTrigger = prefs.getBoolean(KEY_CLIPBOARD_TRIGGER, true);
     }
 
     public void reloadSettings() {
@@ -252,6 +300,9 @@ public class IrisFloatingCopilot {
 
     public void onPackageChanged(String newPackage) {
         if (newPackage == null) return;
+        if (!newPackage.equals(this.currentPackage)) {
+            deepScanBuffer.clear();
+        }
         this.currentPackage = newPackage;
         mainHandler.post(() -> {
             if (!isEnabled || newPackage.equals("com.android.systemui")) {
@@ -305,7 +356,7 @@ public class IrisFloatingCopilot {
     }
 
     public static void syncConfig(Context context, String backend, String apiKey, String model) {
-        syncConfig(context, backend, apiKey, null, null, model);
+        syncConfig(context, backend, apiKey, null, null, model, null);
     }
 
     public static void syncConfig(Context context, String backend, String apiKey, String geminiKey, String groqKey, String model) {
@@ -430,7 +481,7 @@ public class IrisFloatingCopilot {
         cardBgDrawable.setStroke(dpToPx(1.5f), Color.parseColor("#5500F2FF"));
         layout.setBackground(cardBgDrawable);
 
-        // Top Drag Handle Bar (Makes entire top area draggable)
+        // Top Drag Handle Bar
         LinearLayout dragHandleContainer = new LinearLayout(service);
         dragHandleContainer.setOrientation(LinearLayout.VERTICAL);
         dragHandleContainer.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -446,7 +497,7 @@ public class IrisFloatingCopilot {
         dragHandleContainer.addView(dragPill, dragLp);
         layout.addView(dragHandleContainer);
 
-        // Header Row (Also Draggable)
+        // Header Row (Draggable)
         LinearLayout header = new LinearLayout(service);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -454,12 +505,12 @@ public class IrisFloatingCopilot {
         cardTitle = new TextView(service);
         cardTitle.setText("◈ IRIS COPILOT");
         cardTitle.setTextColor(Color.parseColor("#00F2FF"));
-        cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+        cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
         cardTitle.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         header.addView(cardTitle, titleLp);
 
-        // Mode Badge Pill (CHAT / BROWSER / EMAIL / GENERAL)
+        // Mode Badge Pill
         modeBadgeView = new TextView(service);
         modeBadgeView.setText("GENERAL");
         modeBadgeView.setTextColor(Color.BLACK);
@@ -473,13 +524,25 @@ public class IrisFloatingCopilot {
         modeBadgeView.setBackground(modeBg);
         header.addView(modeBadgeView);
 
+        // Multi-Screen Deep Scan Button
+        TextView deepScanBtn = new TextView(service);
+        deepScanBtn.setText("📜");
+        deepScanBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        deepScanBtn.setPadding(dpToPx(7), dpToPx(4), dpToPx(4), dpToPx(4));
+        deepScanBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            performDeepScan();
+        });
+        header.addView(deepScanBtn);
+
         // Refresh / Rescan button
         TextView refreshBtn = new TextView(service);
         refreshBtn.setText("🔄");
-        refreshBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        refreshBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(6), dpToPx(4));
+        refreshBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        refreshBtn.setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4));
         refreshBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            deepScanBuffer.clear();
             refreshContext();
             Toast.makeText(service, "Screen context resynced", Toast.LENGTH_SHORT).show();
         });
@@ -489,8 +552,8 @@ public class IrisFloatingCopilot {
         TextView closeBtn = new TextView(service);
         closeBtn.setText("✕");
         closeBtn.setTextColor(Color.parseColor("#88FFFFFF"));
-        closeBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        closeBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(4), dpToPx(4));
+        closeBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f);
+        closeBtn.setPadding(dpToPx(5), dpToPx(4), dpToPx(4), dpToPx(4));
         closeBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             hideCard();
@@ -498,7 +561,7 @@ public class IrisFloatingCopilot {
         header.addView(closeBtn);
         layout.addView(header);
 
-        // Attach Drag Listener to both Drag Handle and Header
+        // Attach Drag Listener
         View.OnTouchListener cardDragListener = new View.OnTouchListener() {
             private int initialX, initialY;
             private float initialTouchX, initialTouchY;
@@ -527,7 +590,7 @@ public class IrisFloatingCopilot {
         dragHandleContainer.setOnTouchListener(cardDragListener);
         cardTitle.setOnTouchListener(cardDragListener);
 
-        // Context Subheader (Tap to expand/collapse live context preview)
+        // Context Subheader
         cardSubTitle = new TextView(service);
         cardSubTitle.setText("Analyzing active screen...");
         cardSubTitle.setTextColor(Color.parseColor("#88FFFFFF"));
@@ -561,7 +624,7 @@ public class IrisFloatingCopilot {
         prevLp.setMargins(0, 0, 0, dpToPx(6));
         layout.addView(contextPreviewView, prevLp);
 
-        // Smart Detected Entities Bar (OTPs, URLs, Emails, Phones)
+        // Smart Detected Entities + Clipboard Bar
         entitiesScroll = new HorizontalScrollView(service);
         entitiesScroll.setHorizontalScrollBarEnabled(false);
         entitiesScroll.setVisibility(View.GONE);
@@ -571,7 +634,7 @@ public class IrisFloatingCopilot {
         entitiesScroll.addView(entitiesBar);
         layout.addView(entitiesScroll);
 
-        // Active Draft Instant Tools Bar (Shown only when user has typed a draft in the app)
+        // Active Draft Instant Tools Bar
         draftToolsScroll = new HorizontalScrollView(service);
         draftToolsScroll.setHorizontalScrollBarEnabled(false);
         draftToolsScroll.setVisibility(View.GONE);
@@ -590,11 +653,93 @@ public class IrisFloatingCopilot {
         actionsScroll.setHorizontalScrollBarEnabled(false);
         quickActionsBar = new LinearLayout(service);
         quickActionsBar.setOrientation(LinearLayout.HORIZONTAL);
-
         actionsScroll.addView(quickActionsBar);
         layout.addView(actionsScroll);
 
-        // Ask / Compose Input Area (Hidden by default)
+        // Smart Reply & Answer Length + Tone Filter Strip
+        replyFilterLayout = new LinearLayout(service);
+        replyFilterLayout.setOrientation(LinearLayout.VERTICAL);
+        replyFilterLayout.setPadding(0, dpToPx(6), 0, 0);
+        replyFilterLayout.setVisibility(View.GONE);
+
+        // Row 1: Length / Depth Selector (AUTO, SHORT, MEDIUM, DETAILED)
+        HorizontalScrollView lengthScroll = new HorizontalScrollView(service);
+        lengthScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout lengthRow = new LinearLayout(service);
+        lengthRow.setOrientation(LinearLayout.HORIZONTAL);
+        lengthRow.setPadding(0, 0, 0, dpToPx(4));
+        String[][] lengths = new String[][]{
+                {"AUTO", "✨ AUTO DEPTH"},
+                {"SHORT", "⚡ SHORT"},
+                {"MEDIUM", "⚖️ MEDIUM"},
+                {"DETAILED", "📝 DETAILED / LONG"}
+        };
+        replyLengthChipViews.clear();
+        for (String[] l : lengths) {
+            final String lKey = l[0];
+            TextView chip = new TextView(service);
+            chip.setText(l[1]);
+            chip.setTag(lKey);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+            chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+            chip.setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, 0, dpToPx(5), 0);
+            chip.setLayoutParams(lp);
+            chip.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                replyLength = lKey;
+                refreshReplyFilterChips();
+                executeAction(lastActiveAction);
+            });
+            replyLengthChipViews.add(chip);
+            lengthRow.addView(chip);
+        }
+        lengthScroll.addView(lengthRow);
+        replyFilterLayout.addView(lengthScroll);
+
+        // Row 2: Smart Reply Tone & Stance Selector (AUTO, POLITE, CASUAL, PRO, WITTY, YES, NO, LATER)
+        HorizontalScrollView replyToneScroll = new HorizontalScrollView(service);
+        replyToneScroll.setHorizontalScrollBarEnabled(false);
+        replyToneRow = new LinearLayout(service);
+        replyToneRow.setOrientation(LinearLayout.HORIZONTAL);
+        String[][] rTones = new String[][]{
+                {"AUTO", "✨ 3-STYLE MIX"},
+                {"POLITE", "👔 POLITE"},
+                {"CASUAL", "😎 CASUAL"},
+                {"PRO", "💼 PRO"},
+                {"WITTY", "🔥 WITTY"},
+                {"YES", "👍 YES / AGREE"},
+                {"NO", "✋ NO / DECLINE"},
+                {"LATER", "⏳ BUSY / LATER"}
+        };
+        replyToneChipViews.clear();
+        for (String[] rt : rTones) {
+            final String rtKey = rt[0];
+            TextView chip = new TextView(service);
+            chip.setText(rt[1]);
+            chip.setTag(rtKey);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+            chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+            chip.setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, 0, dpToPx(5), 0);
+            chip.setLayoutParams(lp);
+            chip.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                replyTone = rtKey;
+                refreshReplyFilterChips();
+                executeAction("REPLY");
+            });
+            replyToneChipViews.add(chip);
+            replyToneRow.addView(chip);
+        }
+        replyToneScroll.addView(replyToneRow);
+        replyFilterLayout.addView(replyToneScroll);
+        refreshReplyFilterChips();
+        layout.addView(replyFilterLayout);
+
+        // Ask / Compose Input Area
         askLayout = new LinearLayout(service);
         askLayout.setOrientation(LinearLayout.VERTICAL);
         askLayout.setPadding(0, dpToPx(8), 0, 0);
@@ -604,17 +749,17 @@ public class IrisFloatingCopilot {
         toneBar = new LinearLayout(service);
         toneBar.setOrientation(LinearLayout.HORIZONTAL);
         toneBar.setPadding(0, 0, 0, dpToPx(6));
-        String[] tones = new String[]{"AUTO", "PRO", "CASUAL", "SHORT", "WITTY"};
+        String[] tones = new String[]{"AUTO", "PRO", "CASUAL", "POLITE", "SHORT", "DETAILED"};
         toneChipViews.clear();
         for (String t : tones) {
             TextView chip = new TextView(service);
             chip.setText(t);
             chip.setTag(t);
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
             chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            chip.setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3));
+            chip.setPadding(dpToPx(7), dpToPx(3), dpToPx(7), dpToPx(3));
             LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            chipLp.setMargins(0, 0, dpToPx(5), 0);
+            chipLp.setMargins(0, 0, dpToPx(4), 0);
             chip.setLayoutParams(chipLp);
             chip.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
@@ -629,6 +774,7 @@ public class IrisFloatingCopilot {
 
         LinearLayout inputRow = new LinearLayout(service);
         inputRow.setOrientation(LinearLayout.HORIZONTAL);
+        inputRow.setGravity(Gravity.CENTER_VERTICAL);
 
         customQuestionInput = new EditText(service);
         customQuestionInput.setHint("Ask about this screen...");
@@ -640,6 +786,17 @@ public class IrisFloatingCopilot {
         customQuestionInput.setSingleLine(true);
         LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         inputRow.addView(customQuestionInput, editLp);
+
+        // Voice Compose / Voice Ask Mic Button
+        voiceMicBtn = new TextView(service);
+        voiceMicBtn.setText("🎙️");
+        voiceMicBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        voiceMicBtn.setPadding(dpToPx(8), dpToPx(5), dpToPx(8), dpToPx(5));
+        voiceMicBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            toggleVoiceComposeRecognition();
+        });
+        inputRow.addView(voiceMicBtn);
 
         askSendBtn = new Button(service);
         askSendBtn.setText("ASK");
@@ -673,7 +830,7 @@ public class IrisFloatingCopilot {
         loadingIndicator.setVisibility(View.GONE);
         layout.addView(loadingIndicator);
 
-        // Results Container (Bounded height so card stays compact & scrollable)
+        // Results Container
         ScrollView resultsScroll = new ScrollView(service);
         resultsScroll.setVerticalScrollBarEnabled(true);
         resultsContainer = new LinearLayout(service);
@@ -729,10 +886,12 @@ public class IrisFloatingCopilot {
             quickActionsBar.addView(createActionPill("✨ REWRITE", false, v -> executeAction("REWRITE")));
             quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
             quickActionsBar.addView(createActionPill("📌 EXTRACT", false, v -> executeAction("EXTRACT")));
+            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
             quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
         } else if ("BROWSER".equals(mode)) {
             quickActionsBar.addView(createActionPill("📝 TL;DR SUMMARY", true, v -> executeAction("SUMMARIZE")));
-            quickActionsBar.addView(createActionPill("📌 EXTRACT DATA", true, v -> executeAction("EXTRACT")));
+            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", true, v -> executeAction("FACT_CHECK")));
+            quickActionsBar.addView(createActionPill("📌 EXTRACT DATA", false, v -> executeAction("EXTRACT")));
             quickActionsBar.addView(createActionPill("🔍 EXPLAIN", false, v -> executeAction("EXPLAIN")));
             quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
             quickActionsBar.addView(createActionPill("✍️ COMPOSE", false, v -> openInputMode("COMPOSE")));
@@ -750,6 +909,7 @@ public class IrisFloatingCopilot {
             quickActionsBar.addView(createActionPill("✍️ COMPOSE", true, v -> openInputMode("COMPOSE")));
             quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
             quickActionsBar.addView(createActionPill("📌 EXTRACT", false, v -> executeAction("EXTRACT")));
+            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
             quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
             quickActionsBar.addView(createActionPill("✨ REWRITE", false, v -> executeAction("REWRITE")));
             quickActionsBar.addView(createActionPill("🔍 EXPLAIN", false, v -> executeAction("EXPLAIN")));
@@ -820,6 +980,93 @@ public class IrisFloatingCopilot {
         }
     }
 
+    private void refreshReplyFilterChips() {
+        for (TextView chip : replyLengthChipViews) {
+            boolean active = replyLength.equals(chip.getTag());
+            GradientDrawable chipBg = new GradientDrawable();
+            chipBg.setShape(GradientDrawable.RECTANGLE);
+            chipBg.setCornerRadius(dpToPx(8));
+            chipBg.setColor(active ? Color.parseColor("#3300F2FF") : Color.parseColor("#11FFFFFF"));
+            chipBg.setStroke(dpToPx(1), active ? Color.parseColor("#00F2FF") : Color.parseColor("#33FFFFFF"));
+            chip.setBackground(chipBg);
+            chip.setTextColor(active ? Color.parseColor("#00F2FF") : Color.parseColor("#99FFFFFF"));
+        }
+        for (TextView chip : replyToneChipViews) {
+            boolean active = replyTone.equals(chip.getTag());
+            GradientDrawable chipBg = new GradientDrawable();
+            chipBg.setShape(GradientDrawable.RECTANGLE);
+            chipBg.setCornerRadius(dpToPx(8));
+            chipBg.setColor(active ? Color.parseColor("#3310B981") : Color.parseColor("#11FFFFFF"));
+            chipBg.setStroke(dpToPx(1), active ? Color.parseColor("#10B981") : Color.parseColor("#33FFFFFF"));
+            chip.setBackground(chipBg);
+            chip.setTextColor(active ? Color.parseColor("#A7F3D0") : Color.parseColor("#99FFFFFF"));
+        }
+    }
+
+    private void toggleVoiceComposeRecognition() {
+        try {
+            if (isVoiceListening && speechRecognizer != null) {
+                speechRecognizer.stopListening();
+                isVoiceListening = false;
+                if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
+                return;
+            }
+            if (!SpeechRecognizer.isRecognitionAvailable(service)) {
+                Toast.makeText(service, "Voice recognition not available on this device", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (speechRecognizer == null) {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(service);
+                speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                    @Override public void onReadyForSpeech(Bundle params) {}
+                    @Override public void onBeginningOfSpeech() {}
+                    @Override public void onRmsChanged(float rmsdB) {}
+                    @Override public void onBufferReceived(byte[] buffer) {}
+                    @Override public void onEndOfSpeech() {
+                        isVoiceListening = false;
+                        if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
+                    }
+                    @Override public void onError(int error) {
+                        isVoiceListening = false;
+                        if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
+                    }
+                    @Override
+                    public void onResults(Bundle results) {
+                        isVoiceListening = false;
+                        if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
+                        ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                        if (matches != null && !matches.isEmpty()) {
+                            String spoken = matches.get(0).trim();
+                            if (!spoken.isEmpty() && customQuestionInput != null) {
+                                customQuestionInput.setText(spoken);
+                                hideSoftKeyboard();
+                                restoreNotFocusable();
+                                if ("COMPOSE".equals(inputMode)) {
+                                    executeAction("COMPOSE:" + composeTone + ":" + spoken);
+                                } else {
+                                    executeAction("ASK:" + spoken);
+                                }
+                            }
+                        }
+                    }
+                    @Override public void onPartialResults(Bundle partialResults) {}
+                    @Override public void onEvent(int eventType, Bundle params) {}
+                });
+            }
+            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            isVoiceListening = true;
+            if (voiceMicBtn != null) voiceMicBtn.setText("🔴");
+            Toast.makeText(service, "Listening... speak your prompt", Toast.LENGTH_SHORT).show();
+            speechRecognizer.startListening(intent);
+        } catch (Exception e) {
+            isVoiceListening = false;
+            if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
+            Toast.makeText(service, "Voice input unavailable", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void openInputMode(String mode) {
         if (askLayout == null || customQuestionInput == null) return;
         boolean sameMode = mode.equals(inputMode);
@@ -836,7 +1083,7 @@ public class IrisFloatingCopilot {
         boolean isCompose = "COMPOSE".equals(mode);
         if (toneBar != null) toneBar.setVisibility(isCompose ? View.VISIBLE : View.GONE);
         if (askSendBtn != null) askSendBtn.setText(isCompose ? "DRAFT" : "ASK");
-        customQuestionInput.setHint(isCompose ? "What to write? (e.g. tell boss 15m late)" : "Ask about this screen or follow up...");
+        customQuestionInput.setHint(isCompose ? "Type or tap 🎙️ (e.g. tell boss 15m late)" : "Ask about screen or tap 🎙️...");
         customQuestionInput.setText("");
 
         askLayout.setVisibility(View.VISIBLE);
@@ -930,6 +1177,7 @@ public class IrisFloatingCopilot {
         hideSoftKeyboard();
         restoreNotFocusable();
         if (askLayout != null) askLayout.setVisibility(View.GONE);
+        if (replyFilterLayout != null) replyFilterLayout.setVisibility(View.GONE);
         if (contextPreviewView != null) contextPreviewView.setVisibility(View.GONE);
         if (isCardAttached && cardView != null) {
             try {
@@ -945,6 +1193,10 @@ public class IrisFloatingCopilot {
     private void cleanup() {
         hideCard();
         hidePill();
+        if (speechRecognizer != null) {
+            try { speechRecognizer.destroy(); } catch (Exception ignored) {}
+            speechRecognizer = null;
+        }
         executor.shutdownNow();
     }
 
@@ -974,6 +1226,7 @@ public class IrisFloatingCopilot {
         public String selectedText = "";
         public AccessibilityNodeInfo inputNode = null;
         public AccessibilityNodeInfo sendNode = null;
+        public AccessibilityNodeInfo scrollableNode = null;
         public boolean hasInput = false;
         public Map<String, String> entities = new LinkedHashMap<>();
     }
@@ -1013,9 +1266,10 @@ public class IrisFloatingCopilot {
         List<AccessibilityNodeInfo> focusedHolder = new ArrayList<>();
         List<AccessibilityNodeInfo> editableHolder = new ArrayList<>();
         List<AccessibilityNodeInfo> sendHolder = new ArrayList<>();
+        List<AccessibilityNodeInfo> scrollHolder = new ArrayList<>();
         List<String> selectedHolder = new ArrayList<>();
 
-        traverseTree(root, spatialNodes, focusedHolder, editableHolder, sendHolder, selectedHolder);
+        traverseTree(root, spatialNodes, focusedHolder, editableHolder, sendHolder, scrollHolder, selectedHolder);
 
         if (!focusedHolder.isEmpty()) {
             data.inputNode = focusedHolder.get(0);
@@ -1028,6 +1282,9 @@ public class IrisFloatingCopilot {
         if (!sendHolder.isEmpty()) {
             data.sendNode = sendHolder.get(0);
         }
+        if (!scrollHolder.isEmpty()) {
+            data.scrollableNode = scrollHolder.get(0);
+        }
 
         if (!selectedHolder.isEmpty()) {
             data.selectedText = selectedHolder.get(0);
@@ -1038,7 +1295,6 @@ public class IrisFloatingCopilot {
             data.currentDraft = cs != null ? cs.toString().trim() : "";
         }
 
-        // Sort nodes spatially top-to-bottom, left-to-right
         Collections.sort(spatialNodes);
         DisplayMetrics dm = service.getResources().getDisplayMetrics();
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : 1080;
@@ -1048,7 +1304,7 @@ public class IrisFloatingCopilot {
         for (SpatialNode sn : spatialNodes) {
             String rawText = sn.text;
             if (!data.currentDraft.isEmpty() && rawText.equals(data.currentDraft)) {
-                continue; // Don't duplicate the user's input box draft as a chat bubble
+                continue;
             }
             fullRawForEntities.append(rawText).append(" ");
 
@@ -1071,7 +1327,32 @@ public class IrisFloatingCopilot {
         return data;
     }
 
+    private void performDeepScan() {
+        ScreenContextData firstPass = extractScreenContext();
+        deepScanBuffer.addAll(firstPass.texts);
+
+        if (firstPass.scrollableNode != null) {
+            Toast.makeText(service, "📜 Deep scanning multi-screen content...", Toast.LENGTH_SHORT).show();
+            firstPass.scrollableNode.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);
+            mainHandler.postDelayed(() -> {
+                ScreenContextData secondPass = extractScreenContext();
+                deepScanBuffer.addAll(secondPass.texts);
+                refreshContext();
+                Toast.makeText(service, "📜 Stitched " + deepScanBuffer.size() + " screen nodes!", Toast.LENGTH_SHORT).show();
+            }, 550);
+        } else {
+            refreshContext();
+            Toast.makeText(service, "📜 Buffered " + deepScanBuffer.size() + " screen nodes", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void extractEntities(String corpus, Map<String, String> out) {
+        if (clipboardTrigger && !latestExternalClipboard.isEmpty()) {
+            String preview = latestExternalClipboard.length() > 22
+                    ? latestExternalClipboard.substring(0, 22) + "…"
+                    : latestExternalClipboard;
+            out.put("📋 CLIP: " + preview, "__CLIPBOARD__:" + latestExternalClipboard);
+        }
         if (corpus == null || corpus.isEmpty()) return;
 
         Matcher otpM = OTP_PATTERN.matcher(corpus);
@@ -1081,20 +1362,20 @@ public class IrisFloatingCopilot {
         }
 
         Matcher urlM = URL_PATTERN.matcher(corpus);
-        while (urlM.find() && out.size() < 5) {
+        while (urlM.find() && out.size() < 6) {
             String url = urlM.group();
-            String shortUrl = url.length() > 26 ? url.substring(0, 26) + "…" : url;
+            String shortUrl = url.length() > 24 ? url.substring(0, 24) + "…" : url;
             out.put("🔗 " + shortUrl, url);
         }
 
         Matcher emailM = EMAIL_PATTERN.matcher(corpus);
-        while (emailM.find() && out.size() < 5) {
+        while (emailM.find() && out.size() < 6) {
             String email = emailM.group();
             out.put("📧 " + email, email);
         }
 
         Matcher phoneM = PHONE_PATTERN.matcher(corpus);
-        while (phoneM.find() && out.size() < 5) {
+        while (phoneM.find() && out.size() < 6) {
             String phone = phoneM.group().trim();
             if (phone.replaceAll("\\D", "").length() >= 8) {
                 out.put("📞 " + phone, phone);
@@ -1108,6 +1389,7 @@ public class IrisFloatingCopilot {
             List<AccessibilityNodeInfo> focusedHolder,
             List<AccessibilityNodeInfo> editableHolder,
             List<AccessibilityNodeInfo> sendHolder,
+            List<AccessibilityNodeInfo> scrollHolder,
             List<String> selectedHolder
     ) {
         if (node == null || !node.isVisibleToUser()) return;
@@ -1125,7 +1407,10 @@ public class IrisFloatingCopilot {
             }
         }
 
-        // Detect Send Button in chat/messaging apps
+        if (node.isScrollable() && scrollHolder.isEmpty() && bounds.height() > dpToPx(180)) {
+            scrollHolder.add(node);
+        }
+
         if (node.isClickable() && sendHolder.isEmpty()) {
             CharSequence cd = node.getContentDescription();
             String viewId = node.getViewIdResourceName();
@@ -1158,7 +1443,7 @@ public class IrisFloatingCopilot {
         }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            traverseTree(node.getChild(i), spatialNodes, focusedHolder, editableHolder, sendHolder, selectedHolder);
+            traverseTree(node.getChild(i), spatialNodes, focusedHolder, editableHolder, sendHolder, scrollHolder, selectedHolder);
         }
     }
 
@@ -1186,44 +1471,58 @@ public class IrisFloatingCopilot {
             modeBadgeView.setText(data.screenMode);
         }
 
-        int textCount = data.texts.size();
-        String sub = textCount + " nodes";
+        List<String> combinedTexts = new ArrayList<>();
+        if (!deepScanBuffer.isEmpty()) {
+            combinedTexts.addAll(deepScanBuffer);
+            for (String t : data.texts) {
+                if (!combinedTexts.contains(t)) combinedTexts.add(t);
+            }
+        } else {
+            combinedTexts.addAll(data.texts);
+        }
+
+        int textCount = combinedTexts.size();
+        String sub = (!deepScanBuffer.isEmpty() ? "📜 " + textCount + " stitched nodes" : textCount + " nodes");
         if (data.hasInput) {
             sub += " • Draft (" + (data.currentDraft.isEmpty() ? "empty" : data.currentDraft.length() + "c") + ")";
         }
-        sub += " • Tap to inspect ▾";
+        sub += " • Inspect ▾";
         cardSubTitle.setText(sub);
 
-        // Show or hide Draft Instant Tools Bar
         if (draftToolsScroll != null) {
             draftToolsScroll.setVisibility(data.hasInput && !data.currentDraft.isEmpty() ? View.VISIBLE : View.GONE);
         }
 
-        // Populate Smart Entities Bar
         if (entitiesBar != null && entitiesScroll != null) {
             entitiesBar.removeAllViews();
             if (!data.entities.isEmpty()) {
                 for (Map.Entry<String, String> entry : data.entities.entrySet()) {
                     TextView chip = new TextView(service);
                     chip.setText(entry.getKey());
-                    chip.setTextColor(Color.parseColor("#A7F3D0"));
+                    final String val = entry.getValue();
+                    boolean isClip = val.startsWith("__CLIPBOARD__:");
+                    chip.setTextColor(Color.parseColor(isClip ? "#7DD3FC" : "#A7F3D0"));
                     chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
                     chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
                     chip.setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3));
                     GradientDrawable eb = new GradientDrawable();
                     eb.setShape(GradientDrawable.RECTANGLE);
                     eb.setCornerRadius(dpToPx(8));
-                    eb.setColor(Color.parseColor("#2210B981"));
-                    eb.setStroke(dpToPx(1), Color.parseColor("#6610B981"));
+                    eb.setColor(Color.parseColor(isClip ? "#220284C7" : "#2210B981"));
+                    eb.setStroke(dpToPx(1), Color.parseColor(isClip ? "#6638BDF8" : "#6610B981"));
                     chip.setBackground(eb);
                     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                     lp.setMargins(0, 0, dpToPx(5), 0);
                     chip.setLayoutParams(lp);
-                    final String valToCopy = entry.getValue();
                     chip.setOnClickListener(v -> {
                         v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                        copyToClipboard(valToCopy);
-                        Toast.makeText(service, "Copied: " + valToCopy, Toast.LENGTH_SHORT).show();
+                        if (isClip) {
+                            String clipContent = val.substring("__CLIPBOARD__:".length());
+                            executeAction("CLIPBOARD_AI:" + clipContent);
+                        } else {
+                            copyToClipboard(val);
+                            Toast.makeText(service, "Copied: " + val, Toast.LENGTH_SHORT).show();
+                        }
                     });
                     entitiesBar.addView(chip);
                 }
@@ -1242,15 +1541,15 @@ public class IrisFloatingCopilot {
             sb.append("Current Draft in Input Box: \"").append(data.currentDraft).append("\"\n");
         }
         sb.append("Screen Content (ordered top-to-bottom):\n");
-        int start = Math.max(0, data.texts.size() - 32);
+        int start = Math.max(0, combinedTexts.size() - 45);
         StringBuilder previewSb = new StringBuilder();
         if (data.hasInput && !data.currentDraft.isEmpty()) {
             previewSb.append("DRAFT: ").append(data.currentDraft).append("\n---\n");
         }
-        for (int i = start; i < data.texts.size(); i++) {
-            String line = data.texts.get(i);
+        for (int i = start; i < combinedTexts.size(); i++) {
+            String line = combinedTexts.get(i);
             sb.append("- ").append(line).append("\n");
-            if (i >= Math.max(0, data.texts.size() - 8)) {
+            if (i >= Math.max(0, combinedTexts.size() - 8)) {
                 previewSb.append(line).append("\n");
             }
         }
@@ -1261,43 +1560,152 @@ public class IrisFloatingCopilot {
         resultsContainer.removeAllViews();
     }
 
+    private String getPersonalStyleDirective() {
+        if ("CASUAL_LOWER".equalsIgnoreCase(userStyle)) {
+            return " User Personal Style: casual, relaxed lowercase texting without formal punctuation.";
+        }
+        if ("EXECUTIVE_PRO".equalsIgnoreCase(userStyle)) {
+            return " User Personal Style: polished, articulate, executive professional.";
+        }
+        if ("DIRECT".equalsIgnoreCase(userStyle)) {
+            return " User Personal Style: ultra-concise, direct, zero fluff.";
+        }
+        return "";
+    }
+
+    private String getLengthDirective() {
+        if ("SHORT".equalsIgnoreCase(replyLength)) {
+            return " Length Requirement: SHORT & BRIEF (1 short sentence or a few words).";
+        }
+        if ("MEDIUM".equalsIgnoreCase(replyLength)) {
+            return " Length Requirement: MEDIUM (1 to 2 balanced, natural sentences).";
+        }
+        if ("DETAILED".equalsIgnoreCase(replyLength)) {
+            return " Length Requirement: DETAILED & LONG (thorough, complete, well-explained 2 to 4 sentences).";
+        }
+        return "";
+    }
+
+    private String fetchWikipediaFacts(String queryText) {
+        try {
+            String cleaned = queryText.replaceAll("[^a-zA-Z0-9\\s]", " ").trim();
+            String[] words = cleaned.split("\\s+");
+            StringBuilder qSb = new StringBuilder();
+            for (int i = Math.max(0, words.length - 8); i < words.length; i++) {
+                if (words[i].length() > 2) qSb.append(words[i]).append(" ");
+            }
+            String q = qSb.toString().trim();
+            if (q.isEmpty()) return "";
+            String urlStr = "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch="
+                    + URLEncoder.encode(q, "UTF-8") + "&utf8=&format=json";
+            HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+            conn.setConnectTimeout(3500);
+            conn.setReadTimeout(3500);
+            if (conn.getResponseCode() == 200) {
+                JSONObject json = new JSONObject(readStream(conn.getInputStream()));
+                JSONObject queryObj = json.optJSONObject("query");
+                JSONArray searchArr = queryObj != null ? queryObj.optJSONArray("search") : null;
+                if (searchArr != null && searchArr.length() > 0) {
+                    StringBuilder facts = new StringBuilder("\n[Live Web Encyclopedia Reference]:\n");
+                    for (int i = 0; i < Math.min(2, searchArr.length()); i++) {
+                        JSONObject item = searchArr.getJSONObject(i);
+                        String title = item.optString("title", "");
+                        String snippet = item.optString("snippet", "").replaceAll("<[^>]*>", "");
+                        facts.append("- ").append(title).append(": ").append(snippet).append("\n");
+                    }
+                    return facts.toString();
+                }
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
     private void executeAction(String action) {
         loadingIndicator.setVisibility(View.VISIBLE);
         resultsContainer.removeAllViews();
 
+        // Show Length + Tone Filter Bar for Smart Reply, Summarize, Explain, Extract, Fact Check
+        boolean showFilters = "REPLY".equals(action) || "SUMMARIZE".equals(action)
+                || "EXPLAIN".equals(action) || "EXTRACT".equals(action) || "FACT_CHECK".equals(action);
+        if (replyFilterLayout != null) {
+            replyFilterLayout.setVisibility(showFilters ? View.VISIBLE : View.GONE);
+        }
+        if (replyToneRow != null) {
+            replyToneRow.setVisibility("REPLY".equals(action) ? View.VISIBLE : View.GONE);
+        }
+        if (showFilters) {
+            lastActiveAction = action;
+        }
+
         executor.execute(() -> {
             try {
-                String systemPrompt = "You are Iris Copilot, a sharp cybernetic AI assistant analyzing an Android app screen. Respond directly, concisely, and naturally without filler words.";
+                String styleDir = getPersonalStyleDirective();
+                String lenDir = getLengthDirective();
+                String systemPrompt = "You are Iris Copilot, a sharp cybernetic AI assistant analyzing an Android app screen. Respond directly, concisely, and naturally without filler words." + styleDir + lenDir;
                 String userPrompt = "";
 
                 if ("REPLY".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Based on the screen conversation ([THEM] = incoming messages from the other person, [YOU] = messages sent by the user), generate 3 highly context-relevant, natural, concise smart replies for [YOU] to send next. Return ONLY a JSON array of 3 strings: [\"reply1\", \"reply2\", \"reply3\"]. No markdown wrapper, no filler.";
+                    String toneInstr;
+                    if ("AUTO".equals(replyTone) && "AUTO".equals(replyLength)) {
+                        toneInstr = "Generate 3 distinct replies covering 3 styles in this exact order: "
+                                + "1) Short & Casual (quick 1-liner), "
+                                + "2) Polite & Balanced (warm and courteous), "
+                                + "3) Detailed & Complete (thorough, thoughtful response).";
+                    } else {
+                        String tDesc = "POLITE".equals(replyTone) ? "warm, polite, and courteous"
+                                : "CASUAL".equals(replyTone) ? "casual, friendly, and relaxed"
+                                : "PRO".equals(replyTone) ? "polished and professional"
+                                : "WITTY".equals(replyTone) ? "clever, witty, and engaging"
+                                : "YES".equals(replyTone) ? "agreeing / saying YES positively"
+                                : "NO".equals(replyTone) ? "politely declining / saying NO"
+                                : "LATER".equals(replyTone) ? "saying you are busy right now and will follow up later"
+                                : "natural and context-appropriate";
+                        toneInstr = "Generate 3 smart replies all matching this tone/stance: " + tDesc + "." + lenDir;
+                    }
+                    systemPrompt = "You are Iris Copilot. Based on the screen conversation ([THEM] = incoming messages, [YOU] = user's messages), "
+                            + toneInstr + styleDir
+                            + " Return ONLY a JSON array of 3 strings: [\"reply1\", \"reply2\", \"reply3\"]. No markdown wrapper, no filler.";
                     userPrompt = lastExtractedContext + "\nGenerate 3 smart replies for the user to send next:";
                 } else if ("SUMMARIZE".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Summarize the key information visible on this screen into 3 crisp, high-signal bullet points. Format with markdown bullets (- ).";
+                    String depth = "SHORT".equals(replyLength) ? "Summarize into a ultra-short 2-line TL;DR."
+                            : "DETAILED".equals(replyLength) ? "Provide a comprehensive, detailed summary with key takeaways and context."
+                            : "Summarize the key information into 3 crisp, high-signal bullet points (- ).";
+                    systemPrompt = "You are Iris Copilot. " + depth;
                     userPrompt = lastExtractedContext + "\nSummarize this screen:";
                 } else if ("EXTRACT".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Extract all key actionable items, dates/times, tasks, prices, specs, or important facts visible on this screen into a clean, structured bulleted list (- ). Be concise and specific.";
+                    systemPrompt = "You are Iris Copilot. Extract all key actionable items, dates/times, tasks, prices, specs, or important facts visible on this screen into a clean, structured bulleted list (- )." + lenDir;
                     userPrompt = lastExtractedContext + "\nExtract key actionable items and facts from this screen:";
+                } else if ("FACT_CHECK".equals(action)) {
+                    String wikiContext = fetchWikipediaFacts(lastExtractedContext);
+                    systemPrompt = "You are Iris Copilot Fact-Checker. Verify the main claims, topics, or entities visible on this screen using the provided Live Web Encyclopedia Reference and your knowledge. Point out what is accurate, any context needed, and key facts." + lenDir;
+                    userPrompt = lastExtractedContext + wikiContext + "\nFact-check and explain the key claims/topics on this screen:";
+                } else if (action.startsWith("CLIPBOARD_AI:")) {
+                    String clipText = action.substring("CLIPBOARD_AI:".length());
+                    systemPrompt = "You are Iris Copilot. The user copied this text to their clipboard. Provide: 1) A quick summary/explanation or translation if foreign, and 2) 2 smart replies or improved rewrites for it. Return a JSON array of 3 strings: [\"Insight / Translation: ...\", \"Reply/Rewrite 1\", \"Reply/Rewrite 2\"].";
+                    userPrompt = "Copied Clipboard Text: \"" + clipText + "\"\nScreen Context:\n" + lastExtractedContext;
                 } else if ("TRANSLATE".equals(action)) {
                     systemPrompt = "You are Iris Copilot, a real-time translator. 1) Translate the visible foreign messages/text on screen into clear English. 2) If it's a chat, also provide 2 natural replies in the other person's language (with English translation in parentheses).";
                     userPrompt = lastExtractedContext + "\nTranslate the screen content and suggest translated replies if applicable:";
                 } else if ("REWRITE".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Take the user's current draft (or the last message if no draft) and generate 3 improved alternatives: 1. Polished & Professional, 2. Casual & Friendly, 3. Short & Direct. Return ONLY a JSON array of 3 strings: [\"version1\", \"version2\", \"version3\"].";
+                    systemPrompt = "You are Iris Copilot. Take the user's current draft (or the last message if no draft) and generate 3 improved alternatives: 1. Short & Casual, 2. Polite & Professional, 3. Detailed & Articulate. Return ONLY a JSON array of 3 strings: [\"version1\", \"version2\", \"version3\"].";
                     userPrompt = lastExtractedContext + "\nRewrite this draft:";
                 } else if ("DRAFT_FIX".equals(action) || "DRAFT_POLITE".equals(action) || "DRAFT_SHORT".equals(action) || "DRAFT_EXPAND".equals(action)) {
                     String goal = "DRAFT_FIX".equals(action) ? "Fix all grammar, spelling, and punctuation while keeping the natural tone"
                             : "DRAFT_POLITE".equals(action) ? "Make it warm, polite, and diplomatic"
                             : "DRAFT_SHORT".equals(action) ? "Make it ultra-short, punchy, and direct"
-                            : "Expand it with clear, well-structured detail";
+                            : "Expand it into a detailed, well-structured message";
                     systemPrompt = "You are Iris Copilot. Transform the user's current draft according to this goal: " + goal + ". Return ONLY a JSON array of 2 strings with the best transformed versions: [\"option1\", \"option2\"].";
                     userPrompt = lastExtractedContext + "\nTransform the user's current draft:";
                 } else if (action.startsWith("REFINE_SHORT:")) {
                     String orig = action.substring("REFINE_SHORT:".length());
                     systemPrompt = "You are Iris Copilot. Rewrite the given message in 2 shorter, punchier variations. Return ONLY a JSON array of 2 strings: [\"short1\", \"short2\"].";
                     userPrompt = "Original message: \"" + orig + "\"\nMake it shorter and punchier:";
+                } else if (action.startsWith("REFINE_DETAIL:")) {
+                    String orig = action.substring("REFINE_DETAIL:".length());
+                    systemPrompt = "You are Iris Copilot. Expand the given message into 2 more detailed, polite, and complete variations. Return ONLY a JSON array of 2 strings: [\"detailed1\", \"detailed2\"].";
+                    userPrompt = "Original message: \"" + orig + "\"\nMake it more detailed and complete:";
                 } else if ("EXPLAIN".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Explain the core concept, error, message, or content visible on this screen in simple, direct, clear terms in 2-3 sentences.";
+                    systemPrompt = "You are Iris Copilot. Explain the core concept, error, message, or content visible on this screen in clear terms." + lenDir;
                     userPrompt = lastExtractedContext + "\nExplain what is on this screen:";
                 } else if (action.startsWith("COMPOSE:")) {
                     String rest = action.substring("COMPOSE:".length());
@@ -1306,10 +1714,11 @@ public class IrisFloatingCopilot {
                     String instruction = colonIdx > 0 ? rest.substring(colonIdx + 1) : rest;
                     String toneDesc = "PRO".equals(tone) ? "polished and professional"
                             : "CASUAL".equals(tone) ? "warm, casual, and friendly"
-                            : "SHORT".equals(tone) ? "concise and direct"
-                            : "WITTY".equals(tone) ? "clever, witty, and engaging"
-                            : "natural and fitting for the app";
-                    systemPrompt = "You are Iris Copilot, a sharp message composer. Based on the user's instruction, target tone (" + toneDesc + "), and active app/screen context, generate 3 ready-to-send message drafts. Return ONLY a JSON array of 3 strings: [\"draft1\", \"draft2\", \"draft3\"]. No markdown wrapper, no filler.";
+                            : "POLITE".equals(tone) ? "courteous, polite, and respectful"
+                            : "SHORT".equals(tone) ? "short, concise, and direct (1 sentence)"
+                            : "DETAILED".equals(tone) ? "detailed, thorough, and complete (2-4 sentences)"
+                            : "natural and fitting for the app (provide 1 short, 1 polite medium, and 1 detailed option)";
+                    systemPrompt = "You are Iris Copilot, a sharp message composer. Based on the user's instruction, target style (" + toneDesc + "), and active app/screen context, generate 3 ready-to-send message drafts." + styleDir + " Return ONLY a JSON array of 3 strings: [\"draft1\", \"draft2\", \"draft3\"]. No markdown wrapper, no filler.";
                     userPrompt = lastExtractedContext + "\nCompose a message for this instruction: " + instruction;
                 } else if (action.startsWith("ASK:")) {
                     String question = action.substring("ASK:".length());
@@ -1343,7 +1752,6 @@ public class IrisFloatingCopilot {
         String raw = text.trim();
         List<String> items = new ArrayList<>();
 
-        // 1. Try JSON Array parsing
         try {
             int openBracket = raw.indexOf('[');
             int closeBracket = raw.lastIndexOf(']');
@@ -1357,9 +1765,9 @@ public class IrisFloatingCopilot {
             }
         } catch (Exception ignored) {}
 
-        // 2. If JSON parsing found nothing, try line-by-line bullet or numbered list for suggestion actions
         boolean expectsSuggestions = "REPLY".equals(action) || "REWRITE".equals(action)
-                || action.startsWith("COMPOSE:") || action.startsWith("DRAFT_") || action.startsWith("REFINE_");
+                || action.startsWith("COMPOSE:") || action.startsWith("DRAFT_")
+                || action.startsWith("REFINE_") || action.startsWith("CLIPBOARD_AI:");
         if (items.isEmpty() && (expectsSuggestions || raw.contains("\n1."))) {
             String[] lines = raw.split("\n");
             for (String line : lines) {
@@ -1372,17 +1780,39 @@ public class IrisFloatingCopilot {
             }
         }
 
-        // 3. Render items
         if (!items.isEmpty()) {
-            for (String item : items) {
-                addSuggestionCard(item);
+            String[] autoBadges = new String[]{"⚡ SHORT & CASUAL", "👔 POLITE & BALANCED", "📝 DETAILED & COMPLETE"};
+            for (int i = 0; i < items.size(); i++) {
+                String badgeLabel;
+                if ("REPLY".equals(action) && "AUTO".equals(replyTone) && "AUTO".equals(replyLength) && i < autoBadges.length) {
+                    badgeLabel = autoBadges[i];
+                } else if ("REWRITE".equals(action) && i < autoBadges.length) {
+                    badgeLabel = autoBadges[i];
+                } else if ("REPLY".equals(action)) {
+                    badgeLabel = replyTone + " • " + replyLength;
+                } else if (action.startsWith("COMPOSE:")) {
+                    badgeLabel = "DRAFT #" + (i + 1) + " • " + composeTone;
+                } else {
+                    badgeLabel = "OPTION #" + (i + 1);
+                }
+                addSuggestionCard(items.get(i), badgeLabel);
             }
         } else {
             addTextCard(raw);
         }
     }
 
-    private void addSuggestionCard(String suggestion) {
+    private void saveToIrisItemQueue(String key, String content, String label) {
+        try {
+            SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            JSONArray arr = new JSONArray(prefs.getString(key, "[]"));
+            arr.put(content);
+            prefs.edit().putString(key, arr.toString()).apply();
+            Toast.makeText(service, "✓ Saved to IRIS " + label, Toast.LENGTH_SHORT).show();
+        } catch (Exception ignored) {}
+    }
+
+    private void addSuggestionCard(String suggestion, String styleBadge) {
         LinearLayout card = new LinearLayout(service);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8));
@@ -1393,6 +1823,16 @@ public class IrisFloatingCopilot {
         bg.setColor(Color.parseColor("#1C00F2FF"));
         bg.setStroke(dpToPx(1), Color.parseColor("#3300F2FF"));
         card.setBackground(bg);
+
+        if (styleBadge != null && !styleBadge.isEmpty()) {
+            TextView badgeTv = new TextView(service);
+            badgeTv.setText(styleBadge);
+            badgeTv.setTextColor(Color.parseColor("#8800F2FF"));
+            badgeTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 7.5f);
+            badgeTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+            badgeTv.setPadding(0, 0, 0, dpToPx(3));
+            card.addView(badgeTv);
+        }
 
         TextView tv = new TextView(service);
         tv.setText(suggestion);
@@ -1405,25 +1845,38 @@ public class IrisFloatingCopilot {
         btnRow.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         btnRow.setPadding(0, dpToPx(6), 0, 0);
 
-        // 1-Tap Shorten/Refine button
-        TextView refineBtn = new TextView(service);
-        refineBtn.setText("SHORTEN ↻");
-        refineBtn.setTextColor(Color.parseColor("#99FFFFFF"));
-        refineBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
-        refineBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        refineBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
-        refineBtn.setOnClickListener(v -> {
+        // Shorten button
+        TextView shortenBtn = new TextView(service);
+        shortenBtn.setText("SHORT ✂️");
+        shortenBtn.setTextColor(Color.parseColor("#99FFFFFF"));
+        shortenBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        shortenBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        shortenBtn.setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4));
+        shortenBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             executeAction("REFINE_SHORT:" + suggestion);
         });
-        btnRow.addView(refineBtn);
+        btnRow.addView(shortenBtn);
+
+        // Expand / Detail button
+        TextView detailBtn = new TextView(service);
+        detailBtn.setText("DETAIL ➕");
+        detailBtn.setTextColor(Color.parseColor("#99FFFFFF"));
+        detailBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        detailBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        detailBtn.setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4));
+        detailBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            executeAction("REFINE_DETAIL:" + suggestion);
+        });
+        btnRow.addView(detailBtn);
 
         TextView copyBtn = new TextView(service);
         copyBtn.setText("COPY");
         copyBtn.setTextColor(Color.parseColor("#8800F2FF"));
         copyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
         copyBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        copyBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        copyBtn.setPadding(dpToPx(7), dpToPx(4), dpToPx(7), dpToPx(4));
         copyBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             copyToClipboard(suggestion);
@@ -1436,7 +1889,7 @@ public class IrisFloatingCopilot {
         injectBtn.setTextColor(Color.BLACK);
         injectBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
         injectBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        injectBtn.setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4));
+        injectBtn.setPadding(dpToPx(9), dpToPx(4), dpToPx(9), dpToPx(4));
 
         GradientDrawable btnBg = new GradientDrawable();
         btnBg.setShape(GradientDrawable.RECTANGLE);
@@ -1452,14 +1905,13 @@ public class IrisFloatingCopilot {
         });
         btnRow.addView(injectBtn);
 
-        // If Send Button detected on screen, offer 1-Tap SEND ➤
         if (lastSendButtonNode != null) {
             TextView sendNowBtn = new TextView(service);
             sendNowBtn.setText("SEND ➤");
             sendNowBtn.setTextColor(Color.BLACK);
             sendNowBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
             sendNowBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            sendNowBtn.setPadding(dpToPx(9), dpToPx(4), dpToPx(9), dpToPx(4));
+            sendNowBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
 
             GradientDrawable sendBg = new GradientDrawable();
             sendBg.setShape(GradientDrawable.RECTANGLE);
@@ -1468,7 +1920,7 @@ public class IrisFloatingCopilot {
             sendNowBtn.setBackground(sendBg);
 
             LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            sendLp.setMargins(dpToPx(5), 0, 0, 0);
+            sendLp.setMargins(dpToPx(4), 0, 0, 0);
             sendNowBtn.setLayoutParams(sendLp);
 
             sendNowBtn.setOnClickListener(v -> {
@@ -1514,15 +1966,41 @@ public class IrisFloatingCopilot {
 
         LinearLayout btnRow = new LinearLayout(service);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setGravity(Gravity.END);
+        btnRow.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         btnRow.setPadding(0, dpToPx(6), 0, 0);
+
+        // 1-Tap Save to IRIS Tasks
+        TextView saveTaskBtn = new TextView(service);
+        saveTaskBtn.setText("➕ TASK");
+        saveTaskBtn.setTextColor(Color.parseColor("#A7F3D0"));
+        saveTaskBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        saveTaskBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        saveTaskBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
+        saveTaskBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            saveToIrisItemQueue("copilot_saved_tasks", content, "Tasks");
+        });
+        btnRow.addView(saveTaskBtn);
+
+        // 1-Tap Save to IRIS Notes
+        TextView saveNoteBtn = new TextView(service);
+        saveNoteBtn.setText("📝 NOTE");
+        saveNoteBtn.setTextColor(Color.parseColor("#FDE68A"));
+        saveNoteBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+        saveNoteBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        saveNoteBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
+        saveNoteBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            saveToIrisItemQueue("copilot_saved_notes", content, "Notes");
+        });
+        btnRow.addView(saveNoteBtn);
 
         TextView followUpBtn = new TextView(service);
         followUpBtn.setText("FOLLOW UP 💬");
         followUpBtn.setTextColor(Color.parseColor("#AAFFFFFF"));
-        followUpBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+        followUpBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
         followUpBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        followUpBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        followUpBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
         followUpBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             openInputMode("ASK");
@@ -1534,7 +2012,7 @@ public class IrisFloatingCopilot {
         copyBtn.setTextColor(Color.parseColor("#8800F2FF"));
         copyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
         copyBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        copyBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        copyBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
         copyBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             copyToClipboard(content);
@@ -1547,7 +2025,7 @@ public class IrisFloatingCopilot {
         insertBtn.setTextColor(Color.parseColor("#00F2FF"));
         insertBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
         insertBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        insertBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        insertBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
         insertBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             boolean success = injectText(content);
@@ -1608,7 +2086,7 @@ public class IrisFloatingCopilot {
 
     public boolean injectText(String text) {
         if (text == null) return false;
-        copyToClipboard(text); // Always copy to clipboard as safe baseline
+        copyToClipboard(text);
 
         AccessibilityNodeInfo target = lastTargetInputNode;
         if (target == null || !target.refresh() || !target.isEditable()) {
@@ -1618,7 +2096,7 @@ public class IrisFloatingCopilot {
                 if (target == null || !target.isEditable()) {
                     List<AccessibilityNodeInfo> fHolder = new ArrayList<>();
                     List<AccessibilityNodeInfo> eHolder = new ArrayList<>();
-                    traverseTree(root, new ArrayList<>(), fHolder, eHolder, new ArrayList<>(), new ArrayList<>());
+                    traverseTree(root, new ArrayList<>(), fHolder, eHolder, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
                     if (!fHolder.isEmpty()) target = fHolder.get(0);
                     else if (!eHolder.isEmpty()) target = eHolder.get(0);
                 }
@@ -1630,7 +2108,6 @@ public class IrisFloatingCopilot {
             args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
             boolean ok = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
             if (!ok) {
-                // Fallback to accessibility paste action
                 ok = target.performAction(AccessibilityNodeInfo.ACTION_PASTE);
             }
             return ok;
@@ -1640,6 +2117,7 @@ public class IrisFloatingCopilot {
 
     private void copyToClipboard(String text) {
         try {
+            lastInternalClipboard = text != null ? text.trim() : "";
             ClipboardManager cm = (ClipboardManager) service.getSystemService(Context.CLIPBOARD_SERVICE);
             if (cm != null) {
                 ClipData clip = ClipData.newPlainText("IRIS Copilot", text);
@@ -1656,7 +2134,6 @@ public class IrisFloatingCopilot {
         String groqKey = prefs.getString(KEY_GROQ_KEY, "");
         String model = prefs.getString(KEY_MODEL, "gemini-2.5-flash");
 
-        // Dynamic key fallback
         String effectiveKey = apiKey;
         if ("GROQ".equalsIgnoreCase(backend)) {
             if (!groqKey.isEmpty()) effectiveKey = groqKey;
