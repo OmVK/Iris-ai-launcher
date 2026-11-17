@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { SecureStorage } from '../utils/secureStorage'
 import { getLS } from '../utils/storage'
 import { syncAIConfig } from '../components/LauncherPlugin'
+import { fetchLiveGeminiModels, fetchLiveGroqModels } from '../utils/modelResolver'
 
 const DEPRECATED_GEMINI_MODELS = new Set(['gemini-1.0-pro', 'gemini-pro', 'gemini-1.5-flash', 'gemini-1.5-pro'])
 
@@ -40,6 +41,22 @@ export const useAIStore = create((set, get) => ({
     const cartesiaKey = await SecureStorage.getItem('cartesia_api_key') || localStorage.getItem('cartesia_api_key') || ''
     set({ geminiKey, groqKey, cartesiaKey, _keysLoaded: true })
     syncToNative(get().llmBackend, geminiKey, groqKey, get().geminiModel, get().groqModel)
+
+    // Automatically sync live models & purge discontinued models in the background
+    if (geminiKey) {
+      fetchLiveGeminiModels(geminiKey).then((list) => {
+        if (Array.isArray(list) && list.length > 0 && !list.includes(get().geminiModel)) {
+          get().setGeminiModel(list[0])
+        }
+      }).catch(() => {})
+    }
+    if (groqKey) {
+      fetchLiveGroqModels(groqKey).then((list) => {
+        if (Array.isArray(list) && list.length > 0 && !list.includes(get().groqModel)) {
+          get().setGroqModel(list[0])
+        }
+      }).catch(() => {})
+    }
   },
 
   setLlmBackend: (v) => {
@@ -53,6 +70,13 @@ export const useAIStore = create((set, get) => ({
       SecureStorage.setItem('gemini_api_key', v)
       set({ geminiKey: v })
       syncToNative(get().llmBackend, v, get().groqKey, get().geminiModel, get().groqModel)
+      if (v && v.trim()) {
+        fetchLiveGeminiModels(v).then((list) => {
+          if (Array.isArray(list) && list.length > 0 && !list.includes(get().geminiModel)) {
+            get().setGeminiModel(list[0])
+          }
+        }).catch(() => {})
+      }
     } catch {
       set({ geminiKey: prev })
     }
@@ -63,6 +87,13 @@ export const useAIStore = create((set, get) => ({
       SecureStorage.setItem('groq_api_key', v)
       set({ groqKey: v })
       syncToNative(get().llmBackend, get().geminiKey, v, get().geminiModel, get().groqModel)
+      if (v && v.trim()) {
+        fetchLiveGroqModels(v).then((list) => {
+          if (Array.isArray(list) && list.length > 0 && !list.includes(get().groqModel)) {
+            get().setGroqModel(list[0])
+          }
+        }).catch(() => {})
+      }
     } catch {
       set({ groqKey: prev })
     }

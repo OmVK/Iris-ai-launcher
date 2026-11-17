@@ -17,7 +17,6 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
   const [groqModels, setGroqModels] = useState(() => getCachedGroqModels())
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
-  const [customModelInput, setCustomModelInput] = useState('')
 
   useEffect(() => {
     GenAI.checkAvailability().then(({ available, deviceInfo }) => {
@@ -44,7 +43,7 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
         }
       }
       if (showFeedback) {
-        setSyncMsg('LIVE MODELS SYNCED!')
+        setSyncMsg('AUTO-SYNCED!')
         setTimeout(() => setSyncMsg(''), 2500)
       }
     } finally {
@@ -57,21 +56,6 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
       syncLiveModels(false)
     }
   }, [geminiKey, groqKey, syncLiveModels])
-
-  const handleApplyCustomModel = () => {
-    const clean = customModelInput.trim()
-    if (!clean) return
-    if (llmBackend === 'GROQ') {
-      setGroqModel(clean)
-      if (!groqModels.includes(clean)) setGroqModels([clean, ...groqModels])
-    } else {
-      setGeminiModel(clean)
-      if (!geminiModels.includes(clean)) setGeminiModels([clean, ...geminiModels])
-    }
-    setCustomModelInput('')
-    setSyncMsg(`SET: ${clean}`)
-    setTimeout(() => setSyncMsg(''), 2500)
-  }
 
   return (
     <SettingsSection
@@ -131,7 +115,7 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
               disabled={syncing}
               className="px-2 py-0.5 rounded bg-primary-fixed-dim/15 border border-primary-fixed-dim/40 text-primary-fixed-dim font-mono-data text-[8px] font-bold active:scale-95"
             >
-              {syncing ? 'SYNCING...' : syncMsg || '🔄 SYNC LIVE MODELS'}
+              {syncing ? 'SYNCING...' : syncMsg || '🔄 AUTO-SYNCED'}
             </button>
           </div>
 
@@ -157,24 +141,8 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
             })}
           </div>
 
-          <div className="flex items-center gap-1.5 pt-1">
-            <input
-              type="text"
-              value={customModelInput}
-              onChange={(e) => setCustomModelInput(e.target.value)}
-              placeholder={`Or enter any ${llmBackend} model ID...`}
-              className="flex-1 bg-black/40 border border-outline-variant/30 rounded px-2.5 py-1.5 text-[10px] text-primary-fixed-dim focus:outline-none focus:border-primary-fixed-dim font-mono-data"
-            />
-            <button
-              type="button"
-              onClick={handleApplyCustomModel}
-              className="px-3 py-1.5 rounded bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim text-[9px] font-mono-data font-bold active:scale-95 shrink-0"
-            >
-              USE ID
-            </button>
-          </div>
           <p className="text-[7px] text-on-surface-variant/40 font-mono-data">
-            Self-healing enabled: If a model is retired by the provider, IRIS automatically switches to the newest active model.
+            100% Automatic: Discontinued models are automatically removed and replaced with the latest available model system-wide.
           </p>
         </div>
       )}
