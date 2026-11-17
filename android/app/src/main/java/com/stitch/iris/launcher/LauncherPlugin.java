@@ -2157,8 +2157,9 @@ public class LauncherPlugin extends Plugin {
         String geminiKey = call.getString("geminiKey", "");
         String groqKey = call.getString("groqKey", "");
         String model = call.getString("model", "gemini-2.5-flash");
+        String groqModel = call.getString("groqModel", "llama-3.3-70b-versatile");
 
-        IrisFloatingCopilot.syncConfig(getContext(), backend, apiKey, geminiKey, groqKey, model);
+        IrisFloatingCopilot.syncConfig(getContext(), backend, apiKey, geminiKey, groqKey, model, groqModel);
         JSObject ret = new JSObject();
         ret.put("success", true);
         call.resolve(ret);

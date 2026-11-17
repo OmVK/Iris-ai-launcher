@@ -72,6 +72,7 @@ public class IrisFloatingCopilot {
     private static final String KEY_GEMINI_KEY = "copilot_gemini_key";
     private static final String KEY_GROQ_KEY = "copilot_groq_key";
     private static final String KEY_MODEL = "copilot_model";
+    private static final String KEY_GROQ_MODEL = "copilot_groq_model";
 
     private static final Pattern OTP_PATTERN = Pattern.compile("(?i)(?:otp|code|pin|verification|passcode|auth)[^0-9]{0,20}\\b(\\d{4,8})\\b|\\b(\\d{4,8})\\b[^0-9]{0,20}(?:is your|verification|otp|code)");
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s\"<>()]+");
@@ -308,6 +309,10 @@ public class IrisFloatingCopilot {
     }
 
     public static void syncConfig(Context context, String backend, String apiKey, String geminiKey, String groqKey, String model) {
+        syncConfig(context, backend, apiKey, geminiKey, groqKey, model, null);
+    }
+
+    public static void syncConfig(Context context, String backend, String apiKey, String geminiKey, String groqKey, String model, String groqModel) {
         if (context == null) return;
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
@@ -315,7 +320,8 @@ public class IrisFloatingCopilot {
         if (apiKey != null && !apiKey.isEmpty()) editor.putString(KEY_API_KEY, apiKey);
         if (geminiKey != null && !geminiKey.isEmpty()) editor.putString(KEY_GEMINI_KEY, geminiKey);
         if (groqKey != null && !groqKey.isEmpty()) editor.putString(KEY_GROQ_KEY, groqKey);
-        if (model != null) editor.putString(KEY_MODEL, model);
+        if (model != null && !model.isEmpty()) editor.putString(KEY_MODEL, model);
+        if (groqModel != null && !groqModel.isEmpty()) editor.putString(KEY_GROQ_MODEL, groqModel);
         editor.apply();
     }
 
@@ -1665,76 +1671,178 @@ public class IrisFloatingCopilot {
         }
 
         if ("GROQ".equalsIgnoreCase(backend)) {
-            URL url = new URL("https://api.groq.com/openai/v1/chat/completions");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Authorization", "Bearer " + effectiveKey.trim());
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(14000);
-            conn.setDoOutput(true);
-
-            JSONObject body = new JSONObject();
-            body.put("model", "llama-3.3-70b-versatile");
-            JSONArray messages = new JSONArray();
-            messages.put(new JSONObject().put("role", "system").put("content", systemPrompt));
-            messages.put(new JSONObject().put("role", "user").put("content", userPrompt));
-            body.put("messages", messages);
-            body.put("max_tokens", 800);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(body.toString().getBytes("UTF-8"));
-            }
-
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                String resp = readStream(conn.getInputStream());
-                JSONObject json = new JSONObject(resp);
-                return json.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
-            } else {
-                throw new Exception("Groq HTTP " + code + ": " + readStream(conn.getErrorStream()));
+            String groqModel = prefs.getString(KEY_GROQ_MODEL, "llama-3.3-70b-versatile");
+            try {
+                return callGroqDirect(effectiveKey.trim(), groqModel, systemPrompt, userPrompt);
+            } catch (Exception firstErr) {
+                String fallback = discoverActiveGroqModel(effectiveKey.trim(), groqModel);
+                if (fallback != null && !fallback.equals(groqModel)) {
+                    prefs.edit().putString(KEY_GROQ_MODEL, fallback).apply();
+                    return callGroqDirect(effectiveKey.trim(), fallback, systemPrompt, userPrompt);
+                }
+                throw firstErr;
             }
         } else {
-            // Default Gemini
             String cleanModel = model != null && !model.isEmpty() ? model : "gemini-2.5-flash";
-            URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models/" + cleanModel + ":generateContent");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("x-goog-api-key", effectiveKey.trim());
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(14000);
-            conn.setDoOutput(true);
-
-            JSONObject body = new JSONObject();
-            JSONArray contents = new JSONArray();
-            contents.put(new JSONObject().put("role", "user").put("parts", new JSONArray().put(new JSONObject().put("text", userPrompt))));
-            body.put("contents", contents);
-            body.put("systemInstruction", new JSONObject().put("parts", new JSONArray().put(new JSONObject().put("text", systemPrompt))));
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(body.toString().getBytes("UTF-8"));
-            }
-
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                String resp = readStream(conn.getInputStream());
-                JSONObject json = new JSONObject(resp);
-                JSONArray candidates = json.optJSONArray("candidates");
-                if (candidates != null && candidates.length() > 0) {
-                    JSONObject contentObj = candidates.getJSONObject(0).optJSONObject("content");
-                    if (contentObj != null) {
-                        JSONArray parts = contentObj.optJSONArray("parts");
-                        if (parts != null && parts.length() > 0) {
-                            return parts.getJSONObject(0).optString("text", "");
-                        }
-                    }
+            try {
+                return callGeminiDirect(effectiveKey.trim(), cleanModel, systemPrompt, userPrompt);
+            } catch (Exception firstErr) {
+                String fallback = discoverActiveGeminiModel(effectiveKey.trim(), cleanModel);
+                if (fallback != null && !fallback.equals(cleanModel)) {
+                    prefs.edit().putString(KEY_MODEL, fallback).apply();
+                    return callGeminiDirect(effectiveKey.trim(), fallback, systemPrompt, userPrompt);
                 }
-                return "";
-            } else {
-                throw new Exception("Gemini HTTP " + code + ": " + readStream(conn.getErrorStream()));
+                throw firstErr;
             }
         }
+    }
+
+    private String callGroqDirect(String apiKey, String modelId, String systemPrompt, String userPrompt) throws Exception {
+        URL url = new URL("https://api.groq.com/openai/v1/chat/completions");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(14000);
+        conn.setDoOutput(true);
+
+        JSONObject body = new JSONObject();
+        body.put("model", modelId);
+        JSONArray messages = new JSONArray();
+        messages.put(new JSONObject().put("role", "system").put("content", systemPrompt));
+        messages.put(new JSONObject().put("role", "user").put("content", userPrompt));
+        body.put("messages", messages);
+        body.put("max_tokens", 800);
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.toString().getBytes("UTF-8"));
+        }
+
+        int code = conn.getResponseCode();
+        if (code == 200) {
+            String resp = readStream(conn.getInputStream());
+            JSONObject json = new JSONObject(resp);
+            return json.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
+        } else {
+            throw new Exception("Groq HTTP " + code + ": " + readStream(conn.getErrorStream()));
+        }
+    }
+
+    private String callGeminiDirect(String apiKey, String modelId, String systemPrompt, String userPrompt) throws Exception {
+        URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models/" + modelId + ":generateContent");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setRequestProperty("x-goog-api-key", apiKey);
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(14000);
+        conn.setDoOutput(true);
+
+        JSONObject body = new JSONObject();
+        JSONArray contents = new JSONArray();
+        contents.put(new JSONObject().put("role", "user").put("parts", new JSONArray().put(new JSONObject().put("text", userPrompt))));
+        body.put("contents", contents);
+        body.put("systemInstruction", new JSONObject().put("parts", new JSONArray().put(new JSONObject().put("text", systemPrompt))));
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.toString().getBytes("UTF-8"));
+        }
+
+        int code = conn.getResponseCode();
+        if (code == 200) {
+            String resp = readStream(conn.getInputStream());
+            JSONObject json = new JSONObject(resp);
+            JSONArray candidates = json.optJSONArray("candidates");
+            if (candidates != null && candidates.length() > 0) {
+                JSONObject contentObj = candidates.getJSONObject(0).optJSONObject("content");
+                if (contentObj != null) {
+                    JSONArray parts = contentObj.optJSONArray("parts");
+                    if (parts != null && parts.length() > 0) {
+                        return parts.getJSONObject(0).optString("text", "");
+                    }
+                }
+            }
+            return "";
+        } else {
+            throw new Exception("Gemini HTTP " + code + ": " + readStream(conn.getErrorStream()));
+        }
+    }
+
+    private String discoverActiveGeminiModel(String apiKey, String failedModel) {
+        try {
+            URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("x-goog-api-key", apiKey);
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(6000);
+            if (conn.getResponseCode() == 200) {
+                JSONObject json = new JSONObject(readStream(conn.getInputStream()));
+                JSONArray models = json.optJSONArray("models");
+                if (models != null) {
+                    String bestFlash = null;
+                    String bestAny = null;
+                    for (int i = 0; i < models.length(); i++) {
+                        JSONObject m = models.getJSONObject(i);
+                        String rawName = m.optString("name", "").replace("models/", "");
+                        JSONArray methods = m.optJSONArray("supportedGenerationMethods");
+                        boolean supportsGen = false;
+                        if (methods != null) {
+                            for (int j = 0; j < methods.length(); j++) {
+                                if ("generateContent".equals(methods.getString(j))) {
+                                    supportsGen = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!supportsGen || rawName.equals(failedModel) || rawName.contains("embedding")
+                                || rawName.contains("imagen") || rawName.contains("tts") || rawName.contains("1.0")) {
+                            continue;
+                        }
+                        if (rawName.equals("gemini-2.5-flash")) return rawName;
+                        if (rawName.contains("flash") && bestFlash == null) bestFlash = rawName;
+                        if (bestAny == null) bestAny = rawName;
+                    }
+                    return bestFlash != null ? bestFlash : bestAny;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private String discoverActiveGroqModel(String apiKey, String failedModel) {
+        try {
+            URL url = new URL("https://api.groq.com/openai/v1/models");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(6000);
+            if (conn.getResponseCode() == 200) {
+                JSONObject json = new JSONObject(readStream(conn.getInputStream()));
+                JSONArray data = json.optJSONArray("data");
+                if (data != null) {
+                    String bestVersatile = null;
+                    String bestAny = null;
+                    for (int i = 0; i < data.length(); i++) {
+                        String id = data.getJSONObject(i).optString("id", "");
+                        String lower = id.toLowerCase();
+                        if (id.isEmpty() || id.equals(failedModel) || lower.contains("whisper")
+                                || lower.contains("guard") || lower.contains("tts") || lower.contains("playai")) {
+                            continue;
+                        }
+                        if (id.equals("llama-3.3-70b-versatile")) return id;
+                        if ((lower.contains("versatile") || lower.contains("70b")) && bestVersatile == null) {
+                            bestVersatile = id;
+                        }
+                        if (bestAny == null) bestAny = id;
+                    }
+                    return bestVersatile != null ? bestVersatile : bestAny;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private String readStream(InputStream is) {

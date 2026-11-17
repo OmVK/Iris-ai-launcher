@@ -3,16 +3,28 @@ import { SecureStorage } from '../utils/secureStorage'
 import { getLS } from '../utils/storage'
 import { syncAIConfig } from '../components/LauncherPlugin'
 
-function syncToNative(backend, geminiKey, groqKey, model) {
+const DEPRECATED_GEMINI_MODELS = new Set(['gemini-1.0-pro', 'gemini-pro', 'gemini-1.5-flash', 'gemini-1.5-pro'])
+
+function getInitialGeminiModel() {
+  const saved = getLS('gemini_model', 'gemini-2.5-flash')
+  if (!saved || DEPRECATED_GEMINI_MODELS.has(saved)) {
+    try { localStorage.setItem('gemini_model', 'gemini-2.5-flash') } catch {}
+    return 'gemini-2.5-flash'
+  }
+  return saved
+}
+
+function syncToNative(backend, geminiKey, groqKey, model, groqModel) {
   const key = backend === 'GROQ' ? groqKey : geminiKey
-  syncAIConfig(backend, key, model, geminiKey, groqKey).catch(() => {})
+  syncAIConfig(backend, key, model, geminiKey, groqKey, groqModel).catch(() => {})
 }
 
 export const useAIStore = create((set, get) => ({
   llmBackend: getLS('system_llm_backend', 'GEMINI'),
   geminiKey: '',
   groqKey: '',
-  geminiModel: getLS('gemini_model', 'gemini-2.5-flash'),
+  geminiModel: getInitialGeminiModel(),
+  groqModel: getLS('groq_model', 'llama-3.3-70b-versatile'),
   voiceEnabled: getLS('iris_voice_enabled', 'true') !== 'false',
   voicePitch: (() => { try { const v = parseFloat(getLS('iris_voice_pitch', '1.0')); return isNaN(v) ? 1.0 : v } catch { return 1.0 } })(),
   voiceRate: (() => { try { const v = parseFloat(getLS('iris_voice_rate', '0.96')); return isNaN(v) ? 0.96 : v } catch { return 0.96 } })(),
@@ -27,20 +39,20 @@ export const useAIStore = create((set, get) => ({
     const groqKey = await SecureStorage.getItem('groq_api_key') || ''
     const cartesiaKey = await SecureStorage.getItem('cartesia_api_key') || localStorage.getItem('cartesia_api_key') || ''
     set({ geminiKey, groqKey, cartesiaKey, _keysLoaded: true })
-    syncToNative(get().llmBackend, geminiKey, groqKey, get().geminiModel)
+    syncToNative(get().llmBackend, geminiKey, groqKey, get().geminiModel, get().groqModel)
   },
 
   setLlmBackend: (v) => {
     localStorage.setItem('system_llm_backend', v)
     set({ llmBackend: v })
-    syncToNative(v, get().geminiKey, get().groqKey, get().geminiModel)
+    syncToNative(v, get().geminiKey, get().groqKey, get().geminiModel, get().groqModel)
   },
   setGeminiKey: (v) => {
     const prev = get().geminiKey
     try {
       SecureStorage.setItem('gemini_api_key', v)
       set({ geminiKey: v })
-      syncToNative(get().llmBackend, v, get().groqKey, get().geminiModel)
+      syncToNative(get().llmBackend, v, get().groqKey, get().geminiModel, get().groqModel)
     } catch {
       set({ geminiKey: prev })
     }
@@ -50,7 +62,7 @@ export const useAIStore = create((set, get) => ({
     try {
       SecureStorage.setItem('groq_api_key', v)
       set({ groqKey: v })
-      syncToNative(get().llmBackend, get().geminiKey, v, get().geminiModel)
+      syncToNative(get().llmBackend, get().geminiKey, v, get().geminiModel, get().groqModel)
     } catch {
       set({ groqKey: prev })
     }
@@ -65,7 +77,12 @@ export const useAIStore = create((set, get) => ({
   setGeminiModel: (v) => {
     localStorage.setItem('gemini_model', v)
     set({ geminiModel: v })
-    syncToNative(get().llmBackend, get().geminiKey, get().groqKey, v)
+    syncToNative(get().llmBackend, get().geminiKey, get().groqKey, v, get().groqModel)
+  },
+  setGroqModel: (v) => {
+    localStorage.setItem('groq_model', v)
+    set({ groqModel: v })
+    syncToNative(get().llmBackend, get().geminiKey, get().groqKey, get().geminiModel, v)
   },
   setVoiceEnabled: (v) => { localStorage.setItem('iris_voice_enabled', v); set({ voiceEnabled: v }) },
   setVoicePitch: (v) => { localStorage.setItem('iris_voice_pitch', v); set({ voicePitch: v }) },

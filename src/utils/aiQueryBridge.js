@@ -1,4 +1,5 @@
 import { useAIStore } from '../stores/aiStore'
+import { resolveWorkingGeminiModel, resolveWorkingGroqModel } from './modelResolver'
 
 const SEARCH_TRIGGER_PATTERNS = [
   /\b(?:who|what|where|when|why|how|latest|news|today|price|score|current|update|tell me about|explain|search|look up|president|minister|flavor|taste|science)\b/i
@@ -84,7 +85,7 @@ VOICE PERSONALITY GUIDELINES:
 ${searchContext ? `\n${searchContext}` : ''}`
 
   if (activeBackend === 'GEMINI' && geminiKey) {
-    let model = (localStorage.getItem('gemini_model') || 'gemini-2.0-flash').trim().replace(/\s+/g, '-')
+    let model = (localStorage.getItem('gemini_model') || 'gemini-2.5-flash').trim().replace(/\s+/g, '-')
     
     // Build multi-turn contents from history
     const contents = []
@@ -99,14 +100,24 @@ ${searchContext ? `\n${searchContext}` : ''}`
     }
     contents.push({ role: 'user', parts: [{ text: prompt }] })
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-      body: JSON.stringify({
-        contents,
-        systemInstruction: { parts: [{ text: voiceSystemPrompt }] }
+    const doGeminiFetch = (mId) =>
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mId}:streamGenerateContent?alt=sse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+        body: JSON.stringify({
+          contents,
+          systemInstruction: { parts: [{ text: voiceSystemPrompt }] }
+        })
       })
-    })
+
+    let res = await doGeminiFetch(model)
+    if (!res.ok && (res.status === 404 || res.status === 400)) {
+      const fallback = await resolveWorkingGeminiModel(geminiKey, model)
+      if (fallback && fallback !== model) {
+        model = fallback
+        res = await doGeminiFetch(model)
+      }
+    }
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}))
@@ -150,17 +161,28 @@ ${searchContext ? `\n${searchContext}` : ''}`
     }
     messages.push({ role: 'user', content: prompt })
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${groqKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages
+    let groqModel = (localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile').trim().replace(/\s+/g, '-')
+    const doGroqFetch = (mId) =>
+      fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: mId,
+          messages
+        })
       })
-    })
+
+    let res = await doGroqFetch(groqModel)
+    if (!res.ok && (res.status === 400 || res.status === 404)) {
+      const fallback = await resolveWorkingGroqModel(groqKey, groqModel)
+      if (fallback && fallback !== groqModel) {
+        groqModel = fallback
+        res = await doGroqFetch(groqModel)
+      }
+    }
     const data = await res.json()
     if (!res.ok) throw new Error(data?.error?.message || `Groq API error ${res.status}`)
     const text = data?.choices?.[0]?.message?.content || 'I could not process that query.'

@@ -1327,10 +1327,10 @@ export async function isFloatingCopilotEnabled() {
   }
 }
 
-export async function syncAIConfig(backend, apiKey, model, geminiKey, groqKey) {
+export async function syncAIConfig(backend, apiKey, model, geminiKey, groqKey, groqModel) {
   if (!isNative) return { success: true }
   try {
-    return await NativeLauncher.syncAIConfig({ backend, apiKey, model, geminiKey, groqKey })
+    return await NativeLauncher.syncAIConfig({ backend, apiKey, model, geminiKey, groqKey, groqModel })
   } catch (e) {
     return { success: false }
   }

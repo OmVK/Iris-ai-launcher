@@ -1,17 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import SettingsSection from './SettingsSection'
 import { GenAI } from '../../components/GenAIPlugin'
-
-const GEMINI_MODELS = [
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', desc: 'Latest Fast' },
-  { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', desc: 'Advanced Reasoning' },
-  { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', desc: 'Fast + Reasoning' },
-  { id: 'gemini-1.0-pro', label: 'Gemini 1.0 Pro', desc: 'Legacy Fallback' },
-]
+import { useAIStore } from '../../stores/aiStore'
+import {
+  getCachedGeminiModels,
+  getCachedGroqModels,
+  fetchLiveGeminiModels,
+  fetchLiveGroqModels,
+} from '../../utils/modelResolver'
 
 export default function LLMBackendSection({ expandedSections, toggleSection, llmBackend, setLlmBackend, geminiModel, setGeminiModel }) {
+  const { geminiKey, groqKey, groqModel, setGroqModel } = useAIStore()
   const [genAIAvailable, setGenAIAvailable] = useState(null)
   const [genAIDeviceInfo, setGenAIDeviceInfo] = useState('')
+  const [geminiModels, setGeminiModels] = useState(() => getCachedGeminiModels())
+  const [groqModels, setGroqModels] = useState(() => getCachedGroqModels())
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+  const [customModelInput, setCustomModelInput] = useState('')
 
   useEffect(() => {
     GenAI.checkAvailability().then(({ available, deviceInfo }) => {
@@ -20,23 +26,88 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
     })
   }, [])
 
+  const syncLiveModels = useCallback(async (showFeedback = false) => {
+    setSyncing(true)
+    try {
+      if (geminiKey) {
+        const list = await fetchLiveGeminiModels(geminiKey)
+        setGeminiModels(list)
+        if (list.length > 0 && !list.includes(geminiModel)) {
+          setGeminiModel(list[0])
+        }
+      }
+      if (groqKey) {
+        const list = await fetchLiveGroqModels(groqKey)
+        setGroqModels(list)
+        if (list.length > 0 && !list.includes(groqModel)) {
+          setGroqModel(list[0])
+        }
+      }
+      if (showFeedback) {
+        setSyncMsg('LIVE MODELS SYNCED!')
+        setTimeout(() => setSyncMsg(''), 2500)
+      }
+    } finally {
+      setSyncing(false)
+    }
+  }, [geminiKey, groqKey, geminiModel, groqModel, setGeminiModel, setGroqModel])
+
+  useEffect(() => {
+    if (geminiKey || groqKey) {
+      syncLiveModels(false)
+    }
+  }, [geminiKey, groqKey, syncLiveModels])
+
+  const handleApplyCustomModel = () => {
+    const clean = customModelInput.trim()
+    if (!clean) return
+    if (llmBackend === 'GROQ') {
+      setGroqModel(clean)
+      if (!groqModels.includes(clean)) setGroqModels([clean, ...groqModels])
+    } else {
+      setGeminiModel(clean)
+      if (!geminiModels.includes(clean)) setGeminiModels([clean, ...geminiModels])
+    }
+    setCustomModelInput('')
+    setSyncMsg(`SET: ${clean}`)
+    setTimeout(() => setSyncMsg(''), 2500)
+  }
+
   return (
-    <SettingsSection title="SYSTEM-WIDE LLM BACKEND" icon="neurology" sectionKey="llmBackend" expandedSections={expandedSections} toggleSection={toggleSection}
-      badge={<span className="flex h-2 w-2 rounded-full bg-primary-fixed-dim animate-pulse-cyan" />}>
+    <SettingsSection
+      title="SYSTEM-WIDE LLM BACKEND"
+      icon="neurology"
+      sectionKey="llmBackend"
+      expandedSections={expandedSections}
+      toggleSection={toggleSection}
+      badge={<span className="flex h-2 w-2 rounded-full bg-primary-fixed-dim animate-pulse-cyan" />}
+    >
       <div className="grid grid-cols-2 gap-2">
         {[
           { id: 'OLLAMA', label: 'Ollama Engine (Local)', desc: 'Port 11434 LLM Services' },
           { id: 'ONDEVICE', label: 'Gemini Nano (On-Device)', desc: 'Zero-Cloud AI Inference', disabled: genAIAvailable === false },
-          { id: 'GEMINI', label: 'Google Gemini Pro', desc: 'Online Generative Model' },
-          { id: 'GROQ', label: 'Groq Cloud (Online)', desc: 'Ultra-fast Llama-3 API' },
-          { id: 'NVIDIA', label: 'NVIDIA NIM', desc: 'Accelerated Llama 3.1' }
-        ].map(backend => (
-          <button key={backend.id} onClick={() => !backend.disabled && setLlmBackend(backend.id)} disabled={backend.disabled} className={`p-3 rounded-lg border text-left transition-all active:scale-95 flex flex-col justify-between h-18 ${llmBackend === backend.id ? 'bg-primary-fixed-dim/10 border-primary-fixed-dim/40 text-primary-fixed-dim' : backend.disabled ? 'opacity-40 cursor-not-allowed border-outline-variant/10 text-on-surface-variant/30' : 'hover:bg-surface-variant/40 border-outline-variant/20 text-on-surface-variant/70'}`}>
+          { id: 'GEMINI', label: 'Google Gemini', desc: 'Auto-Updated Live Models' },
+          { id: 'GROQ', label: 'Groq Cloud (Online)', desc: 'Ultra-fast LPU Models' },
+          { id: 'NVIDIA', label: 'NVIDIA NIM', desc: 'Accelerated Inference' },
+        ].map((backend) => (
+          <button
+            key={backend.id}
+            onClick={() => !backend.disabled && setLlmBackend(backend.id)}
+            disabled={backend.disabled}
+            className={`p-3 rounded-lg border text-left transition-all active:scale-95 flex flex-col justify-between h-18 ${
+              llmBackend === backend.id
+                ? 'bg-primary-fixed-dim/10 border-primary-fixed-dim/40 text-primary-fixed-dim'
+                : backend.disabled
+                  ? 'opacity-40 cursor-not-allowed border-outline-variant/10 text-on-surface-variant/30'
+                  : 'hover:bg-surface-variant/40 border-outline-variant/20 text-on-surface-variant/70'
+            }`}
+          >
             <span className="font-bold text-[10px] truncate">{backend.label}</span>
             <span className="text-[7.5px] text-on-surface-variant/50 mt-1 uppercase truncate">{backend.desc}</span>
           </button>
         ))}
       </div>
+
       {llmBackend === 'ONDEVICE' && (
         <div className="mt-3 space-y-1.5">
           <div className="p-2.5 bg-[#00f2ff]/5 border border-[#00f2ff]/30 rounded text-[9px] text-[#00f2ff] uppercase leading-relaxed space-y-1">
@@ -47,17 +118,64 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
           </div>
         </div>
       )}
-      {llmBackend === 'GEMINI' && (
-        <div className="mt-3 space-y-1">
-          <p className="text-[8px] text-on-surface-variant/40 uppercase font-mono-data">GEMINI MODEL VARIANT</p>
-          <div className="grid grid-cols-1 gap-1.5">
-            {GEMINI_MODELS.map(m => (
-              <button key={m.id} onClick={() => setGeminiModel(m.id)} className={`px-3 py-2 rounded border text-left transition-all active:scale-95 flex justify-between items-center ${geminiModel === m.id ? 'bg-primary-fixed-dim/10 border-primary-fixed-dim/40 text-primary-fixed-dim' : 'hover:bg-surface-variant/40 border-outline-variant/20 text-on-surface-variant/70'}`}>
-                <span className="font-mono-data text-[9px] font-bold">{m.label}</span>
-                <span className="text-[7px] text-on-surface-variant/40 uppercase">{m.desc}</span>
-              </button>
-            ))}
+
+      {(llmBackend === 'GEMINI' || llmBackend === 'GROQ') && (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[8px] text-on-surface-variant/50 uppercase font-mono-data">
+              {llmBackend === 'GEMINI' ? `ACTIVE GEMINI MODEL (${geminiModel})` : `ACTIVE GROQ MODEL (${groqModel})`}
+            </p>
+            <button
+              type="button"
+              onClick={() => syncLiveModels(true)}
+              disabled={syncing}
+              className="px-2 py-0.5 rounded bg-primary-fixed-dim/15 border border-primary-fixed-dim/40 text-primary-fixed-dim font-mono-data text-[8px] font-bold active:scale-95"
+            >
+              {syncing ? 'SYNCING...' : syncMsg || '🔄 SYNC LIVE MODELS'}
+            </button>
           </div>
+
+          <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto pr-1">
+            {(llmBackend === 'GEMINI' ? geminiModels : groqModels).slice(0, 10).map((mId) => {
+              const isSelected = llmBackend === 'GEMINI' ? geminiModel === mId : groqModel === mId
+              return (
+                <button
+                  key={mId}
+                  onClick={() => (llmBackend === 'GEMINI' ? setGeminiModel(mId) : setGroqModel(mId))}
+                  className={`px-3 py-2 rounded border text-left transition-all active:scale-95 flex justify-between items-center ${
+                    isSelected
+                      ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim/50 text-primary-fixed-dim'
+                      : 'hover:bg-surface-variant/40 border-outline-variant/20 text-on-surface-variant/70'
+                  }`}
+                >
+                  <span className="font-mono-data text-[9px] font-bold truncate">{mId}</span>
+                  <span className="text-[7px] text-on-surface-variant/40 uppercase shrink-0">
+                    {isSelected ? 'ACTIVE' : 'SELECT'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-1.5 pt-1">
+            <input
+              type="text"
+              value={customModelInput}
+              onChange={(e) => setCustomModelInput(e.target.value)}
+              placeholder={`Or enter any ${llmBackend} model ID...`}
+              className="flex-1 bg-black/40 border border-outline-variant/30 rounded px-2.5 py-1.5 text-[10px] text-primary-fixed-dim focus:outline-none focus:border-primary-fixed-dim font-mono-data"
+            />
+            <button
+              type="button"
+              onClick={handleApplyCustomModel}
+              className="px-3 py-1.5 rounded bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim text-[9px] font-mono-data font-bold active:scale-95 shrink-0"
+            >
+              USE ID
+            </button>
+          </div>
+          <p className="text-[7px] text-on-surface-variant/40 font-mono-data">
+            Self-healing enabled: If a model is retired by the provider, IRIS automatically switches to the newest active model.
+          </p>
         </div>
       )}
     </SettingsSection>

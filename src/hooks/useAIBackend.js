@@ -6,6 +6,7 @@ import { SecureStorage } from '../utils/secureStorage'
 import { GenAI } from '../components/GenAIPlugin'
 import { getBackendPriorityChain, getSanitizedOllamaEndpoint } from '../utils/AIProviderManager'
 import { executeDeviceAgentIntent } from '../utils/aiAgentTools'
+import { resolveWorkingGeminiModel, resolveWorkingGroqModel } from '../utils/modelResolver'
 
 const SEARCH_KEYWORDS = [
   'search', 'what is', 'who is', 'how to', 'latest', 'news', 'weather',
@@ -166,20 +167,31 @@ export default function useAIBackend(speakTextFn) {
   }, [setChatLog])
 
   const callGemini = async (prompt, systemInstruction, signal, chatLogRef, apiKey) => {
-    let chosenModel = (localStorage.getItem('gemini_model') || 'gemini-2.0-flash').trim().replace(/\s+/g, '-')
+    let chosenModel = (localStorage.getItem('gemini_model') || 'gemini-2.5-flash').trim().replace(/\s+/g, '-')
     const history = chatLogRef
       .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
       .slice(-20)
       .map(msg => ({ role: msg.type === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }))
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:streamGenerateContent?alt=sse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [...history, { role: 'user', parts: [{ text: prompt }] }],
-        systemInstruction: { parts: [{ text: systemInstruction }] }
-      }),
-      signal
-    })
+
+    const doFetch = (modelId) =>
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          contents: [...history, { role: 'user', parts: [{ text: prompt }] }],
+          systemInstruction: { parts: [{ text: systemInstruction }] }
+        }),
+        signal
+      })
+
+    let res = await doFetch(chosenModel)
+    if (!res.ok && (res.status === 404 || res.status === 400)) {
+      const fallbackModel = await resolveWorkingGeminiModel(apiKey, chosenModel)
+      if (fallbackModel && fallbackModel !== chosenModel) {
+        chosenModel = fallbackModel
+        res = await doFetch(chosenModel)
+      }
+    }
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}))
@@ -189,21 +201,33 @@ export default function useAIBackend(speakTextFn) {
   }
 
   const callGroq = async (prompt, systemInstruction, signal, chatLogRef, apiKey) => {
-    const activeModel = (localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile').trim().replace(/\s+/g, '-')
+    let activeModel = (localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile').trim().replace(/\s+/g, '-')
     const history = chatLogRef
       .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
       .slice(-20)
       .map(msg => ({ role: msg.type === 'user' ? 'user' : 'assistant', content: msg.text }))
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: activeModel,
-        messages: [{ role: "system", content: systemInstruction }, ...history, { role: "user", content: prompt }],
-        stream: true
-      }),
-      signal
-    })
+
+    const doFetch = (modelId) =>
+      fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: "system", content: systemInstruction }, ...history, { role: "user", content: prompt }],
+          stream: true
+        }),
+        signal
+      })
+
+    let res = await doFetch(activeModel)
+    if (!res.ok && (res.status === 400 || res.status === 404)) {
+      const fallbackModel = await resolveWorkingGroqModel(apiKey, activeModel)
+      if (fallbackModel && fallbackModel !== activeModel) {
+        activeModel = fallbackModel
+        res = await doFetch(activeModel)
+      }
+    }
+
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}))
       throw new Error(errData?.error?.message || `HTTP ${res.status}`)
