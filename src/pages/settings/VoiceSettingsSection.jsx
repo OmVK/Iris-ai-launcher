@@ -37,7 +37,11 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
   }
 
   const handleSaveKey = () => {
-    setCartesiaKey(keyInput.trim())
+    const trimmed = keyInput.trim()
+    setCartesiaKey(trimmed)
+    if (trimmed) {
+      setVoiceEngineProvider('CARTESIA')
+    }
     setIsSaved(true)
     HapticFeedback.trigger()
     setTimeout(() => setIsSaved(false), 2500)

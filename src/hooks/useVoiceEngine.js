@@ -134,13 +134,8 @@ export default function useVoiceEngine() {
     const { voiceEngineProvider: currentProvider, cartesiaKey: storeKey } = useAIStore.getState()
     const activeKey = storeKey || await getCartesiaKey()
 
-    // 1. PROVIDER: CARTESIA
-    if (currentProvider === 'CARTESIA') {
-      if (!activeKey) {
-        alert("Cartesia API Key Missing: Please paste & save a Cartesia API Key in Voice Settings.")
-        finishSpeaking()
-        return
-      }
+    // 1. PROVIDER: CARTESIA (gracefully falls back to Native/Web TTS if no key is configured)
+    if (currentProvider === 'CARTESIA' && activeKey) {
       try {
         const ok = await speakCartesia(text, voiceTimbre, activeKey)
         if (ok) {
@@ -149,8 +144,6 @@ export default function useVoiceEngine() {
         }
       } catch (e) {
         console.warn("[IRIS Cartesia Exception]", e)
-        finishSpeaking()
-        return
       }
     }
 

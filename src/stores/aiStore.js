@@ -17,7 +17,7 @@ export const useAIStore = create((set, get) => ({
   voicePitch: (() => { try { const v = parseFloat(getLS('iris_voice_pitch', '1.0')); return isNaN(v) ? 1.0 : v } catch { return 1.0 } })(),
   voiceRate: (() => { try { const v = parseFloat(getLS('iris_voice_rate', '0.96')); return isNaN(v) ? 0.96 : v } catch { return 0.96 } })(),
   voiceTimbre: getLS('iris_voice_timbre', 'natural_female'),
-  voiceEngineProvider: getLS('iris_voice_engine_provider', 'CARTESIA'),
+  voiceEngineProvider: getLS('iris_voice_engine_provider', 'NATIVE'),
   cartesiaKey: '',
   _keysLoaded: false,
 
