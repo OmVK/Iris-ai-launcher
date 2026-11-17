@@ -28,10 +28,21 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.8.0
+- **Version**: 5.9.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
+
+## ⚡ v5.9.0 IRIS Copilot 2.0 (Spatial Chat AI, Length/Tone Selector, Deep Scan) & Self-Healing Live Models
+
+IRIS v5.9.0 delivers a major evolution of the **Floating Copilot** alongside a **100% Automatic Self-Healing AI Model Engine**:
+- **IRIS Copilot 2.0 — Draggable Cybernetic HUD & Spatial Screen Intelligence**:
+  - **Spatial Chat Attribution (`[THEM]` vs. `[YOU]`)**: Reads screen bounds to distinguish incoming vs. outgoing chat bubbles and automatically classifies the active screen mode (`CHAT`, `BROWSER`, `EMAIL`, `GENERAL`).
+  - **Smart Reply Length, Tone & Intent Strip**: Choose **`SHORT` / `MEDIUM` / `DETAILED`** depth and **`AUTO` / `POLITE` / `CASUAL` / `PRO` / `WITTY` / `👍 YES` / `✋ NO` / `⏳ LATER`** stance chips, with labeled 3-style cards (`⚡ SHORT & CASUAL`, `👔 POLITE & BALANCED`, `📝 DETAILED & COMPLETE`) and 1-tap **`SEND ➤`** (injects text and clicks Send).
+  - **Multi-Screen Deep Scan (`📜`) & Live Fact-Check (`🔎`)**: Auto-scrolls and stitches multi-screen threads/articles into a deduplicated buffer, and verifies claims against live Wikipedia search.
+  - **Voice Compose (`🎙️`), Clipboard AI (`📋`), Entity Extractor & Task/Note Bridge**: Speak rough thoughts directly into Compose, trigger AI on copied text, copy extracted OTPs/URLs/emails/phones with 1 tap, and save results straight to IRIS Tasks (`➕ TASK`) or Notes (`📝 NOTE`).
+- **100% Automatic Live Model Sync & Self-Healing Fallback**:
+  - Queries Google Gemini and Groq live `/models` endpoints on startup and key save, automatically purging discontinued models and applying the newest active models system-wide across Chat, Voice, and Floating Copilot with zero manual input.
 
 ## ⚡ v5.8.0 Floating Edge Copilot, Compose Mode, Screen AI & Archive Fixes
 
