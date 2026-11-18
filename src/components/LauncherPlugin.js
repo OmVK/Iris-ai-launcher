@@ -1348,6 +1348,8 @@ export async function getCopilotSettings() {
       autoKeyboard: true,
       onlyWhenTyping: false,
       userStyle: 'NATURAL',
+      personaMode: 'AUTO',
+      userBio: '',
       clipboardTrigger: true,
       serviceRunning: false,
     }
@@ -1355,7 +1357,7 @@ export async function getCopilotSettings() {
   try {
     return await NativeLauncher.getCopilotSettings()
   } catch (e) {
-    return { enabled: true, opacity: 55, timeoutSec: 3, showOnHome: true, pillSize: 'NORMAL', edgeSide: 'RIGHT', autoKeyboard: true, onlyWhenTyping: false, userStyle: 'NATURAL', clipboardTrigger: true, serviceRunning: false }
+    return { enabled: true, opacity: 55, timeoutSec: 3, showOnHome: true, pillSize: 'NORMAL', edgeSide: 'RIGHT', autoKeyboard: true, onlyWhenTyping: false, userStyle: 'NATURAL', personaMode: 'AUTO', userBio: '', clipboardTrigger: true, serviceRunning: false }
   }
 }
 

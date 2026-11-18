@@ -2122,6 +2122,8 @@ public class LauncherPlugin extends Plugin {
         ret.put("autoKeyboard", prefs.getBoolean(IrisFloatingCopilot.KEY_AUTO_KEYBOARD, true));
         ret.put("onlyWhenTyping", prefs.getBoolean(IrisFloatingCopilot.KEY_ONLY_TYPING, false));
         ret.put("userStyle", prefs.getString(IrisFloatingCopilot.KEY_USER_STYLE, "NATURAL"));
+        ret.put("personaMode", prefs.getString(IrisFloatingCopilot.KEY_PERSONA_MODE, "AUTO"));
+        ret.put("userBio", prefs.getString(IrisFloatingCopilot.KEY_USER_BIO, ""));
         ret.put("clipboardTrigger", prefs.getBoolean(IrisFloatingCopilot.KEY_CLIPBOARD_TRIGGER, true));
         ret.put("serviceRunning", IrisAccessibilityService.getInstance() != null);
         call.resolve(ret);
@@ -2140,6 +2142,8 @@ public class LauncherPlugin extends Plugin {
         if (call.hasOption("autoKeyboard")) editor.putBoolean(IrisFloatingCopilot.KEY_AUTO_KEYBOARD, call.getBoolean("autoKeyboard", true));
         if (call.hasOption("onlyWhenTyping")) editor.putBoolean(IrisFloatingCopilot.KEY_ONLY_TYPING, call.getBoolean("onlyWhenTyping", false));
         if (call.hasOption("userStyle")) editor.putString(IrisFloatingCopilot.KEY_USER_STYLE, call.getString("userStyle", "NATURAL"));
+        if (call.hasOption("personaMode")) editor.putString(IrisFloatingCopilot.KEY_PERSONA_MODE, call.getString("personaMode", "AUTO"));
+        if (call.hasOption("userBio")) editor.putString(IrisFloatingCopilot.KEY_USER_BIO, call.getString("userBio", ""));
         if (call.hasOption("clipboardTrigger")) editor.putBoolean(IrisFloatingCopilot.KEY_CLIPBOARD_TRIGGER, call.getBoolean("clipboardTrigger", true));
         editor.apply();
 

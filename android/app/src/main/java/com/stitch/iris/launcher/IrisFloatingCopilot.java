@@ -8,10 +8,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
+import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -19,9 +21,11 @@ import android.os.Looper;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
@@ -43,6 +47,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -74,6 +79,8 @@ public class IrisFloatingCopilot {
     public static final String KEY_AUTO_KEYBOARD = "copilot_auto_keyboard";
     public static final String KEY_ONLY_TYPING = "copilot_only_typing";
     public static final String KEY_USER_STYLE = "copilot_user_style";
+    public static final String KEY_PERSONA_MODE = "copilot_persona_mode";
+    public static final String KEY_USER_BIO = "copilot_user_bio";
     public static final String KEY_CLIPBOARD_TRIGGER = "copilot_clipboard_trigger";
     private static final String KEY_BACKEND = "copilot_backend";
     private static final String KEY_API_KEY = "copilot_api_key";
@@ -102,7 +109,10 @@ public class IrisFloatingCopilot {
     private boolean autoKeyboard = true;
     private boolean onlyWhenTyping = false;
     private String userStyle = "NATURAL";
+    private String personaMode = "AUTO";
+    private String userBio = "";
     private boolean clipboardTrigger = true;
+    private boolean interviewListenTrigger = false;
 
     private boolean isPillAttached = false;
     private boolean isCardAttached = false;
@@ -223,6 +233,8 @@ public class IrisFloatingCopilot {
         this.autoKeyboard = prefs.getBoolean(KEY_AUTO_KEYBOARD, true);
         this.onlyWhenTyping = prefs.getBoolean(KEY_ONLY_TYPING, false);
         this.userStyle = prefs.getString(KEY_USER_STYLE, "NATURAL");
+        this.personaMode = prefs.getString(KEY_PERSONA_MODE, "AUTO");
+        this.userBio = prefs.getString(KEY_USER_BIO, "");
         this.clipboardTrigger = prefs.getBoolean(KEY_CLIPBOARD_TRIGGER, true);
     }
 
@@ -510,7 +522,7 @@ public class IrisFloatingCopilot {
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         header.addView(cardTitle, titleLp);
 
-        // Mode Badge Pill
+        // Mode Badge Pill (Tap to cycle AUTO -> INTERVIEW -> STUDENT)
         modeBadgeView = new TextView(service);
         modeBadgeView.setText("GENERAL");
         modeBadgeView.setTextColor(Color.BLACK);
@@ -522,6 +534,10 @@ public class IrisFloatingCopilot {
         modeBg.setCornerRadius(dpToPx(6));
         modeBg.setColor(Color.parseColor("#00F2FF"));
         modeBadgeView.setBackground(modeBg);
+        modeBadgeView.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            cyclePersonaMode();
+        });
         header.addView(modeBadgeView);
 
         // Multi-Screen Deep Scan Button
@@ -875,13 +891,77 @@ public class IrisFloatingCopilot {
         rebuildActionPillsForMode("GENERAL");
     }
 
+    private void cyclePersonaMode() {
+        if ("AUTO".equalsIgnoreCase(personaMode)) {
+            personaMode = "INTERVIEW";
+        } else if ("INTERVIEW".equalsIgnoreCase(personaMode)) {
+            personaMode = "STUDENT";
+        } else {
+            personaMode = "AUTO";
+        }
+        SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(KEY_PERSONA_MODE, personaMode).apply();
+
+        if ("INTERVIEW".equalsIgnoreCase(personaMode) && cardParams != null) {
+            cardParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            cardParams.x = 0;
+            cardParams.y = dpToPx(28);
+            if (isCardAttached && cardView != null) {
+                try { windowManager.updateViewLayout(cardView, cardParams); } catch (Exception ignored) {}
+            }
+            Toast.makeText(service, "🎯 INTERVIEW WINGMAN (Camera Teleprompter Docked)", Toast.LENGTH_SHORT).show();
+        } else if ("STUDENT".equalsIgnoreCase(personaMode)) {
+            Toast.makeText(service, "🎓 STUDENT STUDY & SOLVER MODE", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(service, "⚡ AUTO SMART MODE", Toast.LENGTH_SHORT).show();
+        }
+        updateModeBadgeAndActions();
+    }
+
+    private void updateModeBadgeAndActions() {
+        String effectiveMode = !"AUTO".equalsIgnoreCase(personaMode) ? personaMode.toUpperCase() : currentScreenMode;
+        if (modeBadgeView != null) {
+            GradientDrawable modeBg = new GradientDrawable();
+            modeBg.setShape(GradientDrawable.RECTANGLE);
+            modeBg.setCornerRadius(dpToPx(6));
+            if ("INTERVIEW".equals(effectiveMode)) {
+                modeBadgeView.setText("🎯 INTERVIEW");
+                modeBg.setColor(Color.parseColor("#10B981"));
+            } else if ("STUDENT".equals(effectiveMode)) {
+                modeBadgeView.setText("🎓 STUDENT");
+                modeBg.setColor(Color.parseColor("#F59E0B"));
+            } else {
+                modeBadgeView.setText("⚡ " + effectiveMode);
+                modeBg.setColor(Color.parseColor("#00F2FF"));
+            }
+            modeBadgeView.setBackground(modeBg);
+        }
+        rebuildActionPillsForMode(effectiveMode);
+    }
+
     private void rebuildActionPillsForMode(String mode) {
         if (quickActionsBar == null) return;
         quickActionsBar.removeAllViews();
 
-        if ("CHAT".equals(mode)) {
+        if ("INTERVIEW".equals(mode)) {
+            quickActionsBar.addView(createActionPill("🎙️ LISTEN Q", true, v -> startInterviewVoiceCatcher()));
+            quickActionsBar.addView(createActionPill("🎯 TELEPROMPTER", true, v -> executeAction("INTERVIEW_ANSWER")));
+            quickActionsBar.addView(createActionPill("⭐ STAR STORY", true, v -> executeAction("INTERVIEW_STAR")));
+            quickActionsBar.addView(createActionPill("💻 CODE SOLVE", false, v -> executeAction("INTERVIEW_CODE")));
+            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("INTERVIEW")));
+            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
+        } else if ("STUDENT".equals(mode)) {
+            quickActionsBar.addView(createActionPill("🧠 SOLVE / MCQ", true, v -> executeAction("STUDENT_SOLVE")));
+            quickActionsBar.addView(createActionPill("📸 VISION SCAN", true, v -> performVisionScan("STUDENT")));
+            quickActionsBar.addView(createActionPill("💡 SIMPLIFY (ELI5)", false, v -> executeAction("STUDENT_ELI5")));
+            quickActionsBar.addView(createActionPill("🃏 FLASHCARDS", false, v -> executeAction("STUDENT_FLASHCARDS")));
+            quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
+            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
+            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
+        } else if ("CHAT".equals(mode)) {
             quickActionsBar.addView(createActionPill("⚡ SMART REPLY", true, v -> executeAction("REPLY")));
             quickActionsBar.addView(createActionPill("✍️ COMPOSE", true, v -> openInputMode("COMPOSE")));
+            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("AUTO")));
             quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
             quickActionsBar.addView(createActionPill("✨ REWRITE", false, v -> executeAction("REWRITE")));
             quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
@@ -890,7 +970,9 @@ public class IrisFloatingCopilot {
             quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
         } else if ("BROWSER".equals(mode)) {
             quickActionsBar.addView(createActionPill("📝 TL;DR SUMMARY", true, v -> executeAction("SUMMARIZE")));
-            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", true, v -> executeAction("FACT_CHECK")));
+            quickActionsBar.addView(createActionPill("📸 VISION SCAN", true, v -> performVisionScan("AUTO")));
+            quickActionsBar.addView(createActionPill("🧠 SOLVE / MCQ", false, v -> executeAction("STUDENT_SOLVE")));
+            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
             quickActionsBar.addView(createActionPill("📌 EXTRACT DATA", false, v -> executeAction("EXTRACT")));
             quickActionsBar.addView(createActionPill("🔍 EXPLAIN", false, v -> executeAction("EXPLAIN")));
             quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
@@ -902,11 +984,14 @@ public class IrisFloatingCopilot {
             quickActionsBar.addView(createActionPill("✨ REWRITE", false, v -> executeAction("REWRITE")));
             quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
             quickActionsBar.addView(createActionPill("📌 ACTION ITEMS", false, v -> executeAction("EXTRACT")));
+            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("AUTO")));
             quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
             quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
         } else {
             quickActionsBar.addView(createActionPill("⚡ SMART REPLY", true, v -> executeAction("REPLY")));
             quickActionsBar.addView(createActionPill("✍️ COMPOSE", true, v -> openInputMode("COMPOSE")));
+            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("AUTO")));
+            quickActionsBar.addView(createActionPill("🧠 SOLVE / MCQ", false, v -> executeAction("STUDENT_SOLVE")));
             quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
             quickActionsBar.addView(createActionPill("📌 EXTRACT", false, v -> executeAction("EXTRACT")));
             quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
@@ -1003,6 +1088,11 @@ public class IrisFloatingCopilot {
         }
     }
 
+    private void startInterviewVoiceCatcher() {
+        interviewListenTrigger = true;
+        toggleVoiceComposeRecognition();
+    }
+
     private void toggleVoiceComposeRecognition() {
         try {
             if (isVoiceListening && speechRecognizer != null) {
@@ -1028,6 +1118,7 @@ public class IrisFloatingCopilot {
                     }
                     @Override public void onError(int error) {
                         isVoiceListening = false;
+                        interviewListenTrigger = false;
                         if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
                     }
                     @Override
@@ -1037,14 +1128,19 @@ public class IrisFloatingCopilot {
                         ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                         if (matches != null && !matches.isEmpty()) {
                             String spoken = matches.get(0).trim();
-                            if (!spoken.isEmpty() && customQuestionInput != null) {
-                                customQuestionInput.setText(spoken);
-                                hideSoftKeyboard();
-                                restoreNotFocusable();
-                                if ("COMPOSE".equals(inputMode)) {
-                                    executeAction("COMPOSE:" + composeTone + ":" + spoken);
-                                } else {
-                                    executeAction("ASK:" + spoken);
+                            if (!spoken.isEmpty()) {
+                                if (interviewListenTrigger) {
+                                    interviewListenTrigger = false;
+                                    executeAction("INTERVIEW_LISTEN:" + spoken);
+                                } else if (customQuestionInput != null) {
+                                    customQuestionInput.setText(spoken);
+                                    hideSoftKeyboard();
+                                    restoreNotFocusable();
+                                    if ("COMPOSE".equals(inputMode)) {
+                                        executeAction("COMPOSE:" + composeTone + ":" + spoken);
+                                    } else {
+                                        executeAction("ASK:" + spoken);
+                                    }
                                 }
                             }
                         }
@@ -1058,10 +1154,11 @@ public class IrisFloatingCopilot {
             intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
             isVoiceListening = true;
             if (voiceMicBtn != null) voiceMicBtn.setText("🔴");
-            Toast.makeText(service, "Listening... speak your prompt", Toast.LENGTH_SHORT).show();
+            Toast.makeText(service, interviewListenTrigger ? "🎙️ Listening to Interviewer's Question..." : "Listening... speak your prompt", Toast.LENGTH_SHORT).show();
             speechRecognizer.startListening(intent);
         } catch (Exception e) {
             isVoiceListening = false;
+            interviewListenTrigger = false;
             if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
             Toast.makeText(service, "Voice input unavailable", Toast.LENGTH_SHORT).show();
         }
@@ -1460,16 +1557,10 @@ public class IrisFloatingCopilot {
         this.lastSendButtonNode = data.sendNode;
         this.currentAppLabel = data.appName;
 
-        if (!data.screenMode.equals(this.currentScreenMode)) {
-            this.currentScreenMode = data.screenMode;
-            rebuildActionPillsForMode(data.screenMode);
-        }
-
+        this.currentScreenMode = data.screenMode;
         String appLabel = data.appName.toUpperCase();
         cardTitle.setText("◈ IRIS // " + appLabel);
-        if (modeBadgeView != null) {
-            modeBadgeView.setText(data.screenMode);
-        }
+        updateModeBadgeAndActions();
 
         List<String> combinedTexts = new ArrayList<>();
         if (!deepScanBuffer.isEmpty()) {
@@ -1620,13 +1711,151 @@ public class IrisFloatingCopilot {
         return "";
     }
 
+    private String getUserBioDirective() {
+        if (userBio != null && !userBio.trim().isEmpty()) {
+            return "\nUser Resume / Study Profile Context: \"" + userBio.trim() + "\"\n";
+        }
+        return "";
+    }
+
+    private void performVisionScan(final String scanMode) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            Toast.makeText(service, "Vision Scan requires Android 11+", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (cardView != null) cardView.setVisibility(View.INVISIBLE);
+        if (pillView != null) pillView.setVisibility(View.INVISIBLE);
+
+        mainHandler.postDelayed(() -> {
+            try {
+                service.takeScreenshot(Display.DEFAULT_DISPLAY, executor, new AccessibilityService.TakeScreenshotCallback() {
+                    @Override
+                    public void onSuccess(AccessibilityService.ScreenshotResult screenshot) {
+                        mainHandler.post(() -> {
+                            if (cardView != null) cardView.setVisibility(View.VISIBLE);
+                            if (pillView != null) pillView.setVisibility(View.VISIBLE);
+                            loadingIndicator.setVisibility(View.VISIBLE);
+                            resultsContainer.removeAllViews();
+                        });
+                        try {
+                            HardwareBuffer hb = screenshot.getHardwareBuffer();
+                            Bitmap hwBitmap = Bitmap.wrapHardwareBuffer(hb, screenshot.getColorSpace());
+                            if (hwBitmap != null) {
+                                Bitmap swBitmap = hwBitmap.copy(Bitmap.Config.ARGB_8888, false);
+                                hwBitmap.recycle();
+                                hb.close();
+
+                                int maxW = 960;
+                                if (swBitmap.getWidth() > maxW) {
+                                    int newH = (int) ((float) swBitmap.getHeight() * maxW / swBitmap.getWidth());
+                                    Bitmap scaled = Bitmap.createScaledBitmap(swBitmap, maxW, newH, true);
+                                    swBitmap.recycle();
+                                    swBitmap = scaled;
+                                }
+                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                swBitmap.compress(Bitmap.CompressFormat.JPEG, 76, baos);
+                                swBitmap.recycle();
+                                String base64Jpeg = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+
+                                String visionPrompt = "INTERVIEW".equals(scanMode)
+                                        ? "You are an Interview Wingman. Analyze this screen image (coding challenge, system design diagram, or interview question). Provide: 1) 🎯 SPOKEN APPROACH (2 lines to say out loud), 2) 💻 OPTIMAL SOLUTION / ANSWER, 3) ⚡ COMPLEXITY / KEY POINTS."
+                                        : "STUDENT".equals(scanMode)
+                                        ? "You are an expert Student Tutor & Exam Solver. Analyze this screen image (math equation, quiz/MCQ, diagram, or lecture slide). Provide: 1) ✅ DIRECT ANSWER at the top, 2) 📐 STEP-BY-STEP EXPLANATION below."
+                                        : "Analyze this screen image carefully. Solve any questions/problems shown, extract key text/diagrams, and explain clearly.";
+
+                                String resp = queryGeminiVision(visionPrompt, base64Jpeg);
+                                lastAiResponse = resp != null ? resp : "";
+                                mainHandler.post(() -> {
+                                    loadingIndicator.setVisibility(View.GONE);
+                                    displayResults("VISION_SCAN", resp);
+                                });
+                            }
+                        } catch (Exception e) {
+                            mainHandler.post(() -> {
+                                loadingIndicator.setVisibility(View.GONE);
+                                displayError("Vision Scan failed: " + e.getMessage());
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(int errorCode) {
+                        mainHandler.post(() -> {
+                            if (cardView != null) cardView.setVisibility(View.VISIBLE);
+                            if (pillView != null) pillView.setVisibility(View.VISIBLE);
+                            displayError("Screenshot capture failed (code " + errorCode + ")");
+                        });
+                    }
+                });
+            } catch (Exception e) {
+                if (cardView != null) cardView.setVisibility(View.VISIBLE);
+                if (pillView != null) pillView.setVisibility(View.VISIBLE);
+            }
+        }, 140);
+    }
+
+    private String queryGeminiVision(String visionPrompt, String base64Jpeg) throws Exception {
+        SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String geminiKey = prefs.getString(KEY_GEMINI_KEY, "");
+        if (geminiKey.isEmpty()) geminiKey = prefs.getString(KEY_API_KEY, "");
+        if (geminiKey.isEmpty()) {
+            throw new Exception("Vision Scan requires a Gemini API key in IRIS Settings");
+        }
+        String modelId = prefs.getString(KEY_MODEL, "gemini-2.5-flash");
+        if (modelId.isEmpty()) modelId = "gemini-2.5-flash";
+
+        URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models/" + modelId + ":generateContent");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setRequestProperty("x-goog-api-key", geminiKey.trim());
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(18000);
+        conn.setDoOutput(true);
+
+        JSONArray parts = new JSONArray();
+        parts.put(new JSONObject().put("text", visionPrompt + "\n\nExtracted Screen Text Context:\n" + lastExtractedContext));
+        JSONObject inlineData = new JSONObject();
+        inlineData.put("mime_type", "image/jpeg");
+        inlineData.put("data", base64Jpeg);
+        parts.put(new JSONObject().put("inline_data", inlineData));
+
+        JSONArray contents = new JSONArray();
+        contents.put(new JSONObject().put("role", "user").put("parts", parts));
+        JSONObject body = new JSONObject().put("contents", contents);
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.toString().getBytes("UTF-8"));
+        }
+
+        int code = conn.getResponseCode();
+        if (code == 200) {
+            String resp = readStream(conn.getInputStream());
+            JSONObject json = new JSONObject(resp);
+            JSONArray candidates = json.optJSONArray("candidates");
+            if (candidates != null && candidates.length() > 0) {
+                JSONObject contentObj = candidates.getJSONObject(0).optJSONObject("content");
+                if (contentObj != null) {
+                    JSONArray resParts = contentObj.optJSONArray("parts");
+                    if (resParts != null && resParts.length() > 0) {
+                        return resParts.getJSONObject(0).optString("text", "");
+                    }
+                }
+            }
+            return "";
+        } else {
+            throw new Exception("Gemini Vision HTTP " + code + ": " + readStream(conn.getErrorStream()));
+        }
+    }
+
     private void executeAction(String action) {
         loadingIndicator.setVisibility(View.VISIBLE);
         resultsContainer.removeAllViews();
 
-        // Show Length + Tone Filter Bar for Smart Reply, Summarize, Explain, Extract, Fact Check
+        // Show Length + Tone Filter Bar for Smart Reply, Summarize, Explain, Extract, Fact Check, Interview, Student
         boolean showFilters = "REPLY".equals(action) || "SUMMARIZE".equals(action)
-                || "EXPLAIN".equals(action) || "EXTRACT".equals(action) || "FACT_CHECK".equals(action);
+                || "EXPLAIN".equals(action) || "EXTRACT".equals(action) || "FACT_CHECK".equals(action)
+                || action.startsWith("INTERVIEW_") || action.startsWith("STUDENT_");
         if (replyFilterLayout != null) {
             replyFilterLayout.setVisibility(showFilters ? View.VISIBLE : View.GONE);
         }
@@ -1641,10 +1870,56 @@ public class IrisFloatingCopilot {
             try {
                 String styleDir = getPersonalStyleDirective();
                 String lenDir = getLengthDirective();
+                String bioDir = getUserBioDirective();
                 String systemPrompt = "You are Iris Copilot, a sharp cybernetic AI assistant analyzing an Android app screen. Respond directly, concisely, and naturally without filler words." + styleDir + lenDir;
                 String userPrompt = "";
 
-                if ("REPLY".equals(action)) {
+                if (action.startsWith("INTERVIEW_LISTEN:")) {
+                    String heardQuestion = action.substring("INTERVIEW_LISTEN:".length());
+                    systemPrompt = "You are an elite Live Interview Wingman & Teleprompter. The interviewer just asked a question. Format your response so the candidate can glance at it and speak naturally while maintaining eye contact:\n"
+                            + "🎯 OPENING HOOK: (1 strong sentence to start speaking immediately)\n"
+                            + "• KEY POINT 1: (concise talking point)\n"
+                            + "• KEY POINT 2: (concise talking point)\n"
+                            + "• KEY POINT 3: (impact/result talking point)" + lenDir;
+                    userPrompt = bioDir + "Interviewer Question: \"" + heardQuestion + "\"\nScreen Context:\n" + lastExtractedContext + "\nGenerate the Teleprompter answer now:";
+                } else if ("INTERVIEW_ANSWER".equals(action)) {
+                    systemPrompt = "You are an elite Live Interview Wingman & Teleprompter. Based on the interview question or topic visible on screen, format your response for instant eye-contact reading:\n"
+                            + "🎯 OPENING HOOK: (1 strong sentence to start speaking immediately)\n"
+                            + "• KEY POINT 1: (concise talking point)\n"
+                            + "• KEY POINT 2: (concise talking point)\n"
+                            + "• KEY POINT 3: (impact/result talking point)" + lenDir;
+                    userPrompt = bioDir + lastExtractedContext + "\nGenerate the Teleprompter answer for the active interview question/screen:";
+                } else if ("INTERVIEW_STAR".equals(action)) {
+                    systemPrompt = "You are an elite Behavioral Interview Coach. Craft a high-impact STAR Method response tailored to the user's background and the screen context:\n"
+                            + "📌 SITUATION: (1 line setting the scene)\n"
+                            + "🎯 TASK: (1 line on the challenge)\n"
+                            + "⚡ ACTION: (2 crisp bullets on what you did)\n"
+                            + "🏆 RESULT: (1 line with measurable impact)" + lenDir;
+                    userPrompt = bioDir + lastExtractedContext + "\nGenerate a STAR story for this interview context:";
+                } else if ("INTERVIEW_CODE".equals(action)) {
+                    systemPrompt = "You are a Staff Engineer Interview Wingman. Solve the coding or technical question on screen in 3 clean parts:\n"
+                            + "1) 🗣️ WHAT TO SAY ALOUD: (Explain the optimal approach in 2 sentences)\n"
+                            + "2) 💻 OPTIMAL CODE / SOLUTION: (Clean, bug-free solution)\n"
+                            + "3) ⏱️ COMPLEXITY: (Time & Space Big-O complexity)";
+                    userPrompt = lastExtractedContext + "\nSolve the technical/coding question on this screen:";
+                } else if ("STUDENT_SOLVE".equals(action)) {
+                    systemPrompt = "You are an expert Student Exam & Homework Solver. Analyze the question, multiple-choice problem (MCQ), math equation, or assignment on screen. Format strictly as:\n"
+                            + "✅ DIRECT ANSWER: (State the exact correct option/answer immediately at the top)\n\n"
+                            + "📐 STEP-BY-STEP EXPLANATION:\n"
+                            + "- Step 1: ...\n- Step 2: ..." + lenDir;
+                    userPrompt = lastExtractedContext + "\nSolve the question(s) on this screen:";
+                } else if ("STUDENT_ELI5".equals(action)) {
+                    systemPrompt = "You are an expert Study Tutor. Break down the complex topic or paragraph on this screen so it is effortless to understand:\n"
+                            + "💡 SIMPLE ANALOGY: (Explain it like I'm 10 using a real-world analogy)\n"
+                            + "🔑 3 EXAM KEY TERMS: (Bullet list of the 3 most important concepts to remember)" + lenDir;
+                    userPrompt = lastExtractedContext + "\nSimplify and explain this screen:";
+                } else if ("STUDENT_FLASHCARDS".equals(action)) {
+                    systemPrompt = "You are an Active Recall Study Coach. Turn the key material on this screen into 3 high-yield study flashcards formatted as:\n"
+                            + "🃏 Q1: [Question]\n✅ A1: [Concise Answer]\n\n"
+                            + "🃏 Q2: [Question]\n✅ A2: [Concise Answer]\n\n"
+                            + "🃏 Q3: [Question]\n✅ A3: [Concise Answer]";
+                    userPrompt = lastExtractedContext + "\nCreate 3 study flashcards from this screen:";
+                } else if ("REPLY".equals(action)) {
                     String toneInstr;
                     if ("AUTO".equals(replyTone) && "AUTO".equals(replyLength)) {
                         toneInstr = "Generate 3 distinct replies covering 3 styles in this exact order: "

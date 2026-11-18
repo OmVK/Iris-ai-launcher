@@ -3,6 +3,12 @@ import SettingsSection from './SettingsSection'
 import { SettingToggle, SettingSlider, SettingOptionGrid } from './SettingControls'
 import { getCopilotSettings, updateCopilotSettings, openSystemSettings } from '../../components/LauncherPlugin'
 
+const PERSONA_MODE_OPTIONS = [
+  { id: 'AUTO', label: '⚡ AUTO SMART' },
+  { id: 'INTERVIEW', label: '🎯 INTERVIEW' },
+  { id: 'STUDENT', label: '🎓 STUDENT' },
+]
+
 const TIMEOUT_OPTIONS = [
   { id: 0, label: 'NEVER' },
   { id: 3, label: '3 SEC' },
@@ -40,9 +46,12 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
     autoKeyboard: true,
     onlyWhenTyping: false,
     userStyle: 'NATURAL',
+    personaMode: 'AUTO',
+    userBio: '',
     clipboardTrigger: true,
     serviceRunning: true,
   })
+  const [bioSaved, setBioSaved] = useState(false)
 
   useEffect(() => {
     getCopilotSettings().then((res) => {
@@ -58,6 +67,12 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
     if (res && typeof res.serviceRunning === 'boolean') {
       setSettings((prev) => ({ ...prev, serviceRunning: res.serviceRunning }))
     }
+  }
+
+  const handleSaveBio = () => {
+    applySetting({ userBio: settings.userBio })
+    setBioSaved(true)
+    setTimeout(() => setBioSaved(false), 2000)
   }
 
   return (
@@ -92,6 +107,39 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
           </div>
         )}
 
+        <div className="space-y-1.5">
+          <p className="text-[10px]">Copilot Operating Mode</p>
+          <SettingOptionGrid
+            options={PERSONA_MODE_OPTIONS}
+            value={settings.personaMode}
+            onChange={(v) => applySetting({ personaMode: v })}
+            columns={3}
+          />
+          <p className="text-[7px] text-on-surface-variant/45">
+            🎯 INTERVIEW docks near top camera with Teleprompter &amp; STAR answers; 🎓 STUDENT enables MCQ Solver, Flashcards &amp; Vision Scan. (Tap the mode badge in the Copilot header to switch live!)
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px]">Resume / Study Profile Context</p>
+            <button
+              type="button"
+              onClick={handleSaveBio}
+              className="px-2 py-0.5 rounded bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 text-primary-fixed-dim text-[8px] font-bold active:scale-95"
+            >
+              {bioSaved ? 'SAVED!' : 'SAVE PROFILE'}
+            </button>
+          </div>
+          <textarea
+            rows={2}
+            value={settings.userBio || ''}
+            onChange={(e) => setSettings((prev) => ({ ...prev, userBio: e.target.value }))}
+            placeholder="e.g. Full-Stack React & Android Dev, 3 yrs exp, built custom OS launcher (Used by Interview & Student modes)"
+            className="w-full bg-black/40 border border-outline-variant/30 rounded px-2.5 py-1.5 text-[9.5px] text-primary-fixed-dim focus:outline-none focus:border-primary-fixed-dim font-mono-data"
+          />
+        </div>
+
         <SettingSlider
           label="Pill & Card Opacity"
           value={settings.opacity}
@@ -111,9 +159,6 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
             onChange={(v) => applySetting({ userStyle: v })}
             columns={2}
           />
-          <p className="text-[7px] text-on-surface-variant/45">
-            Shapes how Smart Reply &amp; Compose sound by default across all apps
-          </p>
         </div>
 
         <div className="space-y-1.5">
@@ -124,9 +169,6 @@ export default function CopilotSettingsSection({ expandedSections, toggleSection
             onChange={(v) => applySetting({ timeoutSec: v })}
             columns={4}
           />
-          <p className="text-[7px] text-on-surface-variant/45">
-            Automatically fades out the pill when idle (wakes back up when typing or switching apps)
-          </p>
         </div>
 
         <div className="space-y-1.5">
