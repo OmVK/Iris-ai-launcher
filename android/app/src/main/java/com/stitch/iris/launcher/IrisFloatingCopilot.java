@@ -93,6 +93,7 @@ public class IrisFloatingCopilot {
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s\"<>()]+");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
     private static final Pattern PHONE_PATTERN = Pattern.compile("(?:\\+\\d{1,3}[\\s-]?)?(?:\\(\\d{2,4}\\)|\\d{2,4})[\\s.-]?\\d{3,4}[\\s.-]?\\d{3,4}");
+    private static final Pattern COMPOSE_INTENT_PATTERN = Pattern.compile("(?i)^(?:write|tell|reply|compose|draft|message|email|say|send|text|let\\s+\\w+\\s+know|ask\\s+\\w+\\s+to)\\b");
 
     private static IrisFloatingCopilot instance;
     private final AccessibilityService service;
@@ -116,6 +117,7 @@ public class IrisFloatingCopilot {
 
     private boolean isPillAttached = false;
     private boolean isCardAttached = false;
+    private boolean hasActiveDraft = false;
     private String currentPackage = "";
     private String currentAppLabel = "";
     private String currentScreenMode = "GENERAL";
@@ -140,24 +142,16 @@ public class IrisFloatingCopilot {
     private TextView contextPreviewView;
     private HorizontalScrollView entitiesScroll;
     private LinearLayout entitiesBar;
-    private HorizontalScrollView draftToolsScroll;
-    private LinearLayout replyFilterLayout;
-    private LinearLayout replyToneRow;
-    private LinearLayout resultsContainer;
     private LinearLayout quickActionsBar;
-    private LinearLayout askLayout;
-    private LinearLayout toneBar;
+    private LinearLayout moreToolsGrid;
+    private HorizontalScrollView replyFilterScroll;
+    private LinearLayout replyFilterRow;
+    private LinearLayout resultsContainer;
     private EditText customQuestionInput;
     private TextView voiceMicBtn;
-    private Button askSendBtn;
-    private String inputMode = "ASK";
-    private String composeTone = "AUTO";
-    private String replyLength = "AUTO";
-    private String replyTone = "AUTO";
+    private String replyFilter = "AUTO";
     private String lastActiveAction = "REPLY";
-    private final List<TextView> toneChipViews = new ArrayList<>();
-    private final List<TextView> replyLengthChipViews = new ArrayList<>();
-    private final List<TextView> replyToneChipViews = new ArrayList<>();
+    private final List<TextView> replyFilterChipViews = new ArrayList<>();
     private View loadingIndicator;
 
     private AccessibilityNodeInfo lastTargetInputNode;
@@ -524,11 +518,11 @@ public class IrisFloatingCopilot {
 
         // Mode Badge Pill (Tap to cycle AUTO -> INTERVIEW -> STUDENT)
         modeBadgeView = new TextView(service);
-        modeBadgeView.setText("GENERAL");
+        modeBadgeView.setText("⚡ AUTO");
         modeBadgeView.setTextColor(Color.BLACK);
         modeBadgeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 7.5f);
         modeBadgeView.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        modeBadgeView.setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2));
+        modeBadgeView.setPadding(dpToPx(7), dpToPx(2.5f), dpToPx(7), dpToPx(2.5f));
         GradientDrawable modeBg = new GradientDrawable();
         modeBg.setShape(GradientDrawable.RECTANGLE);
         modeBg.setCornerRadius(dpToPx(6));
@@ -540,22 +534,11 @@ public class IrisFloatingCopilot {
         });
         header.addView(modeBadgeView);
 
-        // Multi-Screen Deep Scan Button
-        TextView deepScanBtn = new TextView(service);
-        deepScanBtn.setText("📜");
-        deepScanBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-        deepScanBtn.setPadding(dpToPx(7), dpToPx(4), dpToPx(4), dpToPx(4));
-        deepScanBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            performDeepScan();
-        });
-        header.addView(deepScanBtn);
-
         // Refresh / Rescan button
         TextView refreshBtn = new TextView(service);
         refreshBtn.setText("🔄");
         refreshBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-        refreshBtn.setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4));
+        refreshBtn.setPadding(dpToPx(7), dpToPx(4), dpToPx(5), dpToPx(4));
         refreshBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             deepScanBuffer.clear();
@@ -610,9 +593,9 @@ public class IrisFloatingCopilot {
         cardSubTitle = new TextView(service);
         cardSubTitle.setText("Analyzing active screen...");
         cardSubTitle.setTextColor(Color.parseColor("#88FFFFFF"));
-        cardSubTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        cardSubTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
         cardSubTitle.setTypeface(android.graphics.Typeface.MONOSPACE);
-        cardSubTitle.setPadding(0, dpToPx(3), 0, dpToPx(6));
+        cardSubTitle.setPadding(0, dpToPx(2), 0, dpToPx(6));
         cardSubTitle.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             if (contextPreviewView != null) {
@@ -640,7 +623,7 @@ public class IrisFloatingCopilot {
         prevLp.setMargins(0, 0, 0, dpToPx(6));
         layout.addView(contextPreviewView, prevLp);
 
-        // Smart Detected Entities + Clipboard Bar
+        // Smart Detected Entities + Clipboard Bar (Shown only when OTP/URL/Clipboard exists)
         entitiesScroll = new HorizontalScrollView(service);
         entitiesScroll.setHorizontalScrollBarEnabled(false);
         entitiesScroll.setVisibility(View.GONE);
@@ -650,204 +633,82 @@ public class IrisFloatingCopilot {
         entitiesScroll.addView(entitiesBar);
         layout.addView(entitiesScroll);
 
-        // Active Draft Instant Tools Bar
-        draftToolsScroll = new HorizontalScrollView(service);
-        draftToolsScroll.setHorizontalScrollBarEnabled(false);
-        draftToolsScroll.setVisibility(View.GONE);
-        LinearLayout draftBar = new LinearLayout(service);
-        draftBar.setOrientation(LinearLayout.HORIZONTAL);
-        draftBar.setPadding(0, 0, 0, dpToPx(6));
-        draftBar.addView(createMiniDraftPill("✓ FIX GRAMMAR", v -> executeAction("DRAFT_FIX")));
-        draftBar.addView(createMiniDraftPill("👔 MAKE POLITE", v -> executeAction("DRAFT_POLITE")));
-        draftBar.addView(createMiniDraftPill("✂️ SHORTEN", v -> executeAction("DRAFT_SHORT")));
-        draftBar.addView(createMiniDraftPill("🚀 EXPAND", v -> executeAction("DRAFT_EXPAND")));
-        draftToolsScroll.addView(draftBar);
-        layout.addView(draftToolsScroll);
-
-        // Primary Quick Actions Scroll View
-        HorizontalScrollView actionsScroll = new HorizontalScrollView(service);
-        actionsScroll.setHorizontalScrollBarEnabled(false);
+        // Clean "Rule of 3" Top Action Bar (2 Primary Context Buttons + ➕ MORE ▾)
         quickActionsBar = new LinearLayout(service);
         quickActionsBar.setOrientation(LinearLayout.HORIZONTAL);
-        actionsScroll.addView(quickActionsBar);
-        layout.addView(actionsScroll);
+        quickActionsBar.setGravity(Gravity.CENTER_VERTICAL);
+        layout.addView(quickActionsBar);
 
-        // Smart Reply & Answer Length + Tone Filter Strip
-        replyFilterLayout = new LinearLayout(service);
-        replyFilterLayout.setOrientation(LinearLayout.VERTICAL);
-        replyFilterLayout.setPadding(0, dpToPx(6), 0, 0);
-        replyFilterLayout.setVisibility(View.GONE);
+        // Expandable "➕ MORE TOOLS" 2-Column Drawer (Hidden until tapped)
+        moreToolsGrid = new LinearLayout(service);
+        moreToolsGrid.setOrientation(LinearLayout.VERTICAL);
+        moreToolsGrid.setPadding(0, dpToPx(6), 0, dpToPx(2));
+        moreToolsGrid.setVisibility(View.GONE);
+        buildMoreToolsGrid();
+        layout.addView(moreToolsGrid);
 
-        // Row 1: Length / Depth Selector (AUTO, SHORT, MEDIUM, DETAILED)
-        HorizontalScrollView lengthScroll = new HorizontalScrollView(service);
-        lengthScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout lengthRow = new LinearLayout(service);
-        lengthRow.setOrientation(LinearLayout.HORIZONTAL);
-        lengthRow.setPadding(0, 0, 0, dpToPx(4));
-        String[][] lengths = new String[][]{
-                {"AUTO", "✨ AUTO DEPTH"},
-                {"SHORT", "⚡ SHORT"},
-                {"MEDIUM", "⚖️ MEDIUM"},
-                {"DETAILED", "📝 DETAILED / LONG"}
+        // Single-Row Quick Filter Strip (Shown only when results are displayed)
+        replyFilterScroll = new HorizontalScrollView(service);
+        replyFilterScroll.setHorizontalScrollBarEnabled(false);
+        replyFilterScroll.setPadding(0, dpToPx(6), 0, 0);
+        replyFilterScroll.setVisibility(View.GONE);
+
+        replyFilterRow = new LinearLayout(service);
+        replyFilterRow.setOrientation(LinearLayout.HORIZONTAL);
+        String[][] filters = new String[][]{
+                {"AUTO", "✨ 3-Mix"},
+                {"YES", "👍 Yes"},
+                {"NO", "✋ No"},
+                {"LATER", "⏳ Later"},
+                {"POLITE", "👔 Polite"},
+                {"CASUAL", "😎 Casual"},
+                {"SHORT", "⚡ Short"},
+                {"DETAILED", "📝 Detailed"}
         };
-        replyLengthChipViews.clear();
-        for (String[] l : lengths) {
-            final String lKey = l[0];
+        replyFilterChipViews.clear();
+        for (String[] f : filters) {
+            final String fKey = f[0];
             TextView chip = new TextView(service);
-            chip.setText(l[1]);
-            chip.setTag(lKey);
+            chip.setText(f[1]);
+            chip.setTag(fKey);
             chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
             chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            chip.setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3));
+            chip.setPadding(dpToPx(8), dpToPx(3.5f), dpToPx(8), dpToPx(3.5f));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             lp.setMargins(0, 0, dpToPx(5), 0);
             chip.setLayoutParams(lp);
             chip.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                replyLength = lKey;
+                replyFilter = fKey;
                 refreshReplyFilterChips();
                 executeAction(lastActiveAction);
             });
-            replyLengthChipViews.add(chip);
-            lengthRow.addView(chip);
+            replyFilterChipViews.add(chip);
+            replyFilterRow.addView(chip);
         }
-        lengthScroll.addView(lengthRow);
-        replyFilterLayout.addView(lengthScroll);
-
-        // Row 2: Smart Reply Tone & Stance Selector (AUTO, POLITE, CASUAL, PRO, WITTY, YES, NO, LATER)
-        HorizontalScrollView replyToneScroll = new HorizontalScrollView(service);
-        replyToneScroll.setHorizontalScrollBarEnabled(false);
-        replyToneRow = new LinearLayout(service);
-        replyToneRow.setOrientation(LinearLayout.HORIZONTAL);
-        String[][] rTones = new String[][]{
-                {"AUTO", "✨ 3-STYLE MIX"},
-                {"POLITE", "👔 POLITE"},
-                {"CASUAL", "😎 CASUAL"},
-                {"PRO", "💼 PRO"},
-                {"WITTY", "🔥 WITTY"},
-                {"YES", "👍 YES / AGREE"},
-                {"NO", "✋ NO / DECLINE"},
-                {"LATER", "⏳ BUSY / LATER"}
-        };
-        replyToneChipViews.clear();
-        for (String[] rt : rTones) {
-            final String rtKey = rt[0];
-            TextView chip = new TextView(service);
-            chip.setText(rt[1]);
-            chip.setTag(rtKey);
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-            chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            chip.setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.setMargins(0, 0, dpToPx(5), 0);
-            chip.setLayoutParams(lp);
-            chip.setOnClickListener(v -> {
-                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                replyTone = rtKey;
-                refreshReplyFilterChips();
-                executeAction("REPLY");
-            });
-            replyToneChipViews.add(chip);
-            replyToneRow.addView(chip);
-        }
-        replyToneScroll.addView(replyToneRow);
-        replyFilterLayout.addView(replyToneScroll);
         refreshReplyFilterChips();
-        layout.addView(replyFilterLayout);
-
-        // Ask / Compose Input Area
-        askLayout = new LinearLayout(service);
-        askLayout.setOrientation(LinearLayout.VERTICAL);
-        askLayout.setPadding(0, dpToPx(8), 0, 0);
-        askLayout.setVisibility(View.GONE);
-
-        // Tone Selector Bar (Shown in COMPOSE mode)
-        toneBar = new LinearLayout(service);
-        toneBar.setOrientation(LinearLayout.HORIZONTAL);
-        toneBar.setPadding(0, 0, 0, dpToPx(6));
-        String[] tones = new String[]{"AUTO", "PRO", "CASUAL", "POLITE", "SHORT", "DETAILED"};
-        toneChipViews.clear();
-        for (String t : tones) {
-            TextView chip = new TextView(service);
-            chip.setText(t);
-            chip.setTag(t);
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-            chip.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            chip.setPadding(dpToPx(7), dpToPx(3), dpToPx(7), dpToPx(3));
-            LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            chipLp.setMargins(0, 0, dpToPx(4), 0);
-            chip.setLayoutParams(chipLp);
-            chip.setOnClickListener(v -> {
-                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                composeTone = t;
-                refreshToneChips();
-            });
-            toneChipViews.add(chip);
-            toneBar.addView(chip);
-        }
-        refreshToneChips();
-        askLayout.addView(toneBar);
-
-        LinearLayout inputRow = new LinearLayout(service);
-        inputRow.setOrientation(LinearLayout.HORIZONTAL);
-        inputRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        customQuestionInput = new EditText(service);
-        customQuestionInput.setHint("Ask about this screen...");
-        customQuestionInput.setHintTextColor(Color.parseColor("#55FFFFFF"));
-        customQuestionInput.setTextColor(Color.WHITE);
-        customQuestionInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        customQuestionInput.setBackgroundColor(Color.parseColor("#22FFFFFF"));
-        customQuestionInput.setPadding(dpToPx(10), dpToPx(7), dpToPx(10), dpToPx(7));
-        customQuestionInput.setSingleLine(true);
-        LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        inputRow.addView(customQuestionInput, editLp);
-
-        // Voice Compose / Voice Ask Mic Button
-        voiceMicBtn = new TextView(service);
-        voiceMicBtn.setText("🎙️");
-        voiceMicBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        voiceMicBtn.setPadding(dpToPx(8), dpToPx(5), dpToPx(8), dpToPx(5));
-        voiceMicBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            toggleVoiceComposeRecognition();
-        });
-        inputRow.addView(voiceMicBtn);
-
-        askSendBtn = new Button(service);
-        askSendBtn.setText("ASK");
-        askSendBtn.setTextColor(Color.BLACK);
-        askSendBtn.setBackgroundColor(Color.parseColor("#00F2FF"));
-        askSendBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        askSendBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            String q = customQuestionInput.getText().toString().trim();
-            if (!q.isEmpty()) {
-                hideSoftKeyboard();
-                restoreNotFocusable();
-                if ("COMPOSE".equals(inputMode)) {
-                    executeAction("COMPOSE:" + composeTone + ":" + q);
-                } else {
-                    executeAction("ASK:" + q);
-                }
-            }
-        });
-        inputRow.addView(askSendBtn);
-        askLayout.addView(inputRow);
-        layout.addView(askLayout);
+        replyFilterScroll.addView(replyFilterRow);
+        layout.addView(replyFilterScroll);
 
         // Loading Indicator
         loadingIndicator = new TextView(service);
-        ((TextView) loadingIndicator).setText("◈ Computing neural suggestions...");
+        ((TextView) loadingIndicator).setText("◈ Computing neural response...");
         ((TextView) loadingIndicator).setTextColor(Color.parseColor("#00F2FF"));
-        ((TextView) loadingIndicator).setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        ((TextView) loadingIndicator).setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
         ((TextView) loadingIndicator).setTypeface(android.graphics.Typeface.MONOSPACE);
         loadingIndicator.setPadding(0, dpToPx(8), 0, dpToPx(4));
         loadingIndicator.setVisibility(View.GONE);
         layout.addView(loadingIndicator);
 
-        // Results Container
-        ScrollView resultsScroll = new ScrollView(service);
+        // Results Container (capped at max 260dp height so card scrolls cleanly without overflowing screen)
+        ScrollView resultsScroll = new ScrollView(service) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                int maxHeightPx = dpToPx(260);
+                int cappedHeightSpec = MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.AT_MOST);
+                super.onMeasure(widthMeasureSpec, cappedHeightSpec);
+            }
+        };
         resultsScroll.setVerticalScrollBarEnabled(true);
         resultsContainer = new LinearLayout(service);
         resultsContainer.setOrientation(LinearLayout.VERTICAL);
@@ -860,8 +721,86 @@ public class IrisFloatingCopilot {
         );
         layout.addView(resultsScroll, scrollLp);
 
+        // Unified Bottom Input Bar: [ Write a message or ask anything... ] [🎙️] [📸] [➤]
+        LinearLayout inputBar = new LinearLayout(service);
+        inputBar.setOrientation(LinearLayout.HORIZONTAL);
+        inputBar.setGravity(Gravity.CENTER_VERTICAL);
+        inputBar.setPadding(dpToPx(8), dpToPx(4), dpToPx(6), dpToPx(4));
+        GradientDrawable inputBg = new GradientDrawable();
+        inputBg.setShape(GradientDrawable.RECTANGLE);
+        inputBg.setCornerRadius(dpToPx(14));
+        inputBg.setColor(Color.parseColor("#1AFFFFFF"));
+        inputBg.setStroke(dpToPx(1), Color.parseColor("#3300F2FF"));
+        inputBar.setBackground(inputBg);
+        LinearLayout.LayoutParams inputBarLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        inputBarLp.setMargins(0, dpToPx(8), 0, 0);
+
+        customQuestionInput = new EditText(service);
+        customQuestionInput.setHint("Write message or ask AI...");
+        customQuestionInput.setHintTextColor(Color.parseColor("#66FFFFFF"));
+        customQuestionInput.setTextColor(Color.WHITE);
+        customQuestionInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+        customQuestionInput.setBackgroundColor(Color.TRANSPARENT);
+        customQuestionInput.setPadding(dpToPx(4), dpToPx(5), dpToPx(4), dpToPx(5));
+        customQuestionInput.setSingleLine(true);
+        customQuestionInput.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                enableKeyboardFocus();
+            }
+            return false;
+        });
+        LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        inputBar.addView(customQuestionInput, editLp);
+
+        // 🎙️ Voice Input Button
+        voiceMicBtn = new TextView(service);
+        voiceMicBtn.setText("🎙️");
+        voiceMicBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        voiceMicBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
+        voiceMicBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            interviewListenTrigger = false;
+            toggleVoiceComposeRecognition();
+        });
+        inputBar.addView(voiceMicBtn);
+
+        // 📸 Vision Screenshot Scan Button
+        TextView visionBtn = new TextView(service);
+        visionBtn.setText("📸");
+        visionBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        visionBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
+        visionBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            String effMode = !"AUTO".equalsIgnoreCase(personaMode) ? personaMode.toUpperCase() : currentScreenMode;
+            performVisionScan(effMode);
+        });
+        inputBar.addView(visionBtn);
+
+        // ➤ Smart Submit Button (Auto-detects Compose vs Ask)
+        TextView sendPromptBtn = new TextView(service);
+        sendPromptBtn.setText("➤");
+        sendPromptBtn.setTextColor(Color.BLACK);
+        sendPromptBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        sendPromptBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        sendPromptBtn.setPadding(dpToPx(10), dpToPx(5), dpToPx(10), dpToPx(5));
+        GradientDrawable sendBtnBg = new GradientDrawable();
+        sendBtnBg.setShape(GradientDrawable.RECTANGLE);
+        sendBtnBg.setCornerRadius(dpToPx(10));
+        sendBtnBg.setColor(Color.parseColor("#00F2FF"));
+        sendPromptBtn.setBackground(sendBtnBg);
+        sendPromptBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            submitUnifiedInput();
+        });
+        inputBar.addView(sendPromptBtn);
+
+        layout.addView(inputBar, inputBarLp);
+
         DisplayMetrics dm = service.getResources().getDisplayMetrics();
-        int width = Math.min(dpToPx(356), dm.widthPixels - dpToPx(20));
+        int width = Math.min(dpToPx(352), dm.widthPixels - dpToPx(20));
 
         cardParams = new WindowManager.LayoutParams(
                 width,
@@ -891,6 +830,90 @@ public class IrisFloatingCopilot {
         rebuildActionPillsForMode("GENERAL");
     }
 
+    private void buildMoreToolsGrid() {
+        if (moreToolsGrid == null) return;
+        moreToolsGrid.removeAllViews();
+
+        String[][][] rows = new String[][][]{
+                {{"🌐 Translate", "TRANSLATE"}, {"📌 Extract Data", "EXTRACT"}},
+                {{"🔎 Fact Check", "FACT_CHECK"}, {"📜 Deep Scan", "DEEP_SCAN"}},
+                {{"🧠 Solve / MCQ", "STUDENT_SOLVE"}, {"🃏 Flashcards", "STUDENT_FLASHCARDS"}},
+                {{"💡 Simplify (ELI5)", "STUDENT_ELI5"}, {"⭐ STAR Story", "INTERVIEW_STAR"}},
+                {{"💻 Code Solve", "INTERVIEW_CODE"}, {"✨ Polish Draft", "REWRITE"}}
+        };
+
+        for (String[][] rowDef : rows) {
+            LinearLayout row = new LinearLayout(service);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setPadding(0, 0, 0, dpToPx(4));
+            for (String[] item : rowDef) {
+                final String label = item[0];
+                final String act = item[1];
+                TextView btn = new TextView(service);
+                btn.setText(label);
+                btn.setTextColor(Color.parseColor("#DDF2FF"));
+                btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+                btn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+                btn.setGravity(Gravity.CENTER);
+                btn.setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6));
+
+                GradientDrawable bg = new GradientDrawable();
+                bg.setShape(GradientDrawable.RECTANGLE);
+                bg.setCornerRadius(dpToPx(10));
+                bg.setColor(Color.parseColor("#16FFFFFF"));
+                bg.setStroke(dpToPx(1), Color.parseColor("#2800F2FF"));
+                btn.setBackground(bg);
+
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                lp.setMargins(dpToPx(2), 0, dpToPx(2), 0);
+                btn.setLayoutParams(lp);
+                btn.setOnClickListener(v -> {
+                    v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                    moreToolsGrid.setVisibility(View.GONE);
+                    if ("DEEP_SCAN".equals(act)) {
+                        performDeepScan();
+                    } else {
+                        executeAction(act);
+                    }
+                });
+                row.addView(btn);
+            }
+            moreToolsGrid.addView(row);
+        }
+    }
+
+    private void submitUnifiedInput() {
+        if (customQuestionInput == null) return;
+        String q = customQuestionInput.getText().toString().trim();
+        if (q.isEmpty()) return;
+        customQuestionInput.setText("");
+        hideSoftKeyboard();
+        restoreNotFocusable();
+
+        if (COMPOSE_INTENT_PATTERN.matcher(q).find()) {
+            executeAction("COMPOSE:AUTO:" + q);
+        } else {
+            executeAction("ASK:" + q);
+        }
+    }
+
+    private void enableKeyboardFocus() {
+        if (cardParams == null || customQuestionInput == null) return;
+        cardParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        if (isCardAttached && cardView != null) {
+            try { windowManager.updateViewLayout(cardView, cardParams); } catch (Exception ignored) {}
+        }
+        customQuestionInput.requestFocus();
+        if (autoKeyboard) {
+            mainHandler.postDelayed(() -> {
+                InputMethodManager imm = (InputMethodManager) service.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.showSoftInput(customQuestionInput, InputMethodManager.SHOW_IMPLICIT);
+                }
+            }, 80);
+        }
+    }
+
     private void cyclePersonaMode() {
         if ("AUTO".equalsIgnoreCase(personaMode)) {
             personaMode = "INTERVIEW";
@@ -909,7 +932,7 @@ public class IrisFloatingCopilot {
             if (isCardAttached && cardView != null) {
                 try { windowManager.updateViewLayout(cardView, cardParams); } catch (Exception ignored) {}
             }
-            Toast.makeText(service, "🎯 INTERVIEW WINGMAN (Camera Teleprompter Docked)", Toast.LENGTH_SHORT).show();
+            Toast.makeText(service, "🎯 INTERVIEW WINGMAN (Camera Teleprompter)", Toast.LENGTH_SHORT).show();
         } else if ("STUDENT".equalsIgnoreCase(personaMode)) {
             Toast.makeText(service, "🎓 STUDENT STUDY & SOLVER MODE", Toast.LENGTH_SHORT).show();
         } else {
@@ -946,128 +969,60 @@ public class IrisFloatingCopilot {
         if ("INTERVIEW".equals(mode)) {
             quickActionsBar.addView(createActionPill("🎙️ LISTEN Q", true, v -> startInterviewVoiceCatcher()));
             quickActionsBar.addView(createActionPill("🎯 TELEPROMPTER", true, v -> executeAction("INTERVIEW_ANSWER")));
-            quickActionsBar.addView(createActionPill("⭐ STAR STORY", true, v -> executeAction("INTERVIEW_STAR")));
-            quickActionsBar.addView(createActionPill("💻 CODE SOLVE", false, v -> executeAction("INTERVIEW_CODE")));
-            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("INTERVIEW")));
-            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
         } else if ("STUDENT".equals(mode)) {
             quickActionsBar.addView(createActionPill("🧠 SOLVE / MCQ", true, v -> executeAction("STUDENT_SOLVE")));
-            quickActionsBar.addView(createActionPill("📸 VISION SCAN", true, v -> performVisionScan("STUDENT")));
-            quickActionsBar.addView(createActionPill("💡 SIMPLIFY (ELI5)", false, v -> executeAction("STUDENT_ELI5")));
             quickActionsBar.addView(createActionPill("🃏 FLASHCARDS", false, v -> executeAction("STUDENT_FLASHCARDS")));
-            quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
-            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
-            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
-        } else if ("CHAT".equals(mode)) {
-            quickActionsBar.addView(createActionPill("⚡ SMART REPLY", true, v -> executeAction("REPLY")));
-            quickActionsBar.addView(createActionPill("✍️ COMPOSE", true, v -> openInputMode("COMPOSE")));
-            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("AUTO")));
-            quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
-            quickActionsBar.addView(createActionPill("✨ REWRITE", false, v -> executeAction("REWRITE")));
-            quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
-            quickActionsBar.addView(createActionPill("📌 EXTRACT", false, v -> executeAction("EXTRACT")));
-            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
-            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
         } else if ("BROWSER".equals(mode)) {
-            quickActionsBar.addView(createActionPill("📝 TL;DR SUMMARY", true, v -> executeAction("SUMMARIZE")));
-            quickActionsBar.addView(createActionPill("📸 VISION SCAN", true, v -> performVisionScan("AUTO")));
-            quickActionsBar.addView(createActionPill("🧠 SOLVE / MCQ", false, v -> executeAction("STUDENT_SOLVE")));
-            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
-            quickActionsBar.addView(createActionPill("📌 EXTRACT DATA", false, v -> executeAction("EXTRACT")));
-            quickActionsBar.addView(createActionPill("🔍 EXPLAIN", false, v -> executeAction("EXPLAIN")));
-            quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
-            quickActionsBar.addView(createActionPill("✍️ COMPOSE", false, v -> openInputMode("COMPOSE")));
-            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
-        } else if ("EMAIL".equals(mode)) {
-            quickActionsBar.addView(createActionPill("✍️ COMPOSE", true, v -> openInputMode("COMPOSE")));
-            quickActionsBar.addView(createActionPill("⚡ SMART REPLY", true, v -> executeAction("REPLY")));
-            quickActionsBar.addView(createActionPill("✨ REWRITE", false, v -> executeAction("REWRITE")));
-            quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
-            quickActionsBar.addView(createActionPill("📌 ACTION ITEMS", false, v -> executeAction("EXTRACT")));
-            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("AUTO")));
-            quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
-            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
+            quickActionsBar.addView(createActionPill("📝 SUMMARIZE", true, v -> executeAction("SUMMARIZE")));
+            quickActionsBar.addView(createActionPill("🧠 SOLVE / EXPLAIN", false, v -> executeAction("STUDENT_SOLVE")));
         } else {
+            // CHAT / EMAIL / GENERAL
             quickActionsBar.addView(createActionPill("⚡ SMART REPLY", true, v -> executeAction("REPLY")));
-            quickActionsBar.addView(createActionPill("✍️ COMPOSE", true, v -> openInputMode("COMPOSE")));
-            quickActionsBar.addView(createActionPill("📸 VISION SCAN", false, v -> performVisionScan("AUTO")));
-            quickActionsBar.addView(createActionPill("🧠 SOLVE / MCQ", false, v -> executeAction("STUDENT_SOLVE")));
-            quickActionsBar.addView(createActionPill("📝 SUMMARIZE", false, v -> executeAction("SUMMARIZE")));
-            quickActionsBar.addView(createActionPill("📌 EXTRACT", false, v -> executeAction("EXTRACT")));
-            quickActionsBar.addView(createActionPill("🔎 FACT CHECK", false, v -> executeAction("FACT_CHECK")));
-            quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
-            quickActionsBar.addView(createActionPill("✨ REWRITE", false, v -> executeAction("REWRITE")));
-            quickActionsBar.addView(createActionPill("🔍 EXPLAIN", false, v -> executeAction("EXPLAIN")));
-            quickActionsBar.addView(createActionPill("💬 ASK AI", false, v -> openInputMode("ASK")));
+            if (hasActiveDraft) {
+                quickActionsBar.addView(createActionPill("✨ POLISH DRAFT", false, v -> executeAction("REWRITE")));
+            } else {
+                quickActionsBar.addView(createActionPill("🌐 TRANSLATE", false, v -> executeAction("TRANSLATE")));
+            }
         }
+
+        // 3rd Button is always the clean ➕ MORE ▾ toggle
+        quickActionsBar.addView(createActionPill("➕ MORE ▾", false, v -> {
+            if (moreToolsGrid != null) {
+                boolean show = moreToolsGrid.getVisibility() != View.VISIBLE;
+                moreToolsGrid.setVisibility(show ? View.VISIBLE : View.GONE);
+            }
+        }));
     }
 
     private View createActionPill(String title, boolean primary, View.OnClickListener onClick) {
         TextView tv = new TextView(service);
         tv.setText(title);
-        tv.setTextColor(primary ? Color.parseColor("#00F2FF") : Color.parseColor("#DDF2FF"));
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        tv.setTextColor(primary ? Color.BLACK : Color.parseColor("#DDF2FF"));
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
         tv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        tv.setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(6));
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(dpToPx(8), dpToPx(6.5f), dpToPx(8), dpToPx(6.5f));
 
         GradientDrawable pillBg = new GradientDrawable();
         pillBg.setShape(GradientDrawable.RECTANGLE);
-        pillBg.setCornerRadius(dpToPx(12));
-        pillBg.setColor(Color.parseColor(primary ? "#2900F2FF" : "#1400F2FF"));
-        pillBg.setStroke(dpToPx(1), Color.parseColor(primary ? "#8800F2FF" : "#3800F2FF"));
+        pillBg.setCornerRadius(dpToPx(11));
+        pillBg.setColor(Color.parseColor(primary ? "#00F2FF" : "#1800F2FF"));
+        pillBg.setStroke(dpToPx(1), Color.parseColor(primary ? "#00F2FF" : "#4400F2FF"));
         tv.setBackground(pillBg);
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, 0, dpToPx(6), 0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lp.setMargins(dpToPx(2), 0, dpToPx(2), 0);
         tv.setLayoutParams(lp);
         tv.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             onClick.onClick(v);
         });
         return tv;
-    }
-
-    private View createMiniDraftPill(String title, View.OnClickListener onClick) {
-        TextView tv = new TextView(service);
-        tv.setText(title);
-        tv.setTextColor(Color.parseColor("#FFE082"));
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-        tv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        tv.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(dpToPx(8));
-        bg.setColor(Color.parseColor("#22FFB300"));
-        bg.setStroke(dpToPx(1), Color.parseColor("#55FFB300"));
-        tv.setBackground(bg);
-
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, 0, dpToPx(5), 0);
-        tv.setLayoutParams(lp);
-        tv.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            onClick.onClick(v);
-        });
-        return tv;
-    }
-
-    private void refreshToneChips() {
-        for (TextView chip : toneChipViews) {
-            boolean active = composeTone.equals(chip.getTag());
-            GradientDrawable chipBg = new GradientDrawable();
-            chipBg.setShape(GradientDrawable.RECTANGLE);
-            chipBg.setCornerRadius(dpToPx(8));
-            chipBg.setColor(active ? Color.parseColor("#3300F2FF") : Color.parseColor("#11FFFFFF"));
-            chipBg.setStroke(dpToPx(1), active ? Color.parseColor("#00F2FF") : Color.parseColor("#33FFFFFF"));
-            chip.setBackground(chipBg);
-            chip.setTextColor(active ? Color.parseColor("#00F2FF") : Color.parseColor("#99FFFFFF"));
-        }
     }
 
     private void refreshReplyFilterChips() {
-        for (TextView chip : replyLengthChipViews) {
-            boolean active = replyLength.equals(chip.getTag());
+        for (TextView chip : replyFilterChipViews) {
+            boolean active = replyFilter.equals(chip.getTag());
             GradientDrawable chipBg = new GradientDrawable();
             chipBg.setShape(GradientDrawable.RECTANGLE);
             chipBg.setCornerRadius(dpToPx(8));
@@ -1075,16 +1030,6 @@ public class IrisFloatingCopilot {
             chipBg.setStroke(dpToPx(1), active ? Color.parseColor("#00F2FF") : Color.parseColor("#33FFFFFF"));
             chip.setBackground(chipBg);
             chip.setTextColor(active ? Color.parseColor("#00F2FF") : Color.parseColor("#99FFFFFF"));
-        }
-        for (TextView chip : replyToneChipViews) {
-            boolean active = replyTone.equals(chip.getTag());
-            GradientDrawable chipBg = new GradientDrawable();
-            chipBg.setShape(GradientDrawable.RECTANGLE);
-            chipBg.setCornerRadius(dpToPx(8));
-            chipBg.setColor(active ? Color.parseColor("#3310B981") : Color.parseColor("#11FFFFFF"));
-            chipBg.setStroke(dpToPx(1), active ? Color.parseColor("#10B981") : Color.parseColor("#33FFFFFF"));
-            chip.setBackground(chipBg);
-            chip.setTextColor(active ? Color.parseColor("#A7F3D0") : Color.parseColor("#99FFFFFF"));
         }
     }
 
@@ -1132,12 +1077,11 @@ public class IrisFloatingCopilot {
                                 if (interviewListenTrigger) {
                                     interviewListenTrigger = false;
                                     executeAction("INTERVIEW_LISTEN:" + spoken);
-                                } else if (customQuestionInput != null) {
-                                    customQuestionInput.setText(spoken);
+                                } else {
                                     hideSoftKeyboard();
                                     restoreNotFocusable();
-                                    if ("COMPOSE".equals(inputMode)) {
-                                        executeAction("COMPOSE:" + composeTone + ":" + spoken);
+                                    if (COMPOSE_INTENT_PATTERN.matcher(spoken).find()) {
+                                        executeAction("COMPOSE:AUTO:" + spoken);
                                     } else {
                                         executeAction("ASK:" + spoken);
                                     }
@@ -1154,47 +1098,13 @@ public class IrisFloatingCopilot {
             intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
             isVoiceListening = true;
             if (voiceMicBtn != null) voiceMicBtn.setText("🔴");
-            Toast.makeText(service, interviewListenTrigger ? "🎙️ Listening to Interviewer's Question..." : "Listening... speak your prompt", Toast.LENGTH_SHORT).show();
+            Toast.makeText(service, interviewListenTrigger ? "🎙️ Listening to Interviewer's Question..." : "🎙️ Speak message to compose or question...", Toast.LENGTH_SHORT).show();
             speechRecognizer.startListening(intent);
         } catch (Exception e) {
             isVoiceListening = false;
             interviewListenTrigger = false;
             if (voiceMicBtn != null) voiceMicBtn.setText("🎙️");
             Toast.makeText(service, "Voice input unavailable", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void openInputMode(String mode) {
-        if (askLayout == null || customQuestionInput == null) return;
-        boolean sameMode = mode.equals(inputMode);
-        boolean currentlyVisible = (askLayout.getVisibility() == View.VISIBLE);
-
-        if (currentlyVisible && sameMode) {
-            askLayout.setVisibility(View.GONE);
-            hideSoftKeyboard();
-            restoreNotFocusable();
-            return;
-        }
-
-        inputMode = mode;
-        boolean isCompose = "COMPOSE".equals(mode);
-        if (toneBar != null) toneBar.setVisibility(isCompose ? View.VISIBLE : View.GONE);
-        if (askSendBtn != null) askSendBtn.setText(isCompose ? "DRAFT" : "ASK");
-        customQuestionInput.setHint(isCompose ? "Type or tap 🎙️ (e.g. tell boss 15m late)" : "Ask about screen or tap 🎙️...");
-        customQuestionInput.setText("");
-
-        askLayout.setVisibility(View.VISIBLE);
-        cardParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-        if (isCardAttached) windowManager.updateViewLayout(cardView, cardParams);
-
-        customQuestionInput.requestFocus();
-        if (autoKeyboard) {
-            mainHandler.postDelayed(() -> {
-                InputMethodManager imm = (InputMethodManager) service.getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (imm != null) {
-                    imm.showSoftInput(customQuestionInput, InputMethodManager.SHOW_IMPLICIT);
-                }
-            }, 100);
         }
     }
 
@@ -1273,8 +1183,8 @@ public class IrisFloatingCopilot {
     public void hideCard() {
         hideSoftKeyboard();
         restoreNotFocusable();
-        if (askLayout != null) askLayout.setVisibility(View.GONE);
-        if (replyFilterLayout != null) replyFilterLayout.setVisibility(View.GONE);
+        if (moreToolsGrid != null) moreToolsGrid.setVisibility(View.GONE);
+        if (replyFilterScroll != null) replyFilterScroll.setVisibility(View.GONE);
         if (contextPreviewView != null) contextPreviewView.setVisibility(View.GONE);
         if (isCardAttached && cardView != null) {
             try {
@@ -1459,24 +1369,16 @@ public class IrisFloatingCopilot {
         }
 
         Matcher urlM = URL_PATTERN.matcher(corpus);
-        while (urlM.find() && out.size() < 6) {
+        while (urlM.find() && out.size() < 5) {
             String url = urlM.group();
-            String shortUrl = url.length() > 24 ? url.substring(0, 24) + "…" : url;
+            String shortUrl = url.length() > 22 ? url.substring(0, 22) + "…" : url;
             out.put("🔗 " + shortUrl, url);
         }
 
         Matcher emailM = EMAIL_PATTERN.matcher(corpus);
-        while (emailM.find() && out.size() < 6) {
+        while (emailM.find() && out.size() < 5) {
             String email = emailM.group();
             out.put("📧 " + email, email);
-        }
-
-        Matcher phoneM = PHONE_PATTERN.matcher(corpus);
-        while (phoneM.find() && out.size() < 6) {
-            String phone = phoneM.group().trim();
-            if (phone.replaceAll("\\D", "").length() >= 8) {
-                out.put("📞 " + phone, phone);
-            }
         }
     }
 
@@ -1556,6 +1458,7 @@ public class IrisFloatingCopilot {
         this.lastTargetInputNode = data.inputNode;
         this.lastSendButtonNode = data.sendNode;
         this.currentAppLabel = data.appName;
+        this.hasActiveDraft = data.hasInput && !data.currentDraft.isEmpty();
 
         this.currentScreenMode = data.screenMode;
         String appLabel = data.appName.toUpperCase();
@@ -1573,16 +1476,12 @@ public class IrisFloatingCopilot {
         }
 
         int textCount = combinedTexts.size();
-        String sub = (!deepScanBuffer.isEmpty() ? "📜 " + textCount + " stitched nodes" : textCount + " nodes");
-        if (data.hasInput) {
-            sub += " • Draft (" + (data.currentDraft.isEmpty() ? "empty" : data.currentDraft.length() + "c") + ")";
+        String sub = (!deepScanBuffer.isEmpty() ? "📜 " + textCount + " stitched nodes" : textCount + " screen nodes");
+        if (hasActiveDraft) {
+            sub += " • Draft (" + data.currentDraft.length() + "c)";
         }
         sub += " • Inspect ▾";
         cardSubTitle.setText(sub);
-
-        if (draftToolsScroll != null) {
-            draftToolsScroll.setVisibility(data.hasInput && !data.currentDraft.isEmpty() ? View.VISIBLE : View.GONE);
-        }
 
         if (entitiesBar != null && entitiesScroll != null) {
             entitiesBar.removeAllViews();
@@ -1628,13 +1527,13 @@ public class IrisFloatingCopilot {
         if (!data.selectedText.isEmpty()) {
             sb.append("User Highlighted/Selected Text: \"").append(data.selectedText).append("\"\n");
         }
-        if (data.hasInput && !data.currentDraft.isEmpty()) {
+        if (hasActiveDraft) {
             sb.append("Current Draft in Input Box: \"").append(data.currentDraft).append("\"\n");
         }
         sb.append("Screen Content (ordered top-to-bottom):\n");
         int start = Math.max(0, combinedTexts.size() - 45);
         StringBuilder previewSb = new StringBuilder();
-        if (data.hasInput && !data.currentDraft.isEmpty()) {
+        if (hasActiveDraft) {
             previewSb.append("DRAFT: ").append(data.currentDraft).append("\n---\n");
         }
         for (int i = start; i < combinedTexts.size(); i++) {
@@ -1664,15 +1563,19 @@ public class IrisFloatingCopilot {
         return "";
     }
 
-    private String getLengthDirective() {
-        if ("SHORT".equalsIgnoreCase(replyLength)) {
+    private String getFilterDirective() {
+        if ("SHORT".equalsIgnoreCase(replyFilter)) {
             return " Length Requirement: SHORT & BRIEF (1 short sentence or a few words).";
         }
-        if ("MEDIUM".equalsIgnoreCase(replyLength)) {
-            return " Length Requirement: MEDIUM (1 to 2 balanced, natural sentences).";
-        }
-        if ("DETAILED".equalsIgnoreCase(replyLength)) {
+        if ("DETAILED".equalsIgnoreCase(replyFilter)) {
             return " Length Requirement: DETAILED & LONG (thorough, complete, well-explained 2 to 4 sentences).";
+        }
+        return "";
+    }
+
+    private String getUserBioDirective() {
+        if (userBio != null && !userBio.trim().isEmpty()) {
+            return "\nUser Resume / Study Profile Context: \"" + userBio.trim() + "\"\n";
         }
         return "";
     }
@@ -1708,13 +1611,6 @@ public class IrisFloatingCopilot {
                 }
             }
         } catch (Exception ignored) {}
-        return "";
-    }
-
-    private String getUserBioDirective() {
-        if (userBio != null && !userBio.trim().isEmpty()) {
-            return "\nUser Resume / Study Profile Context: \"" + userBio.trim() + "\"\n";
-        }
         return "";
     }
 
@@ -1849,27 +1745,22 @@ public class IrisFloatingCopilot {
     }
 
     private void executeAction(String action) {
+        if (moreToolsGrid != null) moreToolsGrid.setVisibility(View.GONE);
         loadingIndicator.setVisibility(View.VISIBLE);
         resultsContainer.removeAllViews();
 
-        // Show Length + Tone Filter Bar for Smart Reply, Summarize, Explain, Extract, Fact Check, Interview, Student
-        boolean showFilters = "REPLY".equals(action) || "SUMMARIZE".equals(action)
-                || "EXPLAIN".equals(action) || "EXTRACT".equals(action) || "FACT_CHECK".equals(action)
-                || action.startsWith("INTERVIEW_") || action.startsWith("STUDENT_");
-        if (replyFilterLayout != null) {
-            replyFilterLayout.setVisibility(showFilters ? View.VISIBLE : View.GONE);
+        boolean showFilterRow = "REPLY".equals(action) || "REWRITE".equals(action) || action.startsWith("COMPOSE:");
+        if (replyFilterScroll != null) {
+            replyFilterScroll.setVisibility(showFilterRow ? View.VISIBLE : View.GONE);
         }
-        if (replyToneRow != null) {
-            replyToneRow.setVisibility("REPLY".equals(action) ? View.VISIBLE : View.GONE);
-        }
-        if (showFilters) {
+        if (showFilterRow) {
             lastActiveAction = action;
         }
 
         executor.execute(() -> {
             try {
                 String styleDir = getPersonalStyleDirective();
-                String lenDir = getLengthDirective();
+                String lenDir = getFilterDirective();
                 String bioDir = getUserBioDirective();
                 String systemPrompt = "You are Iris Copilot, a sharp cybernetic AI assistant analyzing an Android app screen. Respond directly, concisely, and naturally without filler words." + styleDir + lenDir;
                 String userPrompt = "";
@@ -1921,38 +1812,35 @@ public class IrisFloatingCopilot {
                     userPrompt = lastExtractedContext + "\nCreate 3 study flashcards from this screen:";
                 } else if ("REPLY".equals(action)) {
                     String toneInstr;
-                    if ("AUTO".equals(replyTone) && "AUTO".equals(replyLength)) {
+                    if ("AUTO".equals(replyFilter)) {
                         toneInstr = "Generate 3 distinct replies covering 3 styles in this exact order: "
                                 + "1) Short & Casual (quick 1-liner), "
                                 + "2) Polite & Balanced (warm and courteous), "
                                 + "3) Detailed & Complete (thorough, thoughtful response).";
                     } else {
-                        String tDesc = "POLITE".equals(replyTone) ? "warm, polite, and courteous"
-                                : "CASUAL".equals(replyTone) ? "casual, friendly, and relaxed"
-                                : "PRO".equals(replyTone) ? "polished and professional"
-                                : "WITTY".equals(replyTone) ? "clever, witty, and engaging"
-                                : "YES".equals(replyTone) ? "agreeing / saying YES positively"
-                                : "NO".equals(replyTone) ? "politely declining / saying NO"
-                                : "LATER".equals(replyTone) ? "saying you are busy right now and will follow up later"
+                        String tDesc = "POLITE".equals(replyFilter) ? "warm, polite, and courteous"
+                                : "CASUAL".equals(replyFilter) ? "casual, friendly, and relaxed"
+                                : "SHORT".equals(replyFilter) ? "ultra-short and direct (1 quick sentence)"
+                                : "DETAILED".equals(replyFilter) ? "detailed, thorough, and well-explained (2-3 sentences)"
+                                : "YES".equals(replyFilter) ? "agreeing / saying YES positively"
+                                : "NO".equals(replyFilter) ? "politely declining / saying NO"
+                                : "LATER".equals(replyFilter) ? "saying you are busy right now and will follow up later"
                                 : "natural and context-appropriate";
-                        toneInstr = "Generate 3 smart replies all matching this tone/stance: " + tDesc + "." + lenDir;
+                        toneInstr = "Generate 3 smart replies all matching this style/stance: " + tDesc + ".";
                     }
                     systemPrompt = "You are Iris Copilot. Based on the screen conversation ([THEM] = incoming messages, [YOU] = user's messages), "
                             + toneInstr + styleDir
                             + " Return ONLY a JSON array of 3 strings: [\"reply1\", \"reply2\", \"reply3\"]. No markdown wrapper, no filler.";
                     userPrompt = lastExtractedContext + "\nGenerate 3 smart replies for the user to send next:";
                 } else if ("SUMMARIZE".equals(action)) {
-                    String depth = "SHORT".equals(replyLength) ? "Summarize into a ultra-short 2-line TL;DR."
-                            : "DETAILED".equals(replyLength) ? "Provide a comprehensive, detailed summary with key takeaways and context."
-                            : "Summarize the key information into 3 crisp, high-signal bullet points (- ).";
-                    systemPrompt = "You are Iris Copilot. " + depth;
+                    systemPrompt = "You are Iris Copilot. Summarize the key information into 3 crisp, high-signal bullet points (- )." + lenDir;
                     userPrompt = lastExtractedContext + "\nSummarize this screen:";
                 } else if ("EXTRACT".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Extract all key actionable items, dates/times, tasks, prices, specs, or important facts visible on this screen into a clean, structured bulleted list (- )." + lenDir;
+                    systemPrompt = "You are Iris Copilot. Extract all key actionable items, dates/times, tasks, prices, specs, or important facts visible on this screen into a clean, structured bulleted list (- ).";
                     userPrompt = lastExtractedContext + "\nExtract key actionable items and facts from this screen:";
                 } else if ("FACT_CHECK".equals(action)) {
                     String wikiContext = fetchWikipediaFacts(lastExtractedContext);
-                    systemPrompt = "You are Iris Copilot Fact-Checker. Verify the main claims, topics, or entities visible on this screen using the provided Live Web Encyclopedia Reference and your knowledge. Point out what is accurate, any context needed, and key facts." + lenDir;
+                    systemPrompt = "You are Iris Copilot Fact-Checker. Verify the main claims, topics, or entities visible on this screen using the provided Live Web Encyclopedia Reference and your knowledge. Point out what is accurate, any context needed, and key facts.";
                     userPrompt = lastExtractedContext + wikiContext + "\nFact-check and explain the key claims/topics on this screen:";
                 } else if (action.startsWith("CLIPBOARD_AI:")) {
                     String clipText = action.substring("CLIPBOARD_AI:".length());
@@ -1964,13 +1852,6 @@ public class IrisFloatingCopilot {
                 } else if ("REWRITE".equals(action)) {
                     systemPrompt = "You are Iris Copilot. Take the user's current draft (or the last message if no draft) and generate 3 improved alternatives: 1. Short & Casual, 2. Polite & Professional, 3. Detailed & Articulate. Return ONLY a JSON array of 3 strings: [\"version1\", \"version2\", \"version3\"].";
                     userPrompt = lastExtractedContext + "\nRewrite this draft:";
-                } else if ("DRAFT_FIX".equals(action) || "DRAFT_POLITE".equals(action) || "DRAFT_SHORT".equals(action) || "DRAFT_EXPAND".equals(action)) {
-                    String goal = "DRAFT_FIX".equals(action) ? "Fix all grammar, spelling, and punctuation while keeping the natural tone"
-                            : "DRAFT_POLITE".equals(action) ? "Make it warm, polite, and diplomatic"
-                            : "DRAFT_SHORT".equals(action) ? "Make it ultra-short, punchy, and direct"
-                            : "Expand it into a detailed, well-structured message";
-                    systemPrompt = "You are Iris Copilot. Transform the user's current draft according to this goal: " + goal + ". Return ONLY a JSON array of 2 strings with the best transformed versions: [\"option1\", \"option2\"].";
-                    userPrompt = lastExtractedContext + "\nTransform the user's current draft:";
                 } else if (action.startsWith("REFINE_SHORT:")) {
                     String orig = action.substring("REFINE_SHORT:".length());
                     systemPrompt = "You are Iris Copilot. Rewrite the given message in 2 shorter, punchier variations. Return ONLY a JSON array of 2 strings: [\"short1\", \"short2\"].";
@@ -1985,15 +1866,8 @@ public class IrisFloatingCopilot {
                 } else if (action.startsWith("COMPOSE:")) {
                     String rest = action.substring("COMPOSE:".length());
                     int colonIdx = rest.indexOf(':');
-                    String tone = colonIdx > 0 ? rest.substring(0, colonIdx) : "AUTO";
                     String instruction = colonIdx > 0 ? rest.substring(colonIdx + 1) : rest;
-                    String toneDesc = "PRO".equals(tone) ? "polished and professional"
-                            : "CASUAL".equals(tone) ? "warm, casual, and friendly"
-                            : "POLITE".equals(tone) ? "courteous, polite, and respectful"
-                            : "SHORT".equals(tone) ? "short, concise, and direct (1 sentence)"
-                            : "DETAILED".equals(tone) ? "detailed, thorough, and complete (2-4 sentences)"
-                            : "natural and fitting for the app (provide 1 short, 1 polite medium, and 1 detailed option)";
-                    systemPrompt = "You are Iris Copilot, a sharp message composer. Based on the user's instruction, target style (" + toneDesc + "), and active app/screen context, generate 3 ready-to-send message drafts." + styleDir + " Return ONLY a JSON array of 3 strings: [\"draft1\", \"draft2\", \"draft3\"]. No markdown wrapper, no filler.";
+                    systemPrompt = "You are Iris Copilot, a sharp message composer. Based on the user's instruction and active app/screen context, generate 3 ready-to-send message drafts: 1) Short & Casual, 2) Polite & Balanced, 3) Detailed & Complete." + styleDir + lenDir + " Return ONLY a JSON array of 3 strings: [\"draft1\", \"draft2\", \"draft3\"]. No markdown wrapper, no filler.";
                     userPrompt = lastExtractedContext + "\nCompose a message for this instruction: " + instruction;
                 } else if (action.startsWith("ASK:")) {
                     String question = action.substring("ASK:".length());
@@ -2041,8 +1915,8 @@ public class IrisFloatingCopilot {
         } catch (Exception ignored) {}
 
         boolean expectsSuggestions = "REPLY".equals(action) || "REWRITE".equals(action)
-                || action.startsWith("COMPOSE:") || action.startsWith("DRAFT_")
-                || action.startsWith("REFINE_") || action.startsWith("CLIPBOARD_AI:");
+                || action.startsWith("COMPOSE:") || action.startsWith("REFINE_")
+                || action.startsWith("CLIPBOARD_AI:");
         if (items.isEmpty() && (expectsSuggestions || raw.contains("\n1."))) {
             String[] lines = raw.split("\n");
             for (String line : lines) {
@@ -2059,14 +1933,11 @@ public class IrisFloatingCopilot {
             String[] autoBadges = new String[]{"⚡ SHORT & CASUAL", "👔 POLITE & BALANCED", "📝 DETAILED & COMPLETE"};
             for (int i = 0; i < items.size(); i++) {
                 String badgeLabel;
-                if ("REPLY".equals(action) && "AUTO".equals(replyTone) && "AUTO".equals(replyLength) && i < autoBadges.length) {
-                    badgeLabel = autoBadges[i];
-                } else if ("REWRITE".equals(action) && i < autoBadges.length) {
+                if (("REPLY".equals(action) || "REWRITE".equals(action) || action.startsWith("COMPOSE:"))
+                        && "AUTO".equals(replyFilter) && i < autoBadges.length) {
                     badgeLabel = autoBadges[i];
                 } else if ("REPLY".equals(action)) {
-                    badgeLabel = replyTone + " • " + replyLength;
-                } else if (action.startsWith("COMPOSE:")) {
-                    badgeLabel = "DRAFT #" + (i + 1) + " • " + composeTone;
+                    badgeLabel = "STYLE: " + replyFilter;
                 } else {
                     badgeLabel = "OPTION #" + (i + 1);
                 }
@@ -2099,105 +1970,75 @@ public class IrisFloatingCopilot {
         bg.setStroke(dpToPx(1), Color.parseColor("#3300F2FF"));
         card.setBackground(bg);
 
-        if (styleBadge != null && !styleBadge.isEmpty()) {
-            TextView badgeTv = new TextView(service);
-            badgeTv.setText(styleBadge);
-            badgeTv.setTextColor(Color.parseColor("#8800F2FF"));
-            badgeTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 7.5f);
-            badgeTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            badgeTv.setPadding(0, 0, 0, dpToPx(3));
-            card.addView(badgeTv);
-        }
+        // Header Row inside card: Style Badge on Left + Primary Actions (⋯, INSERT ↵, SEND ➤) on Right
+        LinearLayout topRow = new LinearLayout(service);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+        topRow.setPadding(0, 0, 0, dpToPx(4));
 
-        TextView tv = new TextView(service);
-        tv.setText(suggestion);
-        tv.setTextColor(Color.WHITE);
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        card.addView(tv);
+        TextView badgeTv = new TextView(service);
+        badgeTv.setText(styleBadge != null ? styleBadge : "SUGGESTION");
+        badgeTv.setTextColor(Color.parseColor("#8800F2FF"));
+        badgeTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 7.5f);
+        badgeTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        topRow.addView(badgeTv, badgeLp);
 
-        LinearLayout btnRow = new LinearLayout(service);
-        btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        btnRow.setPadding(0, dpToPx(6), 0, 0);
+        // Secondary Drawer (Hidden until ⋯ is tapped)
+        final LinearLayout extraRow = new LinearLayout(service);
+        extraRow.setOrientation(LinearLayout.HORIZONTAL);
+        extraRow.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        extraRow.setPadding(0, dpToPx(6), 0, 0);
+        extraRow.setVisibility(View.GONE);
 
-        // Shorten button
-        TextView shortenBtn = new TextView(service);
-        shortenBtn.setText("SHORT ✂️");
-        shortenBtn.setTextColor(Color.parseColor("#99FFFFFF"));
-        shortenBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-        shortenBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        shortenBtn.setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4));
-        shortenBtn.setOnClickListener(v -> {
+        // ⋯ More Toggle
+        TextView moreBtn = new TextView(service);
+        moreBtn.setText("⋯");
+        moreBtn.setTextColor(Color.parseColor("#99FFFFFF"));
+        moreBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+        moreBtn.setPadding(dpToPx(8), dpToPx(2), dpToPx(8), dpToPx(2));
+        moreBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            executeAction("REFINE_SHORT:" + suggestion);
+            extraRow.setVisibility(extraRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
         });
-        btnRow.addView(shortenBtn);
+        topRow.addView(moreBtn);
 
-        // Expand / Detail button
-        TextView detailBtn = new TextView(service);
-        detailBtn.setText("DETAIL ➕");
-        detailBtn.setTextColor(Color.parseColor("#99FFFFFF"));
-        detailBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-        detailBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        detailBtn.setPadding(dpToPx(5), dpToPx(4), dpToPx(5), dpToPx(4));
-        detailBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            executeAction("REFINE_DETAIL:" + suggestion);
-        });
-        btnRow.addView(detailBtn);
-
-        TextView copyBtn = new TextView(service);
-        copyBtn.setText("COPY");
-        copyBtn.setTextColor(Color.parseColor("#8800F2FF"));
-        copyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
-        copyBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        copyBtn.setPadding(dpToPx(7), dpToPx(4), dpToPx(7), dpToPx(4));
-        copyBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            copyToClipboard(suggestion);
-            Toast.makeText(service, "Copied to clipboard", Toast.LENGTH_SHORT).show();
-        });
-        btnRow.addView(copyBtn);
-
+        // INSERT ↵
         TextView injectBtn = new TextView(service);
         injectBtn.setText("INSERT ↵");
         injectBtn.setTextColor(Color.BLACK);
-        injectBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        injectBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
         injectBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        injectBtn.setPadding(dpToPx(9), dpToPx(4), dpToPx(9), dpToPx(4));
-
+        injectBtn.setPadding(dpToPx(9), dpToPx(3.5f), dpToPx(9), dpToPx(3.5f));
         GradientDrawable btnBg = new GradientDrawable();
         btnBg.setShape(GradientDrawable.RECTANGLE);
         btnBg.setCornerRadius(dpToPx(6));
         btnBg.setColor(Color.parseColor("#00F2FF"));
         injectBtn.setBackground(btnBg);
-
         injectBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             boolean success = injectText(suggestion);
             Toast.makeText(service, success ? "✓ Inserted into " + (currentAppLabel.isEmpty() ? "app" : currentAppLabel) : "Copied to clipboard (Tap & hold to paste)", Toast.LENGTH_SHORT).show();
             hideCard();
         });
-        btnRow.addView(injectBtn);
+        topRow.addView(injectBtn);
 
+        // SEND ➤ (Shown when Send button is detected on screen)
         if (lastSendButtonNode != null) {
             TextView sendNowBtn = new TextView(service);
             sendNowBtn.setText("SEND ➤");
             sendNowBtn.setTextColor(Color.BLACK);
-            sendNowBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+            sendNowBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
             sendNowBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            sendNowBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-
+            sendNowBtn.setPadding(dpToPx(8), dpToPx(3.5f), dpToPx(8), dpToPx(3.5f));
             GradientDrawable sendBg = new GradientDrawable();
             sendBg.setShape(GradientDrawable.RECTANGLE);
             sendBg.setCornerRadius(dpToPx(6));
             sendBg.setColor(Color.parseColor("#10B981"));
             sendNowBtn.setBackground(sendBg);
-
             LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             sendLp.setMargins(dpToPx(4), 0, 0, 0);
             sendNowBtn.setLayoutParams(sendLp);
-
             sendNowBtn.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                 boolean injected = injectText(suggestion);
@@ -2211,14 +2052,47 @@ public class IrisFloatingCopilot {
                     }, 140);
                 }
             });
-            btnRow.addView(sendNowBtn);
+            topRow.addView(sendNowBtn);
         }
 
-        card.addView(btnRow);
+        card.addView(topRow);
+
+        // Suggestion Text (Tap text directly to copy)
+        TextView tv = new TextView(service);
+        tv.setText(suggestion);
+        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        tv.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            copyToClipboard(suggestion);
+            Toast.makeText(service, "Copied to clipboard", Toast.LENGTH_SHORT).show();
+        });
+        card.addView(tv);
+
+        // Populate Secondary Drawer (✂️ Shorter, ➕ Longer, ➕ Task, 📝 Note)
+        extraRow.addView(createSecondaryCardAction("✂️ SHORTER", v -> executeAction("REFINE_SHORT:" + suggestion)));
+        extraRow.addView(createSecondaryCardAction("➕ LONGER", v -> executeAction("REFINE_DETAIL:" + suggestion)));
+        extraRow.addView(createSecondaryCardAction("➕ TASK", v -> saveToIrisItemQueue("copilot_saved_tasks", suggestion, "Tasks")));
+        extraRow.addView(createSecondaryCardAction("📝 NOTE", v -> saveToIrisItemQueue("copilot_saved_notes", suggestion, "Notes")));
+        card.addView(extraRow);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, 0, 0, dpToPx(6));
         resultsContainer.addView(card, lp);
+    }
+
+    private View createSecondaryCardAction(String label, View.OnClickListener onClick) {
+        TextView tv = new TextView(service);
+        tv.setText(label);
+        tv.setTextColor(Color.parseColor("#BBFFFFFF"));
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 7.5f);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        tv.setPadding(dpToPx(6), dpToPx(3), dpToPx(6), dpToPx(3));
+        tv.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            onClick.onClick(v);
+        });
+        return tv;
     }
 
     private void addTextCard(String content) {
@@ -2237,6 +2111,11 @@ public class IrisFloatingCopilot {
         tv.setTextColor(Color.parseColor("#EEEEEE"));
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
         tv.setLineSpacing(0, 1.2f);
+        tv.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            copyToClipboard(content);
+            Toast.makeText(service, "Copied to clipboard", Toast.LENGTH_SHORT).show();
+        });
         card.addView(tv);
 
         LinearLayout btnRow = new LinearLayout(service);
@@ -2244,63 +2123,19 @@ public class IrisFloatingCopilot {
         btnRow.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         btnRow.setPadding(0, dpToPx(6), 0, 0);
 
-        // 1-Tap Save to IRIS Tasks
-        TextView saveTaskBtn = new TextView(service);
-        saveTaskBtn.setText("➕ TASK");
-        saveTaskBtn.setTextColor(Color.parseColor("#A7F3D0"));
-        saveTaskBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-        saveTaskBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        saveTaskBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
-        saveTaskBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            saveToIrisItemQueue("copilot_saved_tasks", content, "Tasks");
-        });
-        btnRow.addView(saveTaskBtn);
-
-        // 1-Tap Save to IRIS Notes
-        TextView saveNoteBtn = new TextView(service);
-        saveNoteBtn.setText("📝 NOTE");
-        saveNoteBtn.setTextColor(Color.parseColor("#FDE68A"));
-        saveNoteBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-        saveNoteBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        saveNoteBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
-        saveNoteBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            saveToIrisItemQueue("copilot_saved_notes", content, "Notes");
-        });
-        btnRow.addView(saveNoteBtn);
-
-        TextView followUpBtn = new TextView(service);
-        followUpBtn.setText("FOLLOW UP 💬");
-        followUpBtn.setTextColor(Color.parseColor("#AAFFFFFF"));
-        followUpBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
-        followUpBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        followUpBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
-        followUpBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            openInputMode("ASK");
-        });
-        btnRow.addView(followUpBtn);
-
-        TextView copyBtn = new TextView(service);
-        copyBtn.setText("COPY");
-        copyBtn.setTextColor(Color.parseColor("#8800F2FF"));
-        copyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
-        copyBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        copyBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
-        copyBtn.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        btnRow.addView(createSecondaryCardAction("➕ TASK", v -> saveToIrisItemQueue("copilot_saved_tasks", content, "Tasks")));
+        btnRow.addView(createSecondaryCardAction("📝 NOTE", v -> saveToIrisItemQueue("copilot_saved_notes", content, "Notes")));
+        btnRow.addView(createSecondaryCardAction("COPY", v -> {
             copyToClipboard(content);
             Toast.makeText(service, "Copied to clipboard", Toast.LENGTH_SHORT).show();
-        });
-        btnRow.addView(copyBtn);
+        }));
 
         TextView insertBtn = new TextView(service);
         insertBtn.setText("INSERT ↵");
         insertBtn.setTextColor(Color.parseColor("#00F2FF"));
         insertBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
         insertBtn.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        insertBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
+        insertBtn.setPadding(dpToPx(6), dpToPx(3), dpToPx(6), dpToPx(3));
         insertBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             boolean success = injectText(content);
