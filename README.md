@@ -28,10 +28,26 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 5.9.0
+- **Version**: 6.0.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
+
+## ⚡ v6.0.0 IRIS Copilot 3.0 — Interview Wingman, Student Solver, Vision Scan & Clean Rule-of-3 UI
+
+IRIS v6.0.0 introduces **IRIS Copilot 3.0** with live Interview & Student modes, Gemini Vision Screenshot Scanning, and a redesigned clutter-free UI:
+- **Clean "Rule of 3" Context-Smart UI**:
+  - Displays only the **2 best actions** for your active screen mode plus an expandable **`➕ MORE ▾` 2-Column Grid Drawer** for power tools (`🌐 Translate`, `📌 Extract Data`, `🔎 Fact Check`, `📜 Deep Scan`, `💡 Simplify (ELI5)`, `⭐ STAR Story`, `💻 Code Solve`, `✨ Polish Draft`).
+  - **Single-Row Quick Filter Strip**: 1-tap `✨ 3-Mix`, `👍 Yes`, `✋ No`, `⏳ Later`, `👔 Polite`, `😎 Casual`, `⚡ Short`, and `📝 Detailed` filters.
+  - **Decluttered Result Cards**: Tap any suggestion text to copy to clipboard; header shows only `⋯`, `INSERT ↵`, and `SEND ➤`, with `✂️ SHORTER`, `➕ LONGER`, `➕ TASK`, and `📝 NOTE` tucked cleanly inside `⋯`.
+  - **Unified Smart Bottom Input Bar**: Single `[ Write message or ask AI... ] [🎙️] [📸] [➤]` bar with automatic intent routing (drafts messages or answers questions) plus 1-tap Voice and Vision Screenshot Scan.
+- **🎯 Interview Wingman Mode (`INTERVIEW`)**:
+  - Auto-activates on Zoom, Google Meet, Microsoft Teams, Webex, LinkedIn, and LeetCode (or tap the mode badge to cycle manually).
+  - Includes **`🎤 Answer This`** (3-bullet teleprompter points + natural 30-second spoken script), **`⭐ STAR Story`** (`[S]`, `[T]`, `[A]`, `[R]` generator), **`💻 Code Solve`** (Approach + clean code + Time/Space complexity), and **Live Caption Buffer** (`captionHistoryBuffer`) that captures rolling meeting captions.
+- **🎓 Student Study & Exam Solver (`STUDENT`)**:
+  - Includes **`🧠 Solve / MCQ`** (direct answer + step-by-step explanation), **`🃏 Flashcards`** (`Q:` / `A:` study cards with 1-tap save to IRIS Notes), and **`💡 Simplify (ELI5)`** (plain-English breakdown + real-world analogy).
+- **📸 Gemini Vision Screenshot Scan (`VISION_SCAN`)**:
+  - Captures the live screen via Android 11+ `AccessibilityService.takeScreenshot()` and sends it to Gemini Multimodal Vision to solve diagrams, math equations, charts, and non-selectable images.
 
 ## ⚡ v5.9.0 IRIS Copilot 2.0 (Spatial Chat AI, Length/Tone Selector, Deep Scan) & Self-Healing Live Models
 
