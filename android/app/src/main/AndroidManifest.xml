@@ -133,7 +133,21 @@
         <service
             android:name="com.stitch.iris.launcher.IrisVoiceSessionService"
             android:permission="android.permission.BIND_VOICE_INTERACTION"
-            android:exported="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionSessionService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="com.stitch.iris.launcher.IrisRecognitionService"
+            android:label="IRIS Voice Recognition"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
     </application>
 
     <!-- Permissions -->

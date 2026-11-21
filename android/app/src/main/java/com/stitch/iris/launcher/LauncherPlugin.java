@@ -2299,8 +2299,19 @@ public class LauncherPlugin extends Plugin {
                     return;
                 }
                 if (currentRecognizer == null) {
-                    // Use standard SpeechRecognizer so Android system attribution (AppOp 27) is properly granted
-                    currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
+                    android.content.ComponentName googleRecog = new android.content.ComponentName(
+                        "com.google.android.tts",
+                        "com.google.android.apps.speech.tts.googletts.service.GoogleTTSRecognitionService"
+                    );
+                    try {
+                        PackageManager pm = getContext().getPackageManager();
+                        if (pm.getServiceInfo(googleRecog, 0) != null) {
+                            currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext(), googleRecog);
+                        }
+                    } catch (Exception ignored) {}
+                    if (currentRecognizer == null) {
+                        currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
+                    }
                 }
                 Intent intent = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
