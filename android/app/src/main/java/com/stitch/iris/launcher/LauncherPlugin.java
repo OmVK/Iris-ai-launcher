@@ -2293,12 +2293,14 @@ public class LauncherPlugin extends Plugin {
     public void startOfflineSpeech(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             try {
+                if (ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    androidx.core.app.ActivityCompat.requestPermissions(getActivity(), new String[]{android.Manifest.permission.RECORD_AUDIO}, 7001);
+                    call.reject("RECORD_AUDIO permission not granted yet");
+                    return;
+                }
                 if (currentRecognizer == null) {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && android.speech.SpeechRecognizer.isOnDeviceRecognitionAvailable(getContext())) {
-                        currentRecognizer = android.speech.SpeechRecognizer.createOnDeviceSpeechRecognizer(getContext());
-                    } else {
-                        currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
-                    }
+                    // Use standard SpeechRecognizer so Android system attribution (AppOp 27) is properly granted
+                    currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
                 }
                 Intent intent = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -2306,11 +2308,9 @@ public class LauncherPlugin extends Plugin {
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1);
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 5000);
-                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000);
-                intent.putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 5000);
-                intent.putExtra("android.speech.extra.DICTATION_MODE", true);
-                intent.putExtra("sound_off", true);
+                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4500);
+                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2200);
+                intent.putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 2200);
 
                 // Mute system streams to silence Google Assistant activation chime
                 final android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);

@@ -395,7 +395,26 @@ export default function useVoiceEngine() {
     }
 
     let cancelled = false
+    let partialTriggered = false
     isWakeLoopRunningRef.current = true
+
+    const wakePartialListener = NativeLauncher.addListener('onSpeechPartial', (data) => {
+      if (cancelled || partialTriggered || isListeningRef.current || isSpeakingRef.current || isLiveVoiceRef.current) return
+      const partial = (data?.text || '').trim()
+      if (!partial) return
+      const match = partial.match(WAKE_WORD_REGEX)
+      if (match) {
+        const inlineQuery = (match[1] || '').trim()
+        // If user just said "Hey Iris", trigger immediately on partial without waiting for silence timeout!
+        if (inlineQuery.length === 0) {
+          partialTriggered = true
+          NativeLauncher.stopOfflineSpeech().catch(() => {})
+          HapticFeedback.double()
+          setActivePage('assistant')
+          handleOpenLiveMode()
+        }
+      }
+    })
 
     const runWakeLoop = async () => {
       while (!cancelled && mountedRef.current && useAIStore.getState().wakeWordEnabled && useAppStore.getState().isAppActive) {
@@ -410,9 +429,13 @@ export default function useVoiceEngine() {
           continue
         }
 
+        partialTriggered = false
         try {
           const res = await NativeLauncher.startOfflineSpeech()
-          if (cancelled || !useAIStore.getState().wakeWordEnabled) break
+          if (cancelled || partialTriggered || !useAIStore.getState().wakeWordEnabled) {
+            await new Promise(r => setTimeout(r, 500))
+            continue
+          }
           const transcript = (res?.text || '').trim()
           const match = transcript.match(WAKE_WORD_REGEX)
           if (match) {
@@ -442,6 +465,8 @@ export default function useVoiceEngine() {
     return () => {
       cancelled = true
       isWakeLoopRunningRef.current = false
+      if (typeof wakePartialListener?.then === 'function') wakePartialListener.then(l => l.remove())
+      else wakePartialListener?.remove?.()
       if (!isListeningRef.current && !isLiveVoiceRef.current) {
         NativeLauncher.stopOfflineSpeech().catch(() => {})
       }
