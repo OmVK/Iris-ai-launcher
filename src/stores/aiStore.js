@@ -31,6 +31,7 @@ export const useAIStore = create((set, get) => ({
   voiceRate: (() => { try { const v = parseFloat(getLS('iris_voice_rate', '0.96')); return isNaN(v) ? 0.96 : v } catch { return 0.96 } })(),
   voiceTimbre: getLS('iris_voice_timbre', 'natural_female'),
   voiceEngineProvider: getLS('iris_voice_engine_provider', 'NATIVE'),
+  wakeWordEnabled: getLS('iris_wake_word_enabled', 'false') === 'true',
   cartesiaKey: '',
   _keysLoaded: false,
 
@@ -119,4 +120,5 @@ export const useAIStore = create((set, get) => ({
   setVoicePitch: (v) => { localStorage.setItem('iris_voice_pitch', v); set({ voicePitch: v }) },
   setVoiceRate: (v) => { localStorage.setItem('iris_voice_rate', v); set({ voiceRate: v }) },
   setVoiceTimbre: (v) => { localStorage.setItem('iris_voice_timbre', v); set({ voiceTimbre: v }) },
+  setWakeWordEnabled: (v) => { localStorage.setItem('iris_wake_word_enabled', String(!!v)); set({ wakeWordEnabled: !!v }) },
 }))

@@ -93,7 +93,7 @@ export default function Assistant({
   isAppActive,
   onNavigate
 }) {
-  const { llmBackend, setLlmBackend, geminiModel, voiceEnabled, setVoiceEnabled } = useAIStore()
+  const { llmBackend, setLlmBackend, geminiModel, voiceEnabled, setVoiceEnabled, wakeWordEnabled, setWakeWordEnabled } = useAIStore()
   const {
     chatLog, setChatLog, textPrompt, setTextPrompt,
     isListening, isSpeaking, isGenerating, isLiveVoice, isPrivateSession,
@@ -873,6 +873,25 @@ export default function Assistant({
                     >
                       <span className="material-symbols-outlined text-[13px]">record_voice_over</span>
                       <span>Live Voice</span>
+                    </button>
+
+                    {/* "Hey Iris" Wake Word Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !wakeWordEnabled
+                        setWakeWordEnabled(next)
+                        showToast(next ? '🎙️ "Hey Iris" Wake Word Active (Screen-On Standby)' : '🎙️ "Hey Iris" Wake Word Off')
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-mono font-semibold shrink-0 transition-all ${
+                        wakeWordEnabled
+                          ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-200 shadow-[0_0_10px_rgba(6,182,212,0.25)]'
+                          : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/60'
+                      }`}
+                      title='Say "Hey Iris" or "Hi Iris" while on the launcher to wake IRIS AI hands-free'
+                    >
+                      <span className="material-symbols-outlined text-[13px]">{wakeWordEnabled ? 'hearing' : 'hearing_disabled'}</span>
+                      <span>{wakeWordEnabled ? 'Hey Iris: ON' : 'Hey Iris'}</span>
                     </button>
 
                     {/* Diagnostics Terminal */}

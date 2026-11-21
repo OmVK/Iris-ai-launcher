@@ -5,6 +5,7 @@ import { useAIStore } from '../../stores/aiStore'
 import HapticFeedback from '../../utils/HapticFeedback'
 import useVoiceEngine from '../../hooks/useVoiceEngine'
 import { testCartesiaKey } from '../../utils/cartesiaTTS'
+import { openSystemSettings } from '../../components/LauncherPlugin'
 
 export default function VoiceSettingsSection({ expandedSections, toggleSection, voicePitch, setVoicePitch, voiceRate, setVoiceRate }) {
   const [haptics, setHaptics] = useState(() => HapticFeedback.isEnabled())
@@ -14,7 +15,9 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
     cartesiaKey, 
     setCartesiaKey, 
     voiceEngineProvider, 
-    setVoiceEngineProvider, 
+    setVoiceEngineProvider,
+    wakeWordEnabled,
+    setWakeWordEnabled,
     loadKeys 
   } = useAIStore()
   
@@ -183,6 +186,35 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
       </div>
 
       <SettingToggle label="Haptic Vibration Feedback" sublabel="VIBRATE_ON_TOUCH_GESTURES" icon="vibration" value={haptics} onChange={handleHapticsChange} />
+
+      <SettingToggle
+        label={'"Hey Iris" Voice Wake Word'}
+        sublabel="HANDS_FREE_WAKE_ON_LAUNCHER_SCREEN"
+        icon="hearing"
+        value={wakeWordEnabled}
+        onChange={(v) => setWakeWordEnabled(v)}
+      />
+
+      {/* Android Default Digital Assistant Card */}
+      <div className="p-2.5 rounded-xl bg-black/40 border border-cyan-500/25 space-y-2 my-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-sm text-cyan-400">assistant</span>
+            <span className="text-[9px] font-bold font-mono text-white uppercase tracking-wider">ANDROID DEFAULT DIGITAL ASSISTANT</span>
+          </div>
+          <span className="text-[7.5px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">ZERO IDLE MIC</span>
+        </div>
+        <p className="text-[8px] font-mono text-white/60 leading-relaxed">
+          Set IRIS as your system Digital Assistant to wake IRIS Voice AI from any app by holding the Power Button or pressing your Bluetooth headset button — without keeping the microphone open in the background.
+        </p>
+        <button
+          type="button"
+          onClick={() => openSystemSettings('assistant')}
+          className="w-full py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-300 font-mono font-bold text-[9px] uppercase tracking-wider transition-all active:scale-95"
+        >
+          SET IRIS AS DEFAULT DIGITAL ASSISTANT
+        </button>
+      </div>
       
       {/* Voice Profiles Grid */}
       <div className="space-y-1.5 mt-2">

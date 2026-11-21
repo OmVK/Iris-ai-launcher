@@ -362,6 +362,31 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
+    private static volatile boolean pendingVoiceAssistTrigger = false;
+
+    public static void onVoiceAssistTriggered() {
+        if (instance != null) {
+            try {
+                JSObject data = new JSObject();
+                data.put("timestamp", System.currentTimeMillis());
+                instance.notifyListeners("onVoiceAssistTriggered", data);
+                pendingVoiceAssistTrigger = false;
+            } catch (Exception e) {
+                pendingVoiceAssistTrigger = true;
+            }
+        } else {
+            pendingVoiceAssistTrigger = true;
+        }
+    }
+
+    @PluginMethod
+    public void consumePendingVoiceAssist(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("triggered", pendingVoiceAssistTrigger);
+        pendingVoiceAssistTrigger = false;
+        call.resolve(ret);
+    }
+
     private static long vaultAuthTimestamp = 0;
     private static String currentVaultToken = null;
     private static int failedVaultAttempts = 0;
@@ -846,6 +871,10 @@ public class LauncherPlugin extends Plugin {
                     break;
                 case "accessibility":
                     intent = new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    break;
+                case "voice_input":
+                case "assistant":
+                    intent = new Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS);
                     break;
                 case "notifications":
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

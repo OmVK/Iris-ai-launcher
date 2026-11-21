@@ -32,6 +32,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <action android:name="android.intent.action.VOICE_COMMAND" />
+                <action android:name="android.intent.action.SEARCH_LONG_PRESS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -102,7 +109,7 @@
         <service
             android:name="com.stitch.iris.launcher.LauncherTileService"
             android:icon="@mipmap/ic_launcher"
-            android:label="IRIS Settings"
+            android:label="IRIS Voice AI"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
             <intent-filter>

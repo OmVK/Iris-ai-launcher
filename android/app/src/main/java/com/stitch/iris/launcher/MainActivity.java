@@ -129,6 +129,20 @@ public class MainActivity extends BridgeActivity {
         
         // Allow Android system wallpaper to render behind the WebView
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
+
+        handleAssistIntent(getIntent());
+    }
+
+    private void handleAssistIntent(Intent intent) {
+        if (intent == null) return;
+        String action = intent.getAction();
+        boolean isAssist = Intent.ACTION_ASSIST.equals(action)
+                || "android.intent.action.VOICE_COMMAND".equals(action)
+                || "android.intent.action.SEARCH_LONG_PRESS".equals(action)
+                || intent.getBooleanExtra("iris_trigger_voice_assist", false);
+        if (isAssist) {
+            LauncherPlugin.onVoiceAssistTriggered();
+        }
     }
 
     private void requestBatteryOptimizationExemption() {
@@ -214,6 +228,7 @@ public class MainActivity extends BridgeActivity {
                 && intent.hasCategory(Intent.CATEGORY_HOME)) {
             LauncherPlugin.onHomeIntentReceived();
         }
+        handleAssistIntent(intent);
     }
 
     @Override

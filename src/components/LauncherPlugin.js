@@ -1291,6 +1291,24 @@ export function addHomePressedListener(callback) {
   }
 }
 
+export function addVoiceAssistListener(callback) {
+  if (!isNative) return { remove: () => {} }
+  try {
+    return NativeLauncher.addListener('onVoiceAssistTriggered', callback)
+  } catch {
+    return { remove: () => {} }
+  }
+}
+
+export async function consumePendingVoiceAssist() {
+  if (!isNative) return { triggered: false }
+  try {
+    return await NativeLauncher.consumePendingVoiceAssist()
+  } catch {
+    return { triggered: false }
+  }
+}
+
 export async function getScreenContext() {
   if (!isNative) return { success: false, error: 'Web environment' }
   try {

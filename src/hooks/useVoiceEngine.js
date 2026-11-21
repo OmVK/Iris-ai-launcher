@@ -2,19 +2,25 @@ import { useEffect, useRef, useCallback } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import { useAssistantStore } from '../stores/assistantStore'
 import { useAIStore } from '../stores/aiStore'
+import { useAppStore } from '../stores/appStore'
 import { SecureStorage } from '../utils/secureStorage'
 import { getCartesiaKey, stopCartesiaAudio, speakCartesia } from '../utils/cartesiaTTS'
 import { speakPiper } from '../utils/piperTTS'
+import HapticFeedback from '../utils/HapticFeedback'
 import {
   speakTextNative,
   stopSpeakingNative,
   setVoiceSettingsNative,
   stopAudio,
   checkAndRequestPermission,
+  addVoiceAssistListener,
+  consumePendingVoiceAssist,
   isNative
 } from '../components/LauncherPlugin'
 
 const NativeLauncher = registerPlugin('LauncherPlugin')
+
+const WAKE_WORD_REGEX = /\b(?:hey|hi|okay|ok|yo)\s+iris\b[,.!?\s]*(.*)/i
 
 let recognition = null
 try {
@@ -42,12 +48,14 @@ export default function useVoiceEngine() {
     setTextPrompt,
   } = useAssistantStore()
 
-  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre } = useAIStore()
+  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre, wakeWordEnabled } = useAIStore()
+  const { isAppActive, setActivePage } = useAppStore()
 
   const lastTtsTextRef = useRef('')
   const isListeningRef = useRef(false)
   const isLiveVoiceRef = useRef(false)
   const isSpeakingRef = useRef(false)
+  const isWakeLoopRunningRef = useRef(false)
   const finishSpeakingTimerRef = useRef(null)
   const mountedRef = useRef(true)
   const submitPromptRef = useRef(null)
@@ -133,10 +141,10 @@ export default function useVoiceEngine() {
     isListeningRef.current = false
     setIsListening(false)
     if (isNative) {
-      NativeLauncher.stopOfflineSpeech().catch(() => {})
+      NativeLauncher.stopOfflineSpeech().catch(() => { })
     }
     if (recognition) {
-      try { recognition.stop() } catch {}
+      try { recognition.stop() } catch { }
     }
   }, [setIsListening])
 
@@ -145,6 +153,7 @@ export default function useVoiceEngine() {
       stopVoiceInput()
       return
     }
+    isWakeLoopRunningRef.current = false
     try {
       const perm = await checkAndRequestPermission('RECORD_AUDIO')
       if (perm && !perm.granted) return
@@ -157,7 +166,7 @@ export default function useVoiceEngine() {
 
     if (isNative) {
       try {
-        await NativeLauncher.stopOfflineSpeech().catch(() => {})
+        await NativeLauncher.stopOfflineSpeech().catch(() => { })
         isListeningRef.current = true
         setIsListening(true)
         const res = await NativeLauncher.startOfflineSpeech()
@@ -246,7 +255,7 @@ export default function useVoiceEngine() {
     const { voiceEngineProvider: currentProvider, cartesiaKey: storeKey } = useAIStore.getState()
     const activeKey = storeKey || await getCartesiaKey()
 
-    // 1. PROVIDER: CARTESIA (gracefully falls back to Native/Web TTS if no key is configured)
+    // 1. PROVIDER: CARTESIA
     if (currentProvider === 'CARTESIA' && activeKey) {
       try {
         const ok = await speakCartesia(text, voiceTimbre, activeKey)
@@ -334,9 +343,10 @@ export default function useVoiceEngine() {
   const handleOpenLiveMode = useCallback(async () => {
     const hasPermission = await requestMicrophonePermission()
     if (!hasPermission) return
+    isWakeLoopRunningRef.current = false
     isLiveVoiceRef.current = true
     setIsLiveVoice(true)
-    await speakText("Live neural link active. I am listening.", true)
+    await speakText("I'm listening.", true)
   }, [speakText, requestMicrophonePermission, setIsLiveVoice])
 
   const handleExitLiveModeOnly = useCallback(() => {
@@ -353,6 +363,90 @@ export default function useVoiceEngine() {
     stopVoiceInput()
     setChatLog(prev => prev.filter(item => !item.loading))
   }, [stopSpeaking, stopVoiceInput, setChatLog, setIsLiveVoice])
+
+  // System-wide Digital Assistant Trigger (ACTION_ASSIST / VOICE_COMMAND / Quick Settings Tile)
+  useEffect(() => {
+    if (!isNative) return
+    const triggerAssist = () => {
+      HapticFeedback.double()
+      setActivePage('assistant')
+      setTimeout(() => {
+        handleOpenLiveMode()
+      }, 220)
+    }
+    consumePendingVoiceAssist().then((res) => {
+      if (res?.triggered) triggerAssist()
+    }).catch(() => {})
+    const handle = addVoiceAssistListener(() => {
+      triggerAssist()
+    })
+    return () => {
+      if (handle && typeof handle.remove === 'function') handle.remove()
+      else if (handle && typeof handle.then === 'function') handle.then(h => h?.remove?.())
+    }
+  }, [handleOpenLiveMode, setActivePage])
+
+  // "Hey Iris" / "Hi Iris" Smart Screen-On Wake Word Standby Engine
+  // Strictly releases the microphone when the screen is off or app is backgrounded (!isAppActive)
+  useEffect(() => {
+    if (!isNative || !wakeWordEnabled || !isAppActive) {
+      isWakeLoopRunningRef.current = false
+      return
+    }
+
+    let cancelled = false
+    isWakeLoopRunningRef.current = true
+
+    const runWakeLoop = async () => {
+      while (!cancelled && mountedRef.current && useAIStore.getState().wakeWordEnabled && useAppStore.getState().isAppActive) {
+        if (
+          document.hidden ||
+          isListeningRef.current ||
+          isSpeakingRef.current ||
+          isLiveVoiceRef.current ||
+          window.__iris_offline_assistant_active
+        ) {
+          await new Promise(r => setTimeout(r, 900))
+          continue
+        }
+
+        try {
+          const res = await NativeLauncher.startOfflineSpeech()
+          if (cancelled || !useAIStore.getState().wakeWordEnabled) break
+          const transcript = (res?.text || '').trim()
+          const match = transcript.match(WAKE_WORD_REGEX)
+          if (match) {
+            HapticFeedback.double()
+            const inlineQuery = (match[1] || '').trim()
+            setActivePage('assistant')
+            if (inlineQuery.length >= 2 && submitPromptRef.current) {
+              // User said "Hey Iris, what's the weather today" in one breath
+              isLiveVoiceRef.current = true
+              setIsLiveVoice(true)
+              submitPromptRef.current(inlineQuery)
+            } else {
+              // User just said "Hey Iris" -> open Live Voice and listen for command
+              await handleOpenLiveMode()
+            }
+            await new Promise(r => setTimeout(r, 1500))
+          }
+        } catch {
+          // Silence timeout or recognizer busy -> pause briefly before next standby window
+        }
+        await new Promise(r => setTimeout(r, 450))
+      }
+    }
+
+    runWakeLoop()
+
+    return () => {
+      cancelled = true
+      isWakeLoopRunningRef.current = false
+      if (!isListeningRef.current && !isLiveVoiceRef.current) {
+        NativeLauncher.stopOfflineSpeech().catch(() => {})
+      }
+    }
+  }, [wakeWordEnabled, isAppActive, handleOpenLiveMode, setActivePage, setIsLiveVoice])
 
   const isLiveConfigured = useCallback(() => {
     const { llmBackend, geminiKey, groqKey } = useAIStore.getState()
