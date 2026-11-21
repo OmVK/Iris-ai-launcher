@@ -2381,6 +2381,9 @@ public class LauncherPlugin extends Plugin {
                         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                             if (!isResolving) {
                                 isResolving = true;
+                                try {
+                                    if (currentRecognizer != null) currentRecognizer.cancel();
+                                } catch (Exception ignored) {}
                                 if (lastPartial != null && !lastPartial.trim().isEmpty()) {
                                     JSObject ret = new JSObject();
                                     ret.put("text", lastPartial);
@@ -2389,7 +2392,7 @@ public class LauncherPlugin extends Plugin {
                                     call.reject("Speech recognizer hung during processing");
                                 }
                             }
-                        }, 1500);
+                        }, 2800);
                     }
                     @Override
                     public void onError(int error) {
@@ -2411,13 +2414,24 @@ public class LauncherPlugin extends Plugin {
                         if (isResolving) return;
                         isResolving = true;
                         java.util.ArrayList<String> matches = results.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
+                        String bestMatch = null;
                         if (matches != null && !matches.isEmpty()) {
+                            for (String m : matches) {
+                                if (m != null && !m.trim().isEmpty()) {
+                                    bestMatch = m.trim();
+                                    break;
+                                }
+                            }
+                        }
+                        if (bestMatch != null) {
+                            android.util.Log.d("IrisSpeech", "Final speech matched: " + bestMatch);
                             JSObject ret = new JSObject();
-                            ret.put("text", matches.get(0));
+                            ret.put("text", bestMatch);
                             call.resolve(ret);
                         } else if (lastPartial != null && !lastPartial.trim().isEmpty()) {
+                            android.util.Log.d("IrisSpeech", "Fallback partial speech matched: " + lastPartial);
                             JSObject ret = new JSObject();
-                            ret.put("text", lastPartial);
+                            ret.put("text", lastPartial.trim());
                             call.resolve(ret);
                         } else {
                             call.reject("No speech matched");
@@ -2427,8 +2441,14 @@ public class LauncherPlugin extends Plugin {
                     public void onPartialResults(android.os.Bundle partialResults) {
                         java.util.ArrayList<String> matches = partialResults.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
                         if (matches != null && !matches.isEmpty()) {
-                            lastPartial = matches.get(0);
-                            notifyListeners("onSpeechPartial", new JSObject().put("text", lastPartial));
+                            for (String m : matches) {
+                                if (m != null && !m.trim().isEmpty()) {
+                                    lastPartial = m.trim();
+                                    android.util.Log.d("IrisSpeech", "Partial speech: " + lastPartial);
+                                    notifyListeners("onSpeechPartial", new JSObject().put("text", lastPartial));
+                                    break;
+                                }
+                            }
                         }
                     }
                     @Override

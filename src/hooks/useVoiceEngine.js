@@ -20,7 +20,7 @@ import {
 
 const NativeLauncher = registerPlugin('LauncherPlugin')
 
-const WAKE_WORD_REGEX = /\b(?:hey|hi|okay|ok|yo)\s+iris\b[,.!?\s]*(.*)/i
+const WAKE_WORD_REGEX = /\b(?:hey|hi|okay|ok|yo|hello|a|o)\s*(?:iris|irish|irene|aries|siri|aires|airis|virus)\b[,.!?\s]*(.*)/i
 
 let recognition = null
 try {
@@ -457,7 +457,7 @@ export default function useVoiceEngine() {
         try {
           const res = await NativeLauncher.startOfflineSpeech()
           if (cancelled || partialTriggered || !useAIStore.getState().wakeWordEnabled) {
-            await new Promise(r => setTimeout(r, 600))
+            await new Promise(r => setTimeout(r, 800))
             continue
           }
           const transcript = (res?.text || '').trim()
@@ -465,12 +465,12 @@ export default function useVoiceEngine() {
           if (match) {
             const inlineQuery = (match[1] || '').trim()
             await triggerWakeAction(inlineQuery)
-            await new Promise(r => setTimeout(r, 1500))
+            await new Promise(r => setTimeout(r, 1800))
           }
         } catch {
-          // Silence timeout or recognizer busy -> pause briefly before next standby window
+          // Silence timeout or recognizer busy -> pause before next standby window
         }
-        await new Promise(r => setTimeout(r, 450))
+        await new Promise(r => setTimeout(r, 900))
       }
     }
 
