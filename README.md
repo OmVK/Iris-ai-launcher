@@ -28,10 +28,26 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 6.0.0
+- **Version**: 6.1.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)
+
+## ⚡ v6.1.0 IRIS AI Total Upgrade — Rich Markdown & Code UI, Multimodal Vision, Cognitive Personas & Native Voice Bridge
+
+IRIS v6.1.0 delivers a complete 5-pillar overhaul of the **IRIS AI Assistant** (`Assistant.jsx`) plus a critical gesture isolation fix:
+- **Frictionless Cyber-Glass UI & Welcome Command Deck**:
+  - Instant entry on launch (no forced biometric blur screen on standard sessions) with a 4-card **Interactive Welcome Command Deck** (*Daily Briefing & Notifications*, *Code & System Architect*, *Study Tutor & Flashcards*, *OS Memory & Device Boost*).
+  - **Slide-Over Neural Sessions Drawer**: Mobile-friendly slide-over history drawer with **Automatic Session Naming** derived from your first message.
+- **Rich Markdown, Code Copy & Actionable Message Cards**:
+  - Renders headings, bullet points, numbered steps, bold key terms, inline code badges, and **fenced code blocks** with a language header and 1-tap **`COPY`** button.
+  - Every AI response includes an inline action bar: **`COPY`**, **`SPEAK`** (TTS read-aloud that skips raw code blocks), **`NOTE`** (saves to IRIS Notes), **`TASK`** (saves to IRIS Day Tasks), **`✂️ SHORTER`**, and **`➕ DEEPER`**, plus an instant **`⏹️ STOP`** generation button while streaming.
+- **Multimodal Vision & 1-Tap Context Chips**:
+  - Attach photos or screenshots directly in chat via **`Vision Image`** for **Gemini Multimodal Vision** analysis, or tap **`Unread Notifs`**, **`Device Stats`**, **`Analyze Clipboard`**, and **`Live Autopilot`** chips above the input bar.
+- **4 Cognitive Persona Modes**:
+  - Switch between **`⚡ Commander`** (executive & OS control), **`💻 Coder`** (production code & complexity), **`🎓 Tutor`** (step-by-step study & flashcards), and **`🌐 Research`** (live DuckDuckGo + Wikipedia synthesis).
+- **Native Android Speech Bridge, Live Voice Orb HUD & Arc Search Fix**:
+  - Wired native `LauncherPlugin.startOfflineSpeech()` and `onSpeechPartial` into `useVoiceEngine.js` with a dedicated **Animated Live Voice Orb HUD**, and decoupled `showArcSearch` from `autoTriggerLive` so opening Arc Search never triggers IRIS AI in the background.
 
 ## ⚡ v6.0.0 IRIS Copilot 3.0 — Interview Wingman, Student Solver, Vision Scan & Clean Rule-of-3 UI
 
