@@ -83,7 +83,13 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
 
     window.__iris_offline_assistant_active = true
     speechInterruptRef.current = false
-    startListening()
+    const pendingCmd = window.__iris_pending_wake_command
+    if (pendingCmd) {
+      window.__iris_pending_wake_command = null
+      handleCommand(pendingCmd)
+    } else {
+      startListening()
+    }
 
     const statusListener = LauncherPlugin.addListener('onSpeechStatus', (data) => {
       if (!mountedRef.current) return

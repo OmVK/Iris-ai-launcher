@@ -3,9 +3,8 @@ import SettingsSection from './SettingsSection'
 import { SettingSlider, SettingToggle } from './SettingControls'
 import { useAIStore } from '../../stores/aiStore'
 import HapticFeedback from '../../utils/HapticFeedback'
-import useVoiceEngine from '../../hooks/useVoiceEngine'
 import { testCartesiaKey } from '../../utils/cartesiaTTS'
-import { openSystemSettings } from '../../components/LauncherPlugin'
+import { openSystemSettings, speakTextNative } from '../../components/LauncherPlugin'
 
 export default function VoiceSettingsSection({ expandedSections, toggleSection, voicePitch, setVoicePitch, voiceRate, setVoiceRate }) {
   const [haptics, setHaptics] = useState(() => HapticFeedback.isEnabled())
@@ -24,7 +23,7 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
   const [keyInput, setKeyInput] = useState('')
   const [testStatus, setTestStatus] = useState(null) // null | { loading: boolean, success: boolean, msg: string }
   const [isSaved, setIsSaved] = useState(false)
-  const { speakText } = useVoiceEngine()
+  const speakText = (txt) => { speakTextNative(txt).catch(() => {}) }
 
   useEffect(() => {
     loadKeys()

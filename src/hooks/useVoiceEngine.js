@@ -369,10 +369,15 @@ export default function useVoiceEngine() {
     if (!isNative) return
     const triggerAssist = () => {
       HapticFeedback.double()
-      setActivePage('assistant')
-      setTimeout(() => {
+      const currentPage = useAppStore.getState().activePage
+      if (currentPage === 'assistant') {
         handleOpenLiveMode()
-      }, 220)
+      } else {
+        setActivePage('home')
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
+        }, 60)
+      }
     }
     consumePendingVoiceAssist().then((res) => {
       if (res?.triggered) triggerAssist()
@@ -398,8 +403,27 @@ export default function useVoiceEngine() {
     let partialTriggered = false
     isWakeLoopRunningRef.current = true
 
+    const triggerWakeAction = async (inlineQuery) => {
+      HapticFeedback.double()
+      const currentPage = useAppStore.getState().activePage
+      if (currentPage === 'assistant') {
+        if (inlineQuery && inlineQuery.length >= 2 && submitPromptRef.current) {
+          isLiveVoiceRef.current = true
+          setIsLiveVoice(true)
+          submitPromptRef.current(inlineQuery)
+        } else {
+          await handleOpenLiveMode()
+        }
+      } else {
+        setActivePage('home')
+        window.dispatchEvent(new CustomEvent('iris-trigger-assistant', {
+          detail: inlineQuery && inlineQuery.length >= 2 ? { initialCommand: inlineQuery } : {}
+        }))
+      }
+    }
+
     const wakePartialListener = NativeLauncher.addListener('onSpeechPartial', (data) => {
-      if (cancelled || partialTriggered || isListeningRef.current || isSpeakingRef.current || isLiveVoiceRef.current) return
+      if (cancelled || partialTriggered || isListeningRef.current || isSpeakingRef.current || isLiveVoiceRef.current || window.__iris_offline_assistant_active) return
       const partial = (data?.text || '').trim()
       if (!partial) return
       const match = partial.match(WAKE_WORD_REGEX)
@@ -409,9 +433,9 @@ export default function useVoiceEngine() {
         if (inlineQuery.length === 0) {
           partialTriggered = true
           NativeLauncher.stopOfflineSpeech().catch(() => {})
-          HapticFeedback.double()
-          setActivePage('assistant')
-          handleOpenLiveMode()
+          setTimeout(() => {
+            triggerWakeAction('')
+          }, 120)
         }
       }
     })
@@ -433,24 +457,14 @@ export default function useVoiceEngine() {
         try {
           const res = await NativeLauncher.startOfflineSpeech()
           if (cancelled || partialTriggered || !useAIStore.getState().wakeWordEnabled) {
-            await new Promise(r => setTimeout(r, 500))
+            await new Promise(r => setTimeout(r, 600))
             continue
           }
           const transcript = (res?.text || '').trim()
           const match = transcript.match(WAKE_WORD_REGEX)
           if (match) {
-            HapticFeedback.double()
             const inlineQuery = (match[1] || '').trim()
-            setActivePage('assistant')
-            if (inlineQuery.length >= 2 && submitPromptRef.current) {
-              // User said "Hey Iris, what's the weather today" in one breath
-              isLiveVoiceRef.current = true
-              setIsLiveVoice(true)
-              submitPromptRef.current(inlineQuery)
-            } else {
-              // User just said "Hey Iris" -> open Live Voice and listen for command
-              await handleOpenLiveMode()
-            }
+            await triggerWakeAction(inlineQuery)
             await new Promise(r => setTimeout(r, 1500))
           }
         } catch {
@@ -467,7 +481,7 @@ export default function useVoiceEngine() {
       isWakeLoopRunningRef.current = false
       if (typeof wakePartialListener?.then === 'function') wakePartialListener.then(l => l.remove())
       else wakePartialListener?.remove?.()
-      if (!isListeningRef.current && !isLiveVoiceRef.current) {
+      if (!isListeningRef.current && !isLiveVoiceRef.current && !window.__iris_offline_assistant_active) {
         NativeLauncher.stopOfflineSpeech().catch(() => {})
       }
     }

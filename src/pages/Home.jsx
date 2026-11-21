@@ -56,8 +56,11 @@ export default function Home({
   } = useAppContextMenu({ setInstalledApps, onToggleAppLock })
 
   useEffect(() => {
-    const handler = () => {
+    const handler = (e) => {
       setShowOfflineAssistant(true)
+      if (e?.detail?.initialCommand) {
+        window.__iris_pending_wake_command = e.detail.initialCommand
+      }
     }
     window.addEventListener('iris-trigger-assistant', handler)
     return () => window.removeEventListener('iris-trigger-assistant', handler)
