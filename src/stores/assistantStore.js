@@ -1,8 +1,13 @@
 import { create } from 'zustand'
 
 const DEFAULT_LOG = [
-  { time: "14:02:12", sender: "IRIS", text: "Secure neuro-link established. How can I assist your objectives today, Commander?", type: "system" }
+  { time: "READY", sender: "IRIS", text: "Hi! How can I help you today?", type: "system" }
 ]
+
+const normalizePersona = (raw) => {
+  if (!raw || raw === 'COMMANDER') return 'CHAT'
+  return raw
+}
 
 const loadSessions = () => {
   try {
@@ -10,16 +15,32 @@ const loadSessions = () => {
     const parsed = cached ? JSON.parse(cached) : null
     if (Array.isArray(parsed) && parsed.length > 0) return parsed.length > 10 ? parsed.slice(-10) : parsed
   } catch {}
-  return [{ id: 'default', name: 'Default Session Node', log: DEFAULT_LOG }]
+  return [{ id: 'default', name: 'New Chat', log: DEFAULT_LOG }]
 }
 
 const loadChatLog = (sessions) => {
   try {
     const activeId = localStorage.getItem('iris_assistant_active_session') || 'default'
     const found = sessions.find(s => s.id === activeId)
-    if (found && Array.isArray(found.log)) return found.log.length > 50 ? found.log.slice(-50) : found.log
+    if (found && Array.isArray(found.log) && found.log.length > 0) {
+      // Upgrade old military default greeting if it was untouched
+      if (found.log.length === 1 && found.log[0]?.text?.includes('Secure neuro-link established')) {
+        return DEFAULT_LOG
+      }
+      return found.log.length > 50 ? found.log.slice(-50) : found.log
+    }
   } catch {}
   return DEFAULT_LOG
+}
+
+const stripHeavyImagesForStorage = (logArray) => {
+  if (!Array.isArray(logArray)) return []
+  return logArray.slice(-50).map(m => {
+    if (m && m.imagePreview && m.imagePreview.length > 90000) {
+      return { ...m, imagePreview: null, hadImageAttachment: true }
+    }
+    return m
+  })
 }
 
 const initSessions = loadSessions()
@@ -32,14 +53,16 @@ export const useAssistantStore = create((set, get) => ({
   isGenerating: false,
   isLiveVoice: false,
   isPrivateSession: false,
+  webSearchEnabled: false,
   isLiveScreenOpen: false,
   activeUserTranscript: '',
   activeAiResponse: '',
   showLiveConfigModal: false,
   liveSetupEngine: (() => { try { return localStorage.getItem('system_llm_backend') || 'GEMINI' } catch { return 'GEMINI' } })(),
   liveSetupKey: '',
-  assistantPersona: (() => { try { return localStorage.getItem('iris_assistant_persona') || 'COMMANDER' } catch { return 'COMMANDER' } })(),
+  assistantPersona: (() => { try { return normalizePersona(localStorage.getItem('iris_assistant_persona')) } catch { return 'CHAT' } })(),
   attachedImage: null,
+  attachedFile: null,
   sessions: initSessions,
   activeSessionId: (() => { try { return localStorage.getItem('iris_assistant_active_session') || 'default' } catch { return 'default' } })(),
   _savedChatLog: null,
@@ -53,6 +76,7 @@ export const useAssistantStore = create((set, get) => ({
   setIsGenerating: (v) => set({ isGenerating: v }),
   setIsLiveVoice: (v) => set({ isLiveVoice: v }),
   setIsPrivateSession: (v) => set({ isPrivateSession: v }),
+  setWebSearchEnabled: (v) => set({ webSearchEnabled: v }),
   setIsLiveScreenOpen: (v) => set({ isLiveScreenOpen: v }),
   setActiveUserTranscript: (v) => set({ activeUserTranscript: v }),
   setActiveAiResponse: (v) => set({ activeAiResponse: v }),
@@ -64,6 +88,7 @@ export const useAssistantStore = create((set, get) => ({
     set({ assistantPersona: v })
   },
   setAttachedImage: (v) => set({ attachedImage: v }),
+  setAttachedFile: (v) => set({ attachedFile: v }),
 
   setSessions: (updater) => set((s) => ({
     sessions: typeof updater === 'function' ? updater(s.sessions) : updater
@@ -92,8 +117,9 @@ export const useAssistantStore = create((set, get) => ({
   persistSessions: () => {
     const { sessions, activeSessionId, chatLog, isPrivateSession } = get()
     if (isPrivateSession) return
-    let updated = sessions.map(s => s.id === activeSessionId ? { ...s, log: chatLog } : s)
-    updated = updated.map(s => ({ ...s, log: s.log.length > 50 ? s.log.slice(-50) : s.log }))
+    const safeLog = stripHeavyImagesForStorage(chatLog)
+    let updated = sessions.map(s => s.id === activeSessionId ? { ...s, log: safeLog } : s)
+    updated = updated.map(s => ({ ...s, log: stripHeavyImagesForStorage(s.log) }))
     if (updated.length > 10) updated = updated.slice(-10)
     try { localStorage.setItem('iris_assistant_sessions', JSON.stringify(updated)) } catch {}
     set({ sessions: updated })
@@ -101,12 +127,19 @@ export const useAssistantStore = create((set, get) => ({
 
   createNewSession: () => {
     const { isPrivateSession } = get()
-    if (isPrivateSession) return
+    if (isPrivateSession) {
+      set({
+        chatLog: [{ time: "INCOGNITO", sender: "IRIS", text: "🕵️ Incognito session cleared. Your chats and web searches are never saved.", type: "system" }],
+        attachedImage: null,
+        attachedFile: null
+      })
+      return
+    }
     const newId = `session_${Date.now()}`
     const newSession = {
       id: newId,
       name: 'New Chat',
-      log: [{ time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), sender: "IRIS", text: "New session neuro-link ready. Awaiting prompt details.", type: "system" }]
+      log: [{ time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), sender: "IRIS", text: "Hi! How can I help you today?", type: "system" }]
     }
     set((s) => {
       const trimmed = [...s.sessions, newSession]
@@ -115,7 +148,7 @@ export const useAssistantStore = create((set, get) => ({
         localStorage.setItem('iris_assistant_sessions', JSON.stringify(sessions))
         localStorage.setItem('iris_assistant_active_session', newId)
       } catch {}
-      return { sessions, activeSessionId: newId, chatLog: newSession.log }
+      return { sessions, activeSessionId: newId, chatLog: newSession.log, attachedImage: null, attachedFile: null }
     })
   },
 
@@ -142,20 +175,36 @@ export const useAssistantStore = create((set, get) => ({
     }
   },
 
-  togglePrivate: () => {
+  burnIncognitoChat: () => {
+    set({
+      chatLog: [{ time: "INCOGNITO", sender: "IRIS", text: "🕵️ Incognito memory wiped. Nothing was saved to history or storage.", type: "system" }],
+      textPrompt: '',
+      attachedImage: null,
+      attachedFile: null,
+      activeUserTranscript: '',
+      activeAiResponse: ''
+    })
+  },
+
+  togglePrivate: (enableWebSearch = false) => {
     const { isPrivateSession, sessions, activeSessionId, chatLog, _savedChatLog } = get()
     if (!isPrivateSession) {
       set({
         isPrivateSession: true,
+        webSearchEnabled: enableWebSearch ? true : get().webSearchEnabled,
         _savedChatLog: chatLog,
-        chatLog: [{ time: "SECURE", sender: "IRIS", text: "HIGH-SECURITY PRIVATE NEURO-LINK ENGAGED. NO HISTORICAL NODES WILL BE PERSISTED.", type: "error" }]
+        attachedImage: null,
+        attachedFile: null,
+        chatLog: [{ time: "INCOGNITO", sender: "IRIS", text: "🕵️ **Incognito Mode Active** — Your messages, images, and web searches in this session are completely private and will vanish as soon as you exit.", type: "system" }]
       })
     } else {
       const found = sessions.find(s => s.id === activeSessionId)
       set({
         isPrivateSession: false,
         _savedChatLog: null,
-        chatLog: _savedChatLog || (found ? found.log : [{ time: "14:02:12", sender: "IRIS", text: "Neuro-link restored to default log.", type: "system" }])
+        attachedImage: null,
+        attachedFile: null,
+        chatLog: _savedChatLog || (found ? found.log : DEFAULT_LOG)
       })
     }
   },

@@ -135,11 +135,14 @@ export default function ChatMessage({
   msg,
   index,
   chatUnlocked = true,
+  isPrivateSession = false,
   onDelete,
   onSpeak,
   onSaveTask,
   onSaveNote,
-  onQuickFollowUp
+  onQuickFollowUp,
+  onEditPrompt,
+  onRegenerate,
 }) {
   const [copied, setCopied] = useState(false)
   const [savedType, setSavedType] = useState(null)
@@ -166,8 +169,14 @@ export default function ChatMessage({
       <div className="group relative max-w-[90%] sm:max-w-[85%] flex flex-col gap-1">
         <div className={`flex items-start gap-2.5 ${isIris ? 'flex-row' : 'flex-row-reverse'}`}>
           {isIris && (
-            <div className="w-7 h-7 mt-0.5 rounded-full bg-[rgba(var(--primary-rgb),0.18)] border border-[rgba(var(--primary-rgb),0.35)] flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(var(--primary-rgb),0.2)]">
-              <span className="material-symbols-outlined text-[15px] text-[var(--primary-color)]">smart_toy</span>
+            <div className={`w-7 h-7 mt-0.5 rounded-full flex items-center justify-center shrink-0 border ${
+              isPrivateSession
+                ? 'bg-purple-500/20 border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                : 'bg-[rgba(var(--primary-rgb),0.18)] border-[rgba(var(--primary-rgb),0.35)] shadow-[0_0_12px_rgba(var(--primary-rgb),0.2)]'
+            }`}>
+              <span className={`material-symbols-outlined text-[15px] ${isPrivateSession ? 'text-purple-300' : 'text-[var(--primary-color)]'}`}>
+                {isPrivateSession ? 'visibility_off' : 'smart_toy'}
+              </span>
             </div>
           )}
 
@@ -175,22 +184,66 @@ export default function ChatMessage({
             isIris
               ? (isError
                 ? 'bg-red-500/10 border border-red-500/30 text-red-300 rounded-tl-sm'
-                : 'bg-[#0a1022]/85 border border-white/10 text-white/90 backdrop-blur-xl rounded-tl-sm shadow-lg')
-              : 'bg-[rgba(var(--primary-rgb),0.16)] border border-[rgba(var(--primary-rgb),0.35)] text-white shadow-[0_0_18px_rgba(var(--primary-rgb),0.12)] rounded-tr-sm'
+                : isPrivateSession
+                  ? 'bg-[#120b24]/90 border border-purple-500/25 text-white/95 backdrop-blur-xl rounded-tl-sm shadow-lg'
+                  : 'bg-[#0a1022]/85 border border-white/10 text-white/90 backdrop-blur-xl rounded-tl-sm shadow-lg')
+              : isPrivateSession
+                ? 'bg-purple-500/20 border border-purple-400/40 text-white shadow-[0_0_18px_rgba(168,85,247,0.18)] rounded-tr-sm'
+                : 'bg-[rgba(var(--primary-rgb),0.16)] border border-[rgba(var(--primary-rgb),0.35)] text-white shadow-[0_0_18px_rgba(var(--primary-rgb),0.12)] rounded-tr-sm'
           }`}>
             {msg.imagePreview && (
-              <div className="mb-2.5 rounded-xl overflow-hidden border border-white/15 max-w-[220px]">
-                <img src={msg.imagePreview} alt="Attached" className="w-full h-auto object-cover max-h-44" />
+              <div className="mb-2.5 rounded-xl overflow-hidden border border-white/15 max-w-[230px]">
+                <img src={msg.imagePreview} alt="Attached" className="w-full h-auto object-cover max-h-48" />
+              </div>
+            )}
+
+            {msg.hadImageAttachment && !msg.imagePreview && (
+              <div className="mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/10 text-[10px] font-mono text-white/70">
+                <span className="material-symbols-outlined text-xs">image</span>
+                <span>Image analyzed</span>
+              </div>
+            )}
+
+            {msg.fileName && (
+              <div className="mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-[10.5px] font-mono text-[var(--primary-color)]">
+                <span className="material-symbols-outlined text-xs">description</span>
+                <span className="truncate max-w-[180px]">{msg.fileName}</span>
               </div>
             )}
 
             <div className="font-sans selectable-text">
-              {isIris ? <FormattedBlocks text={msg.text} /> : <span className="break-words">{msg.text}</span>}
+              {isIris ? <FormattedBlocks text={msg.text} /> : <span className="break-words whitespace-pre-wrap">{msg.text}</span>}
             </div>
+
+            {/* Web Search Citation Pills */}
+            {isIris && Array.isArray(msg.sources) && msg.sources.length > 0 && (
+              <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-col gap-1">
+                <span className="text-[9px] font-mono uppercase tracking-wider text-white/45 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[11px]">travel_explore</span>
+                  <span>Live Web Sources</span>
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {msg.sources.map((src, sIdx) => (
+                    <a
+                      key={sIdx}
+                      href={src.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-mono text-[var(--primary-color)] max-w-[200px] truncate transition-colors"
+                      title={src.snippet || src.title}
+                    >
+                      <span className="material-symbols-outlined text-[11px]">open_in_new</span>
+                      <span className="truncate">{src.title}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {isIris && !msg.loading && !isError && (
               <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap">
                   <button
                     type="button"
                     onClick={handleCopy}
@@ -210,6 +263,18 @@ export default function ChatMessage({
                     >
                       <span className="material-symbols-outlined text-[13px]">volume_up</span>
                       <span>SPEAK</span>
+                    </button>
+                  )}
+
+                  {onRegenerate && index > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onRegenerate(index) }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-mono text-white/70 hover:text-[var(--primary-color)] transition-colors"
+                      title="Regenerate response"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">refresh</span>
+                      <span>RETRY</span>
                     </button>
                   )}
 
@@ -239,7 +304,7 @@ export default function ChatMessage({
                 </div>
 
                 <div className="flex items-center gap-1">
-                  {onQuickFollowUp && (
+                  {onQuickFollowUp && index > 0 && (
                     <>
                       <button
                         type="button"
@@ -273,17 +338,30 @@ export default function ChatMessage({
           </div>
         </div>
 
-        <div className={`text-[9px] uppercase tracking-wider text-white/30 font-mono px-9 flex items-center gap-2 ${isIris ? 'justify-start' : 'justify-end'}`}>
+        <div className={`text-[9px] uppercase tracking-wider text-white/30 font-mono px-9 flex items-center gap-2.5 ${isIris ? 'justify-start' : 'justify-end'}`}>
           <span>{msg.time} {msg.loading ? '• STREAMING...' : ''}</span>
           {!isIris && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onDelete(index) }}
-              className="text-white/25 hover:text-red-400 transition-colors"
-              title="Delete"
-            >
-              ✕
-            </button>
+            <>
+              {onEditPrompt && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onEditPrompt(msg.text, index) }}
+                  className="text-white/35 hover:text-[var(--primary-color)] transition-colors flex items-center gap-0.5"
+                  title="Edit & Resend"
+                >
+                  <span className="material-symbols-outlined text-[11px]">edit</span>
+                  <span>EDIT</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(index) }}
+                className="text-white/25 hover:text-red-400 transition-colors"
+                title="Delete"
+              >
+                ✕
+              </button>
+            </>
           )}
         </div>
       </div>

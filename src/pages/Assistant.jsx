@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { NativeBiometric } from '@capgo/capacitor-native-biometric'
 import { useAIStore } from '../stores/aiStore'
 import { useAssistantStore } from '../stores/assistantStore'
@@ -12,38 +13,77 @@ import OllamaManager from './assistant/OllamaManager'
 import DiagnosticsTerminal from './assistant/DiagnosticsTerminal'
 import ChatMessage from './assistant/ChatMessage'
 import ChronoPinLock from '../components/ChronoPinLock'
-import { logNotification, getSystemStats, getScreenTimeStats } from '../components/LauncherPlugin'
+import { logNotification, getSystemStats, getScreenTimeStats, isNative } from '../components/LauncherPlugin'
 
 const WELCOME_STARTERS = [
   {
-    icon: 'notifications_active',
-    title: 'Daily Briefing & Notifications',
-    desc: 'Summarize my latest unread notifications, battery & screen time today',
-    prompt: 'Check my recent notifications, screen time today, and give me a concise executive briefing.'
+    icon: 'chat_bubble',
+    title: 'Everyday Chat & Writing',
+    desc: 'Ask any question, draft a message, brainstorm ideas, or translate text',
+    prompt: 'Help me write or figure out: ',
+    prefillOnly: true,
+    persona: 'CHAT'
   },
   {
-    icon: 'code',
-    title: 'Code & System Architect',
-    desc: 'Write clean production code, debug an error, or analyze time complexity',
-    prompt: 'Act as a Principal Software Engineer. Help me design or debug a clean, optimal solution for: ',
+    icon: 'travel_explore',
+    title: 'Incognito Live Web Search',
+    desc: 'Search live news, facts, prices & answers privately without saving history',
+    prompt: 'What are the latest updates and key facts about ',
     prefillOnly: true,
-    persona: 'CODER'
+    enableIncognitoSearch: true
+  },
+  {
+    icon: 'add_a_photo',
+    title: 'Snap or Upload Image (Vision)',
+    desc: 'Take a photo or pick from gallery to solve problems, read text, or explain',
+    action: 'OPEN_IMAGE_MENU'
   },
   {
     icon: 'school',
-    title: 'Study Tutor & Flashcards',
-    desc: 'Explain any hard concept simply with an analogy and generate flashcards',
-    prompt: 'Explain this topic in simple terms with a real-world analogy and 3 Q&A flashcards: ',
+    title: 'Study Tutor & Code Helper',
+    desc: 'Explain hard topics simply with examples, flashcards, or clean code',
+    prompt: 'Explain this step-by-step in simple terms with an example: ',
     prefillOnly: true,
     persona: 'TUTOR'
-  },
-  {
-    icon: 'memory',
-    title: 'OS Memory & Device Boost',
-    desc: 'Optimize system RAM and report live hardware telemetry',
-    prompt: 'Boost RAM and optimize device memory right now, then report the reclaimed memory.'
   }
 ]
+
+function compressImageDataUrl(rawDataUrl, maxDim = 1280, quality = 0.8) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image()
+      img.onload = () => {
+        let w = img.width || 800
+        let h = img.height || 800
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w)
+            w = maxDim
+          } else {
+            w = Math.round((w * maxDim) / h)
+            h = maxDim
+          }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, w, h)
+        const compressedUrl = canvas.toDataURL('image/jpeg', quality)
+        const base64 = compressedUrl.includes(',') ? compressedUrl.split(',')[1] : compressedUrl
+        resolve({ dataUrl: compressedUrl, base64, mimeType: 'image/jpeg' })
+      }
+      img.onerror = () => {
+        const base64 = rawDataUrl.includes(',') ? rawDataUrl.split(',')[1] : rawDataUrl
+        resolve({ dataUrl: rawDataUrl, base64, mimeType: 'image/jpeg' })
+      }
+      img.src = rawDataUrl
+    } catch {
+      const base64 = rawDataUrl.includes(',') ? rawDataUrl.split(',')[1] : rawDataUrl
+      resolve({ dataUrl: rawDataUrl, base64, mimeType: 'image/jpeg' })
+    }
+  })
+}
 
 export default function Assistant({
   startVoiceInput, stopVoiceInput, speakText, stopSpeaking,
@@ -57,18 +97,20 @@ export default function Assistant({
   const {
     chatLog, setChatLog, textPrompt, setTextPrompt,
     isListening, isSpeaking, isGenerating, isLiveVoice, isPrivateSession,
+    webSearchEnabled, setWebSearchEnabled, burnIncognitoChat,
     activeUserTranscript, activeAiResponse,
     sessions, activeSessionId, createNewSession, loadSession, deleteSession, togglePrivate, setIsLiveVoice,
-    assistantPersona, setAssistantPersona, attachedImage, setAttachedImage
+    assistantPersona, setAssistantPersona,
+    attachedImage, setAttachedImage,
+    attachedFile, setAttachedFile
   } = useAssistantStore()
   const { isAppActive: storeAppActive } = useAppStore()
 
   const _effectiveAppActive = isAppActive !== undefined ? isAppActive : storeAppActive
 
-  // Normal sessions are unlocked by default (no annoying blur wall on startup).
-  // Users can lock the current view on demand via the lock icon if they step away.
   const [chatUnlocked, setChatUnlocked] = useState(true)
   const [showSidebarDrawer, setShowSidebarDrawer] = useState(false)
+  const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [showPinFallback, setShowPinFallback] = useState(false)
   const [showDiagTerminal, setShowDiagTerminal] = useState(false)
   const [showKeyInput, setShowKeyInput] = useState(false)
@@ -76,7 +118,9 @@ export default function Assistant({
   const [testingConnection, setTestingConnection] = useState(false)
   const [toastBanner, setToastBanner] = useState('')
 
-  const fileInputRef = useRef(null)
+  const imageInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
+  const docInputRef = useRef(null)
   const inputBoxRef = useRef(null)
 
   const [ollamaStatus, setOllamaStatus] = useState('offline')
@@ -101,7 +145,7 @@ export default function Assistant({
 
   const showToast = useCallback((msg) => {
     setToastBanner(msg)
-    setTimeout(() => setToastBanner(''), 2200)
+    setTimeout(() => setToastBanner(''), 2300)
   }, [])
 
   useEffect(() => {
@@ -204,7 +248,6 @@ export default function Assistant({
     }
   }, [])
 
-  // Auto-trigger live mode only when Assistant page is actively visible
   useEffect(() => {
     if (autoTriggerLive && _effectiveAppActive) {
       handleOpenLiveMode()
@@ -218,28 +261,98 @@ export default function Assistant({
   }, [chatLog])
 
   const handleInputSubmit = (e) => {
-    e.preventDefault()
-    if (!textPrompt.trim() && !attachedImage) return
+    if (e) e.preventDefault()
+    if (!textPrompt.trim() && !attachedImage && !attachedFile) return
     submitPrompt(textPrompt)
   }
 
-  const handleImagePick = (e) => {
+  // Native Capacitor Camera / Gallery Picker with fallback to HTML file input
+  const handlePickNativeImage = async (sourceType) => {
+    setShowAttachMenu(false)
+    if (isNative) {
+      try {
+        const photo = await Camera.getPhoto({
+          quality: 80,
+          allowEditing: false,
+          width: 1280,
+          height: 1280,
+          resultType: CameraResultType.DataUrl,
+          source: sourceType === 'CAMERA' ? CameraSource.Camera : CameraSource.Photos
+        })
+        if (photo?.dataUrl) {
+          const compressed = await compressImageDataUrl(photo.dataUrl, 1280, 0.8)
+          setAttachedImage({
+            name: sourceType === 'CAMERA' ? `camera_${Date.now()}.jpg` : `photo_${Date.now()}.jpg`,
+            mimeType: compressed.mimeType,
+            base64: compressed.base64,
+            dataUrl: compressed.dataUrl
+          })
+          showToast('📸 Image ready for AI Vision')
+          inputBoxRef.current?.focus()
+          return
+        }
+      } catch (err) {
+        const msg = String(err?.message || err || '')
+        if (msg.toLowerCase().includes('cancel')) return
+        console.warn('[IRIS] Native Camera picker fallback to file input:', err)
+      }
+    }
+    if (sourceType === 'CAMERA') cameraInputRef.current?.click()
+    else imageInputRef.current?.click()
+  }
+
+  const handleHtmlImagePick = async (e) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '')
-      const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl
+    reader.onload = async () => {
+      const rawDataUrl = String(reader.result || '')
+      const compressed = await compressImageDataUrl(rawDataUrl, 1280, 0.8)
       setAttachedImage({
         name: file.name || 'image.jpg',
-        mimeType: file.type || 'image/jpeg',
-        base64,
-        dataUrl
+        mimeType: compressed.mimeType,
+        base64: compressed.base64,
+        dataUrl: compressed.dataUrl
       })
-      showToast('📸 Image attached for Gemini Vision')
+      showToast('📸 Image attached for AI Vision')
+      inputBoxRef.current?.focus()
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleDocumentPick = (e) => {
+    const file = e.target.files?.[0]
     e.target.value = ''
+    setShowAttachMenu(false)
+    if (!file) return
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const compressed = await compressImageDataUrl(String(reader.result || ''), 1280, 0.8)
+        setAttachedImage({
+          name: file.name,
+          mimeType: compressed.mimeType,
+          base64: compressed.base64,
+          dataUrl: compressed.dataUrl
+        })
+        showToast('📸 Image attached')
+      }
+      reader.readAsDataURL(file)
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const content = String(reader.result || '')
+      setAttachedFile({
+        name: file.name,
+        size: file.size,
+        content: content.slice(0, 15000)
+      })
+      showToast(`📄 Attached ${file.name}`)
+      inputBoxRef.current?.focus()
+    }
+    reader.readAsText(file)
   }
 
   const handleSaveToTask = useCallback((text) => {
@@ -272,7 +385,29 @@ export default function Assistant({
     } catch {}
   }, [showToast])
 
+  const handleEditUserPrompt = useCallback((promptText, msgIdx) => {
+    setTextPrompt(promptText)
+    setChatLog(prev => prev.slice(0, msgIdx))
+    useAssistantStore.getState().persistSessions()
+    setTimeout(() => inputBoxRef.current?.focus(), 50)
+  }, [setChatLog, setTextPrompt])
+
+  const handleRegenerateReply = useCallback((aiMsgIdx) => {
+    const currentLog = useAssistantStore.getState().chatLog
+    let lastUserPrompt = ''
+    for (let i = aiMsgIdx - 1; i >= 0; i--) {
+      if (currentLog[i]?.sender === 'USER' && currentLog[i]?.text) {
+        lastUserPrompt = currentLog[i].text
+        break
+      }
+    }
+    if (!lastUserPrompt) return
+    setChatLog(prev => prev.slice(0, aiMsgIdx))
+    setTimeout(() => submitPrompt(lastUserPrompt), 60)
+  }, [setChatLog, submitPrompt])
+
   const handleAttachContextChip = async (chipType) => {
+    setShowAttachMenu(false)
     if (chipType === 'NOTIFS') {
       const history = useNotificationStore.getState().history || []
       if (history.length === 0) {
@@ -295,7 +430,7 @@ export default function Assistant({
       try {
         const clip = await navigator.clipboard.readText()
         if (clip && clip.trim()) {
-          setTextPrompt(`Analyze or summarize this text: "${clip.trim().slice(0, 800)}"`)
+          setTextPrompt(`Analyze or summarize this text: "${clip.trim().slice(0, 1000)}"`)
           inputBoxRef.current?.focus()
         } else {
           showToast('Clipboard is empty')
@@ -310,7 +445,11 @@ export default function Assistant({
 
   return (
     <div className="h-full flex px-2.5 sm:px-4 pt-12 pb-24 gap-3 overflow-hidden relative z-10">
-      <section className="flex-1 flex flex-col min-w-0 relative bg-[#050917]/80 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <section className={`flex-1 flex flex-col min-w-0 relative backdrop-blur-3xl rounded-2xl shadow-2xl overflow-hidden transition-colors duration-300 border ${
+        isPrivateSession
+          ? 'bg-[#0b0618]/90 border-purple-500/35 shadow-[0_0_35px_rgba(168,85,247,0.18)]'
+          : 'bg-[#050917]/80 border-white/10'
+      }`}>
 
         {/* Slide-Over Sessions Drawer */}
         {showSidebarDrawer && (
@@ -352,7 +491,9 @@ export default function Assistant({
         ) : (
           <>
             {/* Top Bar */}
-            <div className="relative z-30 flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-black/25 gap-2">
+            <div className={`relative z-30 flex items-center justify-between px-3 py-2.5 border-b gap-2 ${
+              isPrivateSession ? 'bg-purple-950/35 border-purple-500/25' : 'bg-black/25 border-white/10'
+            }`}>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
@@ -383,12 +524,46 @@ export default function Assistant({
                 activeGroqModel={activeGroqModel}
                 activeNvidiaModel={activeNvidiaModel}
                 onFetchOllamaModels={fetchOllamaModels}
-                onNewChat={() => { createNewSession(); showToast('✦ New Chat Session Started') }}
+                onNewChat={() => {
+                  createNewSession()
+                  showToast(isPrivateSession ? '🕵️ Incognito Chat Cleared' : '✦ New Chat Started')
+                }}
                 backendStatus={backendStatus}
                 assistantPersona={assistantPersona}
-                onSetPersona={(p) => { setAssistantPersona(p); showToast(`Persona: ${p}`) }}
+                onSetPersona={(p) => { setAssistantPersona(p); showToast(`Mode: ${p}`) }}
+                isPrivateSession={isPrivateSession}
+                onToggleIncognito={() => {
+                  togglePrivate()
+                  showToast(!isPrivateSession ? '🕵️ Incognito Mode ON — Zero History Saved' : '💬 Standard Chat Restored')
+                }}
               />
             </div>
+
+            {/* Active Incognito Zero-Trace Status Strip */}
+            {isPrivateSession && (
+              <div className="px-3.5 py-1.5 bg-purple-950/60 border-b border-purple-500/30 flex items-center justify-between gap-2 z-20">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-purple-200 truncate">
+                  <span className="material-symbols-outlined text-xs text-purple-300">visibility_off</span>
+                  <span className="truncate"><strong>INCOGNITO ZERO-TRACE:</strong> Chats, images &amp; web searches are never saved</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => { burnIncognitoChat(); showToast('🔥 Incognito memory burned') }}
+                    className="px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 border border-red-400/40 text-red-200 text-[9.5px] font-mono font-bold transition-colors"
+                  >
+                    🔥 BURN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => togglePrivate()}
+                    className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/80 text-[9.5px] font-mono transition-colors"
+                  >
+                    EXIT
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Missing API Key Banner */}
             {((llmBackend === 'GEMINI' && !getGeminiKey()) || (llmBackend === 'GROQ' && !getGroqKey())) && (
@@ -426,7 +601,6 @@ export default function Assistant({
             <div className="flex-1 px-3 sm:px-6 overflow-hidden flex flex-col min-h-0 pt-3 relative z-10">
               {showDiagTerminal && <DiagnosticsTerminal onClose={() => setShowDiagTerminal(false)} />}
 
-              {/* Optional On-Demand Privacy Lock Overlay */}
               {!chatUnlocked && (
                 <div className="absolute inset-0 z-50 bg-[#020617]/80 backdrop-blur-2xl flex flex-col items-center justify-center gap-3">
                   <div
@@ -501,15 +675,21 @@ export default function Assistant({
                 </div>
               ) : (
                 <div className="flex-1 overflow-y-auto scroll-container flex flex-col gap-2 pb-3">
-                  {/* Interactive Welcome Command Deck when chat is fresh */}
+                  {/* Everyday Welcome Starters when chat is fresh */}
                   {isDefaultSingleSystemMsg && (
-                    <div className="my-auto py-3 flex flex-col gap-3">
+                    <div className="my-auto py-2 flex flex-col gap-3">
                       <div className="text-center space-y-1">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[rgba(var(--primary-rgb),0.12)] border border-[rgba(var(--primary-rgb),0.25)] text-[10px] font-mono text-[var(--primary-color)]">
-                          <span className="material-symbols-outlined text-xs">auto_awesome</span>
-                          <span>IRIS NEURAL MATRIX • {llmBackend}</span>
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-mono ${
+                          isPrivateSession
+                            ? 'bg-purple-500/20 border-purple-400/40 text-purple-200'
+                            : 'bg-[rgba(var(--primary-rgb),0.12)] border-[rgba(var(--primary-rgb),0.25)] text-[var(--primary-color)]'
+                        }`}>
+                          <span className="material-symbols-outlined text-xs">{isPrivateSession ? 'visibility_off' : 'auto_awesome'}</span>
+                          <span>{isPrivateSession ? 'IRIS INCOGNITO AI • ZERO TRACE' : `IRIS AI • ${llmBackend}`}</span>
                         </div>
-                        <h3 className="text-sm font-bold text-white/90">What objective are we tackling?</h3>
+                        <h3 className="text-sm font-bold text-white/90">
+                          {isPrivateSession ? 'Ask or search anything privately' : 'How can I help you today?'}
+                        </h3>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -518,6 +698,14 @@ export default function Assistant({
                             key={i}
                             type="button"
                             onClick={() => {
+                              if (card.action === 'OPEN_IMAGE_MENU') {
+                                setShowAttachMenu(true)
+                                return
+                              }
+                              if (card.enableIncognitoSearch) {
+                                if (!isPrivateSession) togglePrivate(true)
+                                else setWebSearchEnabled(true)
+                              }
                               if (card.persona) setAssistantPersona(card.persona)
                               if (card.prefillOnly) {
                                 setTextPrompt(card.prompt)
@@ -526,9 +714,17 @@ export default function Assistant({
                                 submitPrompt(card.prompt)
                               }
                             }}
-                            className="p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] active:scale-[0.99] border border-white/10 hover:border-[var(--primary-color)]/40 text-left transition-all flex items-start gap-2.5 group"
+                            className={`p-3 rounded-xl active:scale-[0.99] border text-left transition-all flex items-start gap-2.5 group ${
+                              isPrivateSession
+                                ? 'bg-purple-950/25 hover:bg-purple-900/35 border-purple-500/25 hover:border-purple-400/50'
+                                : 'bg-white/[0.03] hover:bg-white/[0.08] border-white/10 hover:border-[var(--primary-color)]/40'
+                            }`}
                           >
-                            <div className="w-8 h-8 rounded-lg bg-[rgba(var(--primary-rgb),0.12)] border border-[rgba(var(--primary-rgb),0.25)] flex items-center justify-center shrink-0 text-[var(--primary-color)]">
+                            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
+                              isPrivateSession
+                                ? 'bg-purple-500/20 border-purple-400/35 text-purple-300'
+                                : 'bg-[rgba(var(--primary-rgb),0.12)] border-[rgba(var(--primary-rgb),0.25)] text-[var(--primary-color)]'
+                            }`}>
                               <span className="material-symbols-outlined text-base">{card.icon}</span>
                             </div>
                             <div className="min-w-0 flex-1">
@@ -551,6 +747,7 @@ export default function Assistant({
                       msg={msg}
                       index={index}
                       chatUnlocked={chatUnlocked}
+                      isPrivateSession={isPrivateSession}
                       onDelete={(i) => {
                         setChatLog(prev => prev.filter((_, idx) => idx !== i))
                         useAssistantStore.getState().persistSessions()
@@ -559,6 +756,8 @@ export default function Assistant({
                       onSaveTask={handleSaveToTask}
                       onSaveNote={handleSaveToNote}
                       onQuickFollowUp={(followUpPrompt) => submitPrompt(followUpPrompt)}
+                      onEditPrompt={handleEditUserPrompt}
+                      onRegenerate={handleRegenerateReply}
                     />
                   ))}
 
@@ -571,80 +770,176 @@ export default function Assistant({
             <div className="px-2.5 sm:px-5 pb-3 pt-1.5 bg-gradient-to-t from-[#020617] via-[#020617]/90 to-transparent relative z-20">
               <div className="w-full max-w-4xl mx-auto flex flex-col gap-1.5">
 
-                {/* 1-Tap Context Chips Row */}
-                {!isLiveVoice && (
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-0.5">
+                {/* Popover Attachment Sheet (Camera, Gallery, Document, Clipboard, Device Context) */}
+                {showAttachMenu && !isLiveVoice && (
+                  <div className="p-2.5 rounded-2xl bg-[#0d1428]/95 border border-white/15 shadow-2xl grid grid-cols-3 sm:grid-cols-6 gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-white/75 hover:text-[var(--primary-color)] shrink-0 transition-colors"
+                      onClick={() => handlePickNativeImage('CAMERA')}
+                      className="flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/85 hover:text-[var(--primary-color)] transition-all active:scale-95"
                     >
-                      <span className="material-symbols-outlined text-[13px]">add_photo_alternate</span>
-                      <span>Vision Image</span>
+                      <span className="material-symbols-outlined text-lg text-emerald-400">photo_camera</span>
+                      <span className="text-[9.5px] font-mono font-semibold">Take Photo</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleAttachContextChip('NOTIFS')}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-white/75 hover:text-[var(--primary-color)] shrink-0 transition-colors"
+                      onClick={() => handlePickNativeImage('GALLERY')}
+                      className="flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/85 hover:text-[var(--primary-color)] transition-all active:scale-95"
                     >
-                      <span className="material-symbols-outlined text-[13px]">notifications</span>
-                      <span>Unread Notifs</span>
+                      <span className="material-symbols-outlined text-lg text-cyan-400">photo_library</span>
+                      <span className="text-[9.5px] font-mono font-semibold">Gallery</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleAttachContextChip('TELEMETRY')}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-white/75 hover:text-[var(--primary-color)] shrink-0 transition-colors"
+                      onClick={() => docInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/85 hover:text-[var(--primary-color)] transition-all active:scale-95"
                     >
-                      <span className="material-symbols-outlined text-[13px]">Vital_signs</span>
-                      <span>Device Stats</span>
+                      <span className="material-symbols-outlined text-lg text-amber-400">upload_file</span>
+                      <span className="text-[9.5px] font-mono font-semibold">Text / File</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleAttachContextChip('CLIPBOARD')}
+                      className="flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/85 hover:text-[var(--primary-color)] transition-all active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-lg text-purple-400">content_paste</span>
+                      <span className="text-[9.5px] font-mono font-semibold">Clipboard</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAttachContextChip('NOTIFS')}
+                      className="flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/85 hover:text-[var(--primary-color)] transition-all active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-lg text-sky-400">notifications</span>
+                      <span className="text-[9.5px] font-mono font-semibold">Notifs</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAttachContextChip('TELEMETRY')}
+                      className="flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/85 hover:text-[var(--primary-color)] transition-all active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-lg text-rose-400">monitoring</span>
+                      <span className="text-[9.5px] font-mono font-semibold">Device Stats</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Quick Pill Strip Above Input Bar */}
+                {!isLiveVoice && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-0.5">
+                    {/* Web Search Toggle Pill */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !webSearchEnabled
+                        setWebSearchEnabled(next)
+                        showToast(next ? '🌐 Live Web Search Enabled' : '🌐 Live Web Search Off (Auto-detect)')
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-mono font-semibold shrink-0 transition-all ${
+                        webSearchEnabled
+                          ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.25)]'
+                          : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[13px]">public</span>
+                      <span>{webSearchEnabled ? 'Web Search: ON' : 'Web Search'}</span>
+                    </button>
+
+                    {/* Camera Quick Action */}
+                    <button
+                      type="button"
+                      onClick={() => handlePickNativeImage('CAMERA')}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-white/75 hover:text-[var(--primary-color)] shrink-0 transition-colors"
                     >
-                      <span className="material-symbols-outlined text-[13px]">content_paste</span>
-                      <span>Analyze Clipboard</span>
+                      <span className="material-symbols-outlined text-[13px]">photo_camera</span>
+                      <span>Camera</span>
                     </button>
+
+                    {/* Gallery Quick Action */}
+                    <button
+                      type="button"
+                      onClick={() => handlePickNativeImage('GALLERY')}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-white/75 hover:text-[var(--primary-color)] shrink-0 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">image</span>
+                      <span>Gallery</span>
+                    </button>
+
+                    {/* Live Voice Autopilot */}
                     <button
                       type="button"
                       onClick={() => handleOpenLiveMode()}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[rgba(var(--primary-rgb),0.14)] hover:bg-[rgba(var(--primary-rgb),0.24)] border border-[rgba(var(--primary-rgb),0.3)] text-[10px] font-mono font-bold text-[var(--primary-color)] shrink-0 transition-colors"
                     >
                       <span className="material-symbols-outlined text-[13px]">record_voice_over</span>
-                      <span>Live Autopilot</span>
+                      <span>Live Voice</span>
                     </button>
-                  </div>
-                )}
 
-                {/* Attached Image Thumbnail Preview */}
-                {attachedImage && (
-                  <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/5 border border-[var(--primary-color)]/35 w-fit">
-                    <img src={attachedImage.dataUrl} alt="Preview" className="w-9 h-9 rounded-lg object-cover border border-white/15" />
-                    <div className="flex flex-col">
-                      <span className="text-[10.5px] font-mono text-white/90 truncate max-w-[160px]">{attachedImage.name}</span>
-                      <span className="text-[9px] font-mono text-[var(--primary-color)]">Gemini Multimodal Vision Ready</span>
-                    </div>
+                    {/* Diagnostics Terminal */}
                     <button
                       type="button"
-                      onClick={() => setAttachedImage(null)}
-                      className="w-6 h-6 rounded-full bg-white/10 hover:bg-red-500/20 text-white/60 hover:text-red-400 flex items-center justify-center"
+                      onClick={() => setShowDiagTerminal(!showDiagTerminal)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-mono shrink-0 transition-colors ${
+                        showDiagTerminal
+                          ? 'bg-[rgba(var(--primary-rgb),0.2)] border-[var(--primary-color)]/40 text-[var(--primary-color)]'
+                          : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/55'
+                      }`}
                     >
-                      <span className="material-symbols-outlined text-xs">close</span>
+                      <span className="material-symbols-outlined text-[13px]">terminal</span>
+                      <span>Diagnostics</span>
                     </button>
                   </div>
                 )}
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImagePick}
-                  className="hidden"
-                />
+                {/* Attached Image or Document Preview Bar */}
+                {(attachedImage || attachedFile) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {attachedImage && (
+                      <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/10 border border-[var(--primary-color)]/40 w-fit">
+                        <img src={attachedImage.dataUrl} alt="Preview" className="w-10 h-10 rounded-lg object-cover border border-white/15" />
+                        <div className="flex flex-col">
+                          <span className="text-[10.5px] font-mono text-white/90 truncate max-w-[150px]">{attachedImage.name}</span>
+                          <span className="text-[9px] font-mono text-emerald-300">Vision Ready (Gemini &amp; Groq)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAttachedImage(null)}
+                          className="w-6 h-6 rounded-full bg-white/10 hover:bg-red-500/20 text-white/60 hover:text-red-400 flex items-center justify-center"
+                        >
+                          <span className="material-symbols-outlined text-xs">close</span>
+                        </button>
+                      </div>
+                    )}
+                    {attachedFile && (
+                      <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/10 border border-amber-400/40 w-fit">
+                        <span className="material-symbols-outlined text-amber-300 text-lg">description</span>
+                        <div className="flex flex-col">
+                          <span className="text-[10.5px] font-mono text-white/90 truncate max-w-[160px]">{attachedFile.name}</span>
+                          <span className="text-[9px] font-mono text-amber-300">{Math.max(1, Math.round((attachedFile.size || 500) / 1024))} KB • Text Attached</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAttachedFile(null)}
+                          className="w-6 h-6 rounded-full bg-white/10 hover:bg-red-500/20 text-white/60 hover:text-red-400 flex items-center justify-center"
+                        >
+                          <span className="material-symbols-outlined text-xs">close</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                {/* Input Container */}
-                <div className="bg-[#0a1022]/90 backdrop-blur-xl border border-white/15 rounded-2xl p-1.5 flex flex-col gap-1.5 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
+                {/* Fallback HTML File Inputs */}
+                <input ref={imageInputRef} type="file" accept="image/*" onChange={handleHtmlImagePick} className="hidden" />
+                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleHtmlImagePick} className="hidden" />
+                <input ref={docInputRef} type="file" accept=".txt,.md,.json,.csv,.js,.jsx,.ts,.tsx,.py,.java,.html,.css,.xml,.log,text/*,image/*" onChange={handleDocumentPick} className="hidden" />
+
+                {/* Main Input Bar */}
+                <div className={`backdrop-blur-xl rounded-2xl p-1.5 flex flex-col gap-1.5 shadow-[0_-8px_30px_rgba(0,0,0,0.5)] border transition-colors ${
+                  isPrivateSession
+                    ? 'bg-[#120924]/95 border-purple-500/35'
+                    : 'bg-[#0a1022]/90 border-white/15'
+                }`}>
                   {isLiveVoice ? (
                     <div className="flex items-center gap-2 p-1">
                       <button
@@ -674,41 +969,45 @@ export default function Assistant({
                       </button>
                     </div>
                   ) : (
-                    <form onSubmit={handleInputSubmit} className="flex gap-1.5 items-center">
+                    <form onSubmit={handleInputSubmit} className="flex gap-1.5 items-end">
+                      {/* ➕ Attach Menu Button */}
                       <button
                         type="button"
-                        onClick={() => setShowDiagTerminal(!showDiagTerminal)}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
-                          showDiagTerminal ? 'text-[var(--primary-color)] bg-[rgba(var(--primary-rgb),0.15)]' : 'text-white/40 hover:text-white/80 hover:bg-white/5'
+                        onClick={() => setShowAttachMenu(!showAttachMenu)}
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0 ${
+                          showAttachMenu
+                            ? 'bg-[var(--primary-color)] text-[#020617] rotate-45'
+                            : 'bg-white/5 text-white/70 hover:text-white hover:bg-white/10'
                         }`}
-                        title="System Diagnostics Terminal"
+                        title="Attach Photo, Camera, File, or Context"
                       >
-                        <span className="material-symbols-outlined text-[18px]">terminal</span>
+                        <span className="material-symbols-outlined text-[19px]">add</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          togglePrivate()
-                          showToast(!isPrivateSession ? '🔒 Private Incognito Session Active' : '🔓 Standard Session Restored')
-                        }}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
-                          isPrivateSession ? 'text-red-400 bg-red-500/15 border border-red-500/30' : 'text-white/40 hover:text-white/80 hover:bg-white/5'
-                        }`}
-                        title="Toggle Private Incognito Mode (No History Saved)"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">{isPrivateSession ? 'shield_lock' : 'lock_open'}</span>
-                      </button>
-
-                      <input
+                      {/* Multi-Line Auto-Sizing Textarea */}
+                      <textarea
                         ref={inputBoxRef}
-                        type="text"
+                        rows={1}
                         value={textPrompt}
                         onChange={e => setTextPrompt(e.target.value)}
-                        placeholder={isListening ? "Listening... speak now" : "Ask IRIS or issue a device command..."}
-                        className="flex-1 min-w-0 bg-transparent px-2 py-2.5 text-[13.5px] text-white placeholder:text-white/35 focus:outline-none border-none font-sans"
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleInputSubmit()
+                          }
+                        }}
+                        placeholder={
+                          isListening
+                            ? "Listening... speak now"
+                            : isPrivateSession
+                              ? (webSearchEnabled ? "Search the web or chat in Incognito..." : "Message IRIS in Incognito (not saved)...")
+                              : (webSearchEnabled ? "Search the live web with IRIS..." : "Message IRIS...")
+                        }
+                        style={{ maxHeight: '96px' }}
+                        className="flex-1 min-w-0 bg-transparent px-2 py-2 text-[13.5px] text-white placeholder:text-white/35 focus:outline-none border-none font-sans resize-none overflow-y-auto leading-snug"
                       />
 
+                      {/* Voice Input / Skip Speech Button */}
                       <button
                         type="button"
                         onClick={isSpeaking ? stopSpeaking : (isListening ? stopVoiceInput : startVoiceInput)}
@@ -726,6 +1025,7 @@ export default function Assistant({
                         </span>
                       </button>
 
+                      {/* Stop Generation or Send Button */}
                       {isGenerating ? (
                         <button
                           type="button"
@@ -738,13 +1038,15 @@ export default function Assistant({
                       ) : (
                         <button
                           type="submit"
-                          disabled={!textPrompt.trim() && !attachedImage}
+                          disabled={!textPrompt.trim() && !attachedImage && !attachedFile}
                           className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shrink-0 ${
-                            (textPrompt.trim() || attachedImage)
-                              ? 'bg-[var(--primary-color)] text-[#020617] hover:scale-105 shadow-[0_0_18px_rgba(var(--primary-rgb),0.35)]'
+                            (textPrompt.trim() || attachedImage || attachedFile)
+                              ? (isPrivateSession
+                                ? 'bg-purple-400 text-[#090414] hover:scale-105 shadow-[0_0_18px_rgba(168,85,247,0.45)]'
+                                : 'bg-[var(--primary-color)] text-[#020617] hover:scale-105 shadow-[0_0_18px_rgba(var(--primary-rgb),0.35)]')
                               : 'bg-white/5 text-white/20'
                           }`}
-                          title="Send Prompt"
+                          title="Send"
                         >
                           <span className="material-symbols-outlined text-[18px]">arrow_upward</span>
                         </button>
