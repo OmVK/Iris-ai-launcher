@@ -167,6 +167,9 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     >
         <div
           ref={navRef}
+          onTouchStart={e => e.stopPropagation()}
+          onTouchMove={e => e.stopPropagation()}
+          onTouchEnd={e => e.stopPropagation()}
           className={`pointer-events-auto relative flex items-center justify-center overflow-hidden island-morph ${
             collapsed ? 'is-collapsed' : ''
           } ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}

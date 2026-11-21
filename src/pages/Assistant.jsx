@@ -177,8 +177,13 @@ export default function Assistant({
     }
   }, [])
 
-  // Auto-trigger live mode
-  useEffect(() => { if (autoTriggerLive) { handleOpenLiveMode(); if (setAutoTriggerLive) setAutoTriggerLive(false) } }, [autoTriggerLive, handleOpenLiveMode, setAutoTriggerLive])
+  // Auto-trigger live mode only when Assistant page is actively visible
+  useEffect(() => {
+    if (autoTriggerLive && _effectiveAppActive) {
+      handleOpenLiveMode()
+      if (setAutoTriggerLive) setAutoTriggerLive(false)
+    }
+  }, [autoTriggerLive, _effectiveAppActive, handleOpenLiveMode, setAutoTriggerLive])
 
   const streamEndRef = useRef(null)
   useEffect(() => { if (streamEndRef.current) streamEndRef.current.scrollIntoView({ behavior: 'smooth' }) }, [chatLog])

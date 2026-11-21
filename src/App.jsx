@@ -301,7 +301,7 @@ export default function App() {
           >
             <Suspense fallback={null}>
               <Assistant
-                autoTriggerLive={useAppStore.getState().showArcSearch}
+                autoTriggerLive={false}
                 setAutoTriggerLive={() => {}}
                 onNavigate={setActivePage}
                 startVoiceInput={voiceEngine.startVoiceInput}
