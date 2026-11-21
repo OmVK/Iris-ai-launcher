@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { registerPlugin } from '@capacitor/core'
 import { useAssistantStore } from '../stores/assistantStore'
 import { useAIStore } from '../stores/aiStore'
 import { SecureStorage } from '../utils/secureStorage'
@@ -13,6 +14,8 @@ import {
   isNative
 } from '../components/LauncherPlugin'
 
+const NativeLauncher = registerPlugin('LauncherPlugin')
+
 let recognition = null
 try {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -20,7 +23,7 @@ try {
     recognition = new SpeechRecognition()
     recognition.continuous = false
     recognition.lang = 'en-US'
-    recognition.interimResults = false
+    recognition.interimResults = true
   }
 } catch (e) {
   console.warn("SpeechRecognition initialization failed:", e)
@@ -35,9 +38,11 @@ export default function useVoiceEngine() {
     setShowLiveConfigModal,
     liveSetupEngine, setLiveSetupEngine,
     liveSetupKey, setLiveSetupKey,
+    setActiveUserTranscript,
+    setTextPrompt,
   } = useAssistantStore()
 
-  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre, voiceEngineProvider: _voiceEngineProvider } = useAIStore()
+  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre } = useAIStore()
 
   const lastTtsTextRef = useRef('')
   const isListeningRef = useRef(false)
@@ -45,6 +50,10 @@ export default function useVoiceEngine() {
   const isSpeakingRef = useRef(false)
   const finishSpeakingTimerRef = useRef(null)
   const mountedRef = useRef(true)
+  const submitPromptRef = useRef(null)
+  const backendIsGeneratingRef = useRef(false)
+  const backendAbortRef = useRef(null)
+  const startVoiceInputRef = useRef(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -61,43 +70,140 @@ export default function useVoiceEngine() {
   useEffect(() => { isLiveVoiceRef.current = isLiveVoice }, [isLiveVoice])
   useEffect(() => { isSpeakingRef.current = isSpeaking }, [isSpeaking])
 
-  const startVoiceInput = useCallback(async () => {
-    if (!recognition) {
-      alert("Browser Speech Recognition blocked. Please type prompts below.")
-      return
+  useEffect(() => {
+    if (!isNative) return
+    const partialListener = NativeLauncher.addListener('onSpeechPartial', (data) => {
+      if (!mountedRef.current || !isListeningRef.current) return
+      if (data?.text) {
+        if (isLiveVoiceRef.current) {
+          setActiveUserTranscript(data.text)
+        } else {
+          setTextPrompt(data.text)
+        }
+      }
+    })
+    return () => {
+      if (typeof partialListener?.then === 'function') partialListener.then(l => l.remove())
+      else partialListener?.remove?.()
     }
-    if (isListening) {
-      recognition.stop()
-    } else {
-      try {
-        const perm = await checkAndRequestPermission('RECORD_AUDIO')
-        if (perm && !perm.granted) return
-      } catch (_) { }
-      window.speechSynthesis?.cancel()
-      stopSpeakingNative().catch(() => { })
-      setIsSpeaking(false)
-      lastTtsTextRef.current = ''
-      try { recognition.start() } catch (e) { console.error(e) }
+  }, [setActiveUserTranscript, setTextPrompt])
+
+  const startWebRecognition = useCallback(() => {
+    if (!recognition) return false
+    try {
+      let finalTranscript = ''
+      recognition.onstart = () => {
+        if (!mountedRef.current) return
+        isListeningRef.current = true
+        setIsListening(true)
+      }
+      recognition.onresult = (event) => {
+        let interim = ''
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript
+          else interim += event.results[i][0].transcript
+        }
+        const txt = (finalTranscript || interim).trim()
+        if (txt && mountedRef.current) {
+          if (isLiveVoiceRef.current) setActiveUserTranscript(txt)
+          else setTextPrompt(txt)
+        }
+      }
+      recognition.onerror = () => {
+        isListeningRef.current = false
+        setIsListening(false)
+      }
+      recognition.onend = () => {
+        isListeningRef.current = false
+        setIsListening(false)
+        const cleaned = finalTranscript.trim()
+        if (cleaned && submitPromptRef.current) {
+          submitPromptRef.current(cleaned)
+        }
+      }
+      recognition.start()
+      return true
+    } catch (e) {
+      console.warn('[IRIS] Web Speech start failed:', e)
+      return false
     }
-  }, [isListening, setIsSpeaking])
+  }, [setActiveUserTranscript, setIsListening, setTextPrompt])
 
   const stopVoiceInput = useCallback(() => {
     isListeningRef.current = false
     setIsListening(false)
-    if (recognition) recognition.stop()
+    if (isNative) {
+      NativeLauncher.stopOfflineSpeech().catch(() => {})
+    }
+    if (recognition) {
+      try { recognition.stop() } catch {}
+    }
   }, [setIsListening])
+
+  const startVoiceInput = useCallback(async () => {
+    if (isListeningRef.current) {
+      stopVoiceInput()
+      return
+    }
+    try {
+      const perm = await checkAndRequestPermission('RECORD_AUDIO')
+      if (perm && !perm.granted) return
+    } catch (_) { }
+
+    window.speechSynthesis?.cancel()
+    stopSpeakingNative().catch(() => { })
+    setIsSpeaking(false)
+    lastTtsTextRef.current = ''
+
+    if (isNative) {
+      try {
+        await NativeLauncher.stopOfflineSpeech().catch(() => {})
+        isListeningRef.current = true
+        setIsListening(true)
+        const res = await NativeLauncher.startOfflineSpeech()
+        isListeningRef.current = false
+        setIsListening(false)
+        const spokenText = (res?.text || '').trim()
+        if (spokenText) {
+          if (submitPromptRef.current) {
+            submitPromptRef.current(spokenText)
+          } else {
+            setTextPrompt(spokenText)
+          }
+        } else if (isLiveVoiceRef.current && mountedRef.current && !isSpeakingRef.current) {
+          setTimeout(() => {
+            if (isLiveVoiceRef.current && !isSpeakingRef.current && !isListeningRef.current) {
+              startVoiceInputRef.current?.()
+            }
+          }, 400)
+        }
+        return
+      } catch (err) {
+        console.warn('[IRIS] Native speech recognition fallback to WebSpeech:', err)
+        isListeningRef.current = false
+        setIsListening(false)
+      }
+    }
+
+    startWebRecognition()
+  }, [setIsListening, setIsSpeaking, setTextPrompt, startWebRecognition, stopVoiceInput])
+
+  useEffect(() => {
+    startVoiceInputRef.current = startVoiceInput
+  }, [startVoiceInput])
 
   const finishSpeaking = useCallback(() => {
     if (finishSpeakingTimerRef.current) clearTimeout(finishSpeakingTimerRef.current)
     if (!mountedRef.current) return
+    isSpeakingRef.current = false
     setIsSpeaking(false)
     if (isLiveVoiceRef.current) {
       finishSpeakingTimerRef.current = setTimeout(() => {
         if (!mountedRef.current) return
-        if (isLiveVoiceRef.current && !isSpeakingRef.current && !isListeningRef.current && recognition) {
-          try { recognition.start() } catch { }
+        if (isLiveVoiceRef.current && !isSpeakingRef.current && !isListeningRef.current) {
+          startVoiceInputRef.current?.()
         }
-      }, 300)
+      }, 350)
     }
   }, [setIsSpeaking])
 
@@ -110,6 +216,7 @@ export default function useVoiceEngine() {
       stopAudio().catch(() => { })
       window._isNativeCartesiaAudioPlaying = false
     }
+    isSpeakingRef.current = false
     setIsSpeaking(false)
     if (backendAbortRef.current?.current) {
       backendAbortRef.current.current.abort()
@@ -118,17 +225,22 @@ export default function useVoiceEngine() {
     if (backendIsGeneratingRef.current) backendIsGeneratingRef.current.current = false
   }, [setIsSpeaking])
 
-  const speakText = useCallback(async (text) => {
-    if (!text || !voiceEnabled) return
+  const speakText = useCallback(async (rawText, forceSpeak = false) => {
+    if (!rawText || (!voiceEnabled && !forceSpeak && !isLiveVoiceRef.current)) return
+    const text = String(rawText)
+      .replace(/```[\s\S]*?```/g, ' Code block omitted. ')
+      .replace(/[*#_`~>]/g, '')
+      .trim()
+    if (!text) return
     if (text === lastTtsTextRef.current && isSpeakingRef.current) return
     lastTtsTextRef.current = text
 
     stopSpeaking()
+    isSpeakingRef.current = true
     setIsSpeaking(true)
 
-    if (recognition && isListeningRef.current) {
-      try { recognition.stop() } catch { }
-      setIsListening(false)
+    if (isListeningRef.current) {
+      stopVoiceInput()
     }
 
     const { voiceEngineProvider: currentProvider, cartesiaKey: storeKey } = useAIStore.getState()
@@ -168,6 +280,7 @@ export default function useVoiceEngine() {
         finishSpeaking()
       } catch (e) {
         console.warn('[IRIS] Native TTS speak failed, falling back:', e)
+        finishSpeaking()
       }
       return
     }
@@ -206,7 +319,7 @@ export default function useVoiceEngine() {
       console.warn('[IRIS] SpeechSynthesis error:', err)
       finishSpeaking()
     }
-  }, [voicePitch, voiceRate, voiceTimbre, voiceEnabled, finishSpeaking, setIsListening, setIsSpeaking, stopSpeaking])
+  }, [voicePitch, voiceRate, voiceTimbre, voiceEnabled, finishSpeaking, setIsSpeaking, stopSpeaking, stopVoiceInput])
 
   const requestMicrophonePermission = useCallback(async () => {
     try {
@@ -221,34 +334,29 @@ export default function useVoiceEngine() {
   const handleOpenLiveMode = useCallback(async () => {
     const hasPermission = await requestMicrophonePermission()
     if (!hasPermission) return
+    isLiveVoiceRef.current = true
     setIsLiveVoice(true)
-    speakText("Engaging live conversation mode. I am listening.")
+    await speakText("Live neural link active. I am listening.", true)
   }, [speakText, requestMicrophonePermission, setIsLiveVoice])
 
   const handleExitLiveModeOnly = useCallback(() => {
     stopSpeaking()
-    setIsLiveVoice(false)
     isLiveVoiceRef.current = false
-    isListeningRef.current = false
-    setIsListening(false)
-    isSpeakingRef.current = false
-    if (recognition) try { recognition.stop() } catch { }
-  }, [stopSpeaking, setIsListening, setIsLiveVoice])
+    setIsLiveVoice(false)
+    stopVoiceInput()
+  }, [stopSpeaking, stopVoiceInput, setIsLiveVoice])
 
   const handleStopLiveModeCompletely = useCallback(() => {
     stopSpeaking()
-    setIsLiveVoice(false)
     isLiveVoiceRef.current = false
-    isListeningRef.current = false
-    setIsListening(false)
-    isSpeakingRef.current = false
-    if (recognition) try { recognition.stop() } catch { }
+    setIsLiveVoice(false)
+    stopVoiceInput()
     setChatLog(prev => prev.filter(item => !item.loading))
-  }, [stopSpeaking, setChatLog, setIsListening, setIsLiveVoice])
+  }, [stopSpeaking, stopVoiceInput, setChatLog, setIsLiveVoice])
 
   const isLiveConfigured = useCallback(() => {
     const { llmBackend, geminiKey, groqKey } = useAIStore.getState()
-    if (llmBackend === 'OLLAMA') return true
+    if (llmBackend === 'OLLAMA' || llmBackend === 'ONDEVICE') return true
     if (llmBackend === 'GEMINI') return !!geminiKey
     if (llmBackend === 'GROQ') return !!groqKey
     if (llmBackend === 'NVIDIA') return localStorage.getItem('iris_has_nvidia_key') === 'true'
@@ -280,15 +388,12 @@ export default function useVoiceEngine() {
     setTimeout(() => handleOpenLiveMode(), 200)
   }, [liveSetupEngine, liveSetupKey, handleOpenLiveMode, setLlmBackend, setShowLiveConfigModal])
 
-  // Bridge to useAIBackend — receives submitPrompt, isGeneratingRef, abortControllerRef
-  const submitPromptRef = useRef(null)
-  const backendIsGeneratingRef = useRef(false)
-  const backendAbortRef = useRef(null)
   const setSubmitPrompt = useCallback((fn, isGenRef, abortRef) => {
     submitPromptRef.current = fn
     if (isGenRef) backendIsGeneratingRef.current = isGenRef
     if (abortRef) backendAbortRef.current = abortRef
   }, [])
+
   const submitPrompt = useCallback((prompt) => {
     if (submitPromptRef.current) submitPromptRef.current(prompt)
   }, [])

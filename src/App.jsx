@@ -309,6 +309,7 @@ export default function App() {
                 speakText={voiceEngine.speakText}
                 stopSpeaking={voiceEngine.stopSpeaking}
                 submitPrompt={aiBackend.submitPrompt}
+                stopGeneration={aiBackend.stopGeneration}
                 handleSaveLiveConfig={voiceEngine.handleSaveLiveConfig}
                 handleOpenLiveMode={voiceEngine.handleOpenLiveMode}
                 handleExitLiveModeOnly={voiceEngine.handleExitLiveModeOnly}

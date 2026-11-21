@@ -8,7 +8,7 @@ const loadSessions = () => {
   try {
     const cached = localStorage.getItem('iris_assistant_sessions')
     const parsed = cached ? JSON.parse(cached) : null
-    if (Array.isArray(parsed)) return parsed.length > 10 ? parsed.slice(-10) : parsed
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed.length > 10 ? parsed.slice(-10) : parsed
   } catch {}
   return [{ id: 'default', name: 'Default Session Node', log: DEFAULT_LOG }]
 }
@@ -29,6 +29,7 @@ export const useAssistantStore = create((set, get) => ({
   textPrompt: '',
   isListening: false,
   isSpeaking: false,
+  isGenerating: false,
   isLiveVoice: false,
   isPrivateSession: false,
   isLiveScreenOpen: false,
@@ -37,6 +38,8 @@ export const useAssistantStore = create((set, get) => ({
   showLiveConfigModal: false,
   liveSetupEngine: (() => { try { return localStorage.getItem('system_llm_backend') || 'GEMINI' } catch { return 'GEMINI' } })(),
   liveSetupKey: '',
+  assistantPersona: (() => { try { return localStorage.getItem('iris_assistant_persona') || 'COMMANDER' } catch { return 'COMMANDER' } })(),
+  attachedImage: null,
   sessions: initSessions,
   activeSessionId: (() => { try { return localStorage.getItem('iris_assistant_active_session') || 'default' } catch { return 'default' } })(),
   _savedChatLog: null,
@@ -47,6 +50,7 @@ export const useAssistantStore = create((set, get) => ({
   setTextPrompt: (v) => set({ textPrompt: v }),
   setIsListening: (v) => set({ isListening: v }),
   setIsSpeaking: (v) => set({ isSpeaking: v }),
+  setIsGenerating: (v) => set({ isGenerating: v }),
   setIsLiveVoice: (v) => set({ isLiveVoice: v }),
   setIsPrivateSession: (v) => set({ isPrivateSession: v }),
   setIsLiveScreenOpen: (v) => set({ isLiveScreenOpen: v }),
@@ -55,6 +59,11 @@ export const useAssistantStore = create((set, get) => ({
   setShowLiveConfigModal: (v) => set({ showLiveConfigModal: v }),
   setLiveSetupEngine: (v) => { set({ liveSetupEngine: v }) },
   setLiveSetupKey: (v) => set({ liveSetupKey: v }),
+  setAssistantPersona: (v) => {
+    try { localStorage.setItem('iris_assistant_persona', v) } catch {}
+    set({ assistantPersona: v })
+  },
+  setAttachedImage: (v) => set({ attachedImage: v }),
 
   setSessions: (updater) => set((s) => ({
     sessions: typeof updater === 'function' ? updater(s.sessions) : updater
@@ -62,6 +71,22 @@ export const useAssistantStore = create((set, get) => ({
   setActiveSessionId: (v) => {
     try { localStorage.setItem('iris_assistant_active_session', v) } catch {}
     set({ activeSessionId: v })
+  },
+
+  autoTitleSession: (firstPromptText) => {
+    const { sessions, activeSessionId, isPrivateSession } = get()
+    if (isPrivateSession || !firstPromptText) return
+    const cleaned = firstPromptText.replace(/\s+/g, ' ').trim()
+    if (!cleaned) return
+    const title = cleaned.length > 28 ? cleaned.slice(0, 28) + '…' : cleaned
+    const updated = sessions.map(s => {
+      if (s.id === activeSessionId && (s.name === 'Default Session Node' || s.name.startsWith('Session Node #') || s.name === 'New Chat')) {
+        return { ...s, name: title }
+      }
+      return s
+    })
+    try { localStorage.setItem('iris_assistant_sessions', JSON.stringify(updated)) } catch {}
+    set({ sessions: updated })
   },
 
   persistSessions: () => {
@@ -75,17 +100,21 @@ export const useAssistantStore = create((set, get) => ({
   },
 
   createNewSession: () => {
-    const { isPrivateSession, sessions } = get()
+    const { isPrivateSession } = get()
     if (isPrivateSession) return
     const newId = `session_${Date.now()}`
     const newSession = {
       id: newId,
-      name: `Session Node #${sessions.length + 1}`,
+      name: 'New Chat',
       log: [{ time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), sender: "IRIS", text: "New session neuro-link ready. Awaiting prompt details.", type: "system" }]
     }
     set((s) => {
       const trimmed = [...s.sessions, newSession]
       const sessions = trimmed.length > 10 ? trimmed.slice(-10) : trimmed
+      try {
+        localStorage.setItem('iris_assistant_sessions', JSON.stringify(sessions))
+        localStorage.setItem('iris_assistant_active_session', newId)
+      } catch {}
       return { sessions, activeSessionId: newId, chatLog: newSession.log }
     })
   },
@@ -94,7 +123,10 @@ export const useAssistantStore = create((set, get) => ({
     const { isPrivateSession, sessions } = get()
     if (isPrivateSession) return
     const found = sessions.find(s => s.id === id)
-    if (found) set({ activeSessionId: id, chatLog: found.log })
+    if (found) {
+      try { localStorage.setItem('iris_assistant_active_session', id) } catch {}
+      set({ activeSessionId: id, chatLog: found.log })
+    }
   },
 
   deleteSession: (id) => {
@@ -103,6 +135,7 @@ export const useAssistantStore = create((set, get) => ({
     const updated = sessions.filter(s => s.id !== id)
     try { localStorage.setItem('iris_assistant_sessions', JSON.stringify(updated)) } catch {}
     if (activeSessionId === id) {
+      try { localStorage.setItem('iris_assistant_active_session', updated[0].id) } catch {}
       set({ sessions: updated, activeSessionId: updated[0].id, chatLog: updated[0].log })
     } else {
       set({ sessions: updated })
