@@ -56,6 +56,10 @@ public class LauncherPlugin extends Plugin {
     private volatile android.speech.SpeechRecognizer currentRecognizer = null;
     private volatile android.media.MediaPlayer mediaPlayer = null;
     private volatile PluginCall currentSpeechCall;
+    private volatile PluginCall currentRecognitionCall = null;
+    private final android.os.Handler recognitionHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable recognitionTimeoutRunnable = null;
+    private volatile boolean callMonitorRegistered = false;
     private static final java.util.concurrent.ConcurrentHashMap<String, byte[]> iconMemoryCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     public static byte[] getOrCreateAppIconBytes(Context context, String packageId) {
@@ -183,6 +187,66 @@ public class LauncherPlugin extends Plugin {
         } catch (Exception e) {
             tts = new android.speech.tts.TextToSpeech(getContext(), initListener);
         }
+
+        registerCallStateMonitor();
+    }
+
+    public void registerCallStateMonitor() {
+        if (callMonitorRegistered) return;
+        try {
+            if (ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+            android.telephony.TelephonyManager tm = (android.telephony.TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
+            if (tm == null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                tm.registerTelephonyCallback(getContext().getMainExecutor(), new IrisCallStateCallback());
+            } else {
+                tm.listen(new android.telephony.PhoneStateListener() {
+                    @Override
+                    public void onCallStateChanged(int state, String phoneNumber) {
+                        emitCallState(state);
+                    }
+                }, android.telephony.PhoneStateListener.LISTEN_CALL_STATE);
+            }
+            callMonitorRegistered = true;
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to register call state monitor", e);
+        }
+    }
+
+    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.S)
+    private class IrisCallStateCallback extends android.telephony.TelephonyCallback implements android.telephony.TelephonyCallback.CallStateListener {
+        @Override
+        public void onCallStateChanged(int state) {
+            emitCallState(state);
+        }
+    }
+
+    private void emitCallState(int state) {
+        try {
+            String stateName = "IDLE";
+            if (state == android.telephony.TelephonyManager.CALL_STATE_RINGING) {
+                stateName = "RINGING";
+            } else if (state == android.telephony.TelephonyManager.CALL_STATE_OFFHOOK) {
+                stateName = "OFFHOOK";
+            }
+            JSObject data = new JSObject();
+            data.put("state", stateName);
+            data.put("timestamp", System.currentTimeMillis());
+            notifyListeners("onCallStateChanged", data);
+        } catch (Exception ignored) {}
+    }
+
+    public static void playAssistantChime() {
+        new Thread(() -> {
+            try {
+                android.media.ToneGenerator tg = new android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 70);
+                tg.startTone(android.media.ToneGenerator.TONE_PROP_BEEP2, 150);
+                Thread.sleep(170);
+                tg.release();
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     @Override
@@ -198,6 +262,18 @@ public class LauncherPlugin extends Plugin {
         if (currentSpeechCall != null) {
             currentSpeechCall.resolve();
             currentSpeechCall = null;
+        }
+        if (recognitionTimeoutRunnable != null) {
+            recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
+            recognitionTimeoutRunnable = null;
+        }
+        if (currentRecognitionCall != null) {
+            try { currentRecognitionCall.reject("Plugin destroyed"); } catch (Exception ignored) {}
+            currentRecognitionCall = null;
+        }
+        if (currentRecognizer != null) {
+            try { currentRecognizer.destroy(); } catch (Exception ignored) {}
+            currentRecognizer = null;
         }
         // Release media player
         if (mediaPlayer != null) {
@@ -365,6 +441,7 @@ public class LauncherPlugin extends Plugin {
     private static volatile boolean pendingVoiceAssistTrigger = false;
 
     public static void onVoiceAssistTriggered() {
+        playAssistantChime();
         if (instance != null) {
             try {
                 JSObject data = new JSObject();
@@ -2298,6 +2375,29 @@ public class LauncherPlugin extends Plugin {
                     call.reject("RECORD_AUDIO permission not granted yet");
                     return;
                 }
+
+                // Register call monitor if permissions were granted after initial load
+                registerCallStateMonitor();
+
+                // Cleanly settle any previous active recognition call so JS promises never hang
+                if (recognitionTimeoutRunnable != null) {
+                    recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
+                    recognitionTimeoutRunnable = null;
+                }
+                if (currentRecognitionCall != null && currentRecognitionCall != call) {
+                    try {
+                        currentRecognitionCall.reject("Speech session superseded");
+                    } catch (Exception ignored) {}
+                    currentRecognitionCall = null;
+                }
+                if (currentRecognizer != null) {
+                    try {
+                        currentRecognizer.cancel();
+                    } catch (Exception ignored) {}
+                }
+
+                currentRecognitionCall = call;
+
                 if (currentRecognizer == null) {
                     android.content.ComponentName googleRecog = new android.content.ComponentName(
                         "com.google.android.tts",
@@ -2317,53 +2417,25 @@ public class LauncherPlugin extends Plugin {
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-US");
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
-                intent.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                intent.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 3);
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4500);
-                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2200);
-                intent.putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 2200);
-
-                // Mute system streams to silence Google Assistant activation chime
-                final android.media.AudioManager audioManager = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
-                if (audioManager != null) {
-                    try {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                            audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_MUTE, 0);
-                            audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_MUTE, 0);
-                            audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_MUTE, 0);
-                            audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_ALARM, android.media.AudioManager.ADJUST_MUTE, 0);
-                        } else {
-                            audioManager.setStreamMute(android.media.AudioManager.STREAM_SYSTEM, true);
-                            audioManager.setStreamMute(android.media.AudioManager.STREAM_NOTIFICATION, true);
-                            audioManager.setStreamMute(android.media.AudioManager.STREAM_MUSIC, true);
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                Runnable restoreAudio = () -> {
-                    if (audioManager != null) {
-                        try {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_UNMUTE, 0);
-                                audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_UNMUTE, 0);
-                                audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_UNMUTE, 0);
-                                audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_ALARM, android.media.AudioManager.ADJUST_UNMUTE, 0);
-                            } else {
-                                audioManager.setStreamMute(android.media.AudioManager.STREAM_SYSTEM, false);
-                                audioManager.setStreamMute(android.media.AudioManager.STREAM_NOTIFICATION, false);
-                                audioManager.setStreamMute(android.media.AudioManager.STREAM_MUSIC, false);
-                            }
-                        } catch (Exception ignored) {}
-                    }
-                };
+                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3500);
+                intent.putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800);
+                intent.putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1800);
 
                 currentRecognizer.setRecognitionListener(new android.speech.RecognitionListener() {
                     private String lastPartial = null;
                     private boolean isResolving = false;
 
+                    private void clearPendingTimeout() {
+                        if (recognitionTimeoutRunnable != null) {
+                            recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
+                            recognitionTimeoutRunnable = null;
+                        }
+                    }
+
                     @Override
                     public void onReadyForSpeech(android.os.Bundle params) {
-                        restoreAudio.run();
                         notifyListeners("onSpeechStatus", new JSObject().put("status", "listening"));
                     }
                     @Override
@@ -2374,45 +2446,62 @@ public class LauncherPlugin extends Plugin {
                     public void onBufferReceived(byte[] buffer) {}
                     @Override
                     public void onEndOfSpeech() {
-                        restoreAudio.run();
                         notifyListeners("onSpeechStatus", new JSObject().put("status", "processing"));
-                        
-                        // Prevent the recognizer from hanging indefinitely in the processing phase
-                        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        clearPendingTimeout();
+                        recognitionTimeoutRunnable = () -> {
                             if (!isResolving) {
                                 isResolving = true;
+                                if (currentRecognitionCall == call) currentRecognitionCall = null;
                                 try {
                                     if (currentRecognizer != null) currentRecognizer.cancel();
                                 } catch (Exception ignored) {}
                                 if (lastPartial != null && !lastPartial.trim().isEmpty()) {
                                     JSObject ret = new JSObject();
-                                    ret.put("text", lastPartial);
+                                    ret.put("text", lastPartial.trim());
                                     call.resolve(ret);
                                 } else {
-                                    call.reject("Speech recognizer hung during processing");
+                                    call.reject("Speech recognizer timed out after end of speech");
                                 }
                             }
-                        }, 2800);
+                        };
+                        recognitionHandler.postDelayed(recognitionTimeoutRunnable, 4000);
                     }
                     @Override
                     public void onError(int error) {
-                        restoreAudio.run();
+                        clearPendingTimeout();
                         if (isResolving) return;
                         isResolving = true;
+                        if (currentRecognitionCall == call) currentRecognitionCall = null;
+
+                        // If recognizer hit ERROR_CLIENT (5) or ERROR_RECOGNIZER_BUSY (8), destroy and recreate on next run
+                        if (error == android.speech.SpeechRecognizer.ERROR_CLIENT ||
+                            error == android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                            error == android.speech.SpeechRecognizer.ERROR_SERVER) {
+                            try {
+                                if (currentRecognizer != null) {
+                                    currentRecognizer.destroy();
+                                    currentRecognizer = null;
+                                }
+                            } catch (Exception ignored) {
+                                currentRecognizer = null;
+                            }
+                        }
+
                         if (lastPartial != null && !lastPartial.trim().isEmpty()) {
                             JSObject ret = new JSObject();
-                            ret.put("text", lastPartial);
+                            ret.put("text", lastPartial.trim());
                             call.resolve(ret);
                         } else {
-                            android.util.Log.e("IrisSpeech", "Speech error code: " + error);
+                            android.util.Log.d("IrisSpeech", "Speech error code: " + error);
                             call.reject("Speech error: " + error);
                         }
                     }
                     @Override
                     public void onResults(android.os.Bundle results) {
-                        restoreAudio.run();
+                        clearPendingTimeout();
                         if (isResolving) return;
                         isResolving = true;
+                        if (currentRecognitionCall == call) currentRecognitionCall = null;
                         java.util.ArrayList<String> matches = results.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
                         String bestMatch = null;
                         if (matches != null && !matches.isEmpty()) {
@@ -2456,8 +2545,8 @@ public class LauncherPlugin extends Plugin {
                 });
 
                 currentRecognizer.startListening(intent);
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(restoreAudio, 1000);
             } catch (Exception e) {
+                if (currentRecognitionCall == call) currentRecognitionCall = null;
                 call.reject("Failed to start speech recognition: " + e.getMessage());
             }
         });
@@ -2467,8 +2556,18 @@ public class LauncherPlugin extends Plugin {
     public void stopOfflineSpeech(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             try {
+                if (recognitionTimeoutRunnable != null) {
+                    recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
+                    recognitionTimeoutRunnable = null;
+                }
                 if (currentRecognizer != null) {
                     currentRecognizer.cancel();
+                }
+                if (currentRecognitionCall != null) {
+                    try {
+                        currentRecognitionCall.reject("Speech stopped by caller");
+                    } catch (Exception ignored) {}
+                    currentRecognitionCall = null;
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -2481,27 +2580,156 @@ public class LauncherPlugin extends Plugin {
     public void resolveWithPartial(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             try {
+                if (recognitionTimeoutRunnable != null) {
+                    recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
+                    recognitionTimeoutRunnable = null;
+                }
                 if (currentRecognizer != null) {
                     currentRecognizer.cancel();
                 }
-                // Use the last known partial result as the final text
                 String text = call.getString("text", "");
                 if (text != null && !text.trim().isEmpty()) {
                     JSObject ret = new JSObject();
-                    ret.put("text", text);
-                    // Resolve the pending speech call if it exists
-                    if (currentSpeechCall != null) {
-                        currentSpeechCall.resolve(ret);
-                        currentSpeechCall = null;
+                    ret.put("text", text.trim());
+                    if (currentRecognitionCall != null) {
+                        try { currentRecognitionCall.resolve(ret); } catch (Exception ignored) {}
+                        currentRecognitionCall = null;
                     }
                     call.resolve(ret);
                 } else {
+                    if (currentRecognitionCall != null) {
+                        try { currentRecognitionCall.reject("No partial text available"); } catch (Exception ignored) {}
+                        currentRecognitionCall = null;
+                    }
                     call.reject("No partial text available");
                 }
             } catch (Exception e) {
                 call.reject("Failed to resolve with partial: " + e.getMessage());
             }
         });
+    }
+
+    @PluginMethod
+    public void playActivationTone(PluginCall call) {
+        playAssistantChime();
+        JSObject ret = new JSObject();
+        ret.put("played", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void answerCall(PluginCall call) {
+        boolean speaker = Boolean.TRUE.equals(call.getBoolean("speaker", false));
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) {
+                    androidx.core.app.ActivityCompat.requestPermissions(
+                        getActivity(),
+                        new String[]{android.Manifest.permission.ANSWER_PHONE_CALLS, android.Manifest.permission.READ_PHONE_STATE},
+                        7009
+                    );
+                    call.reject("ANSWER_PHONE_CALLS permission required");
+                    return;
+                }
+                android.telecom.TelecomManager tm = (android.telecom.TelecomManager) getContext().getSystemService(Context.TELECOM_SERVICE);
+                if (tm != null) {
+                    tm.acceptRingingCall();
+                    if (speaker) {
+                        recognitionHandler.postDelayed(() -> {
+                            try {
+                                android.media.AudioManager am = (android.media.AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+                                if (am != null) {
+                                    am.setMode(android.media.AudioManager.MODE_IN_CALL);
+                                    am.setSpeakerphoneOn(true);
+                                }
+                            } catch (Exception ignored) {}
+                        }, 650);
+                    }
+                    JSObject ret = new JSObject();
+                    ret.put("success", true);
+                    ret.put("speaker", speaker);
+                    call.resolve(ret);
+                    return;
+                }
+            }
+            call.reject("TelecomManager unavailable");
+        } catch (Exception e) {
+            call.reject("Failed to answer call: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void endCall(PluginCall call) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                if (ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) {
+                    androidx.core.app.ActivityCompat.requestPermissions(
+                        getActivity(),
+                        new String[]{android.Manifest.permission.ANSWER_PHONE_CALLS, android.Manifest.permission.READ_PHONE_STATE},
+                        7009
+                    );
+                    call.reject("ANSWER_PHONE_CALLS permission required");
+                    return;
+                }
+                android.telecom.TelecomManager tm = (android.telecom.TelecomManager) getContext().getSystemService(Context.TELECOM_SERVICE);
+                if (tm != null) {
+                    boolean ended = tm.endCall();
+                    JSObject ret = new JSObject();
+                    ret.put("success", ended);
+                    call.resolve(ret);
+                    return;
+                }
+            }
+            call.reject("TelecomManager unavailable");
+        } catch (Exception e) {
+            call.reject("Failed to end call: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void setSpeakerphone(PluginCall call) {
+        boolean enable = Boolean.TRUE.equals(call.getBoolean("enable", true));
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                am.setSpeakerphoneOn(enable);
+                JSObject ret = new JSObject();
+                ret.put("success", true);
+                ret.put("speaker", enable);
+                call.resolve(ret);
+                return;
+            }
+            call.reject("AudioManager unavailable");
+        } catch (Exception e) {
+            call.reject("Failed to toggle speakerphone: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void setVolumeLevel(PluginCall call) {
+        int level = call.getInt("level", 50);
+        String streamType = call.getString("stream", "music");
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                int stream = android.media.AudioManager.STREAM_MUSIC;
+                if ("ring".equalsIgnoreCase(streamType)) stream = android.media.AudioManager.STREAM_RING;
+                else if ("alarm".equalsIgnoreCase(streamType)) stream = android.media.AudioManager.STREAM_ALARM;
+                else if ("notification".equalsIgnoreCase(streamType)) stream = android.media.AudioManager.STREAM_NOTIFICATION;
+                int max = am.getStreamMaxVolume(stream);
+                int clamped = Math.max(0, Math.min(100, level));
+                int targetVol = Math.round((clamped / 100.0f) * max);
+                am.setStreamVolume(stream, targetVol, 0);
+                JSObject ret = new JSObject();
+                ret.put("success", true);
+                ret.put("level", clamped);
+                call.resolve(ret);
+                return;
+            }
+            call.reject("AudioManager unavailable");
+        } catch (Exception e) {
+            call.reject("Failed to set volume level: " + e.getMessage());
+        }
     }
 
     @PluginMethod

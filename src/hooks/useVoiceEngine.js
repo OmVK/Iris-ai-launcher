@@ -15,12 +15,24 @@ import {
   checkAndRequestPermission,
   addVoiceAssistListener,
   consumePendingVoiceAssist,
+  playActivationTone,
+  addCallStateListener,
   isNative
 } from '../components/LauncherPlugin'
 
 const NativeLauncher = registerPlugin('LauncherPlugin')
 
-const WAKE_WORD_REGEX = /\b(?:hey|hi|okay|ok|yo|hello|a|o)\s*(?:iris|irish|irene|aries|siri|aires|airis|virus)\b[,.!?\s]*(.*)/i
+const WAKE_WORD_PREFIX_REGEX = /\b(?:hey|hi|okay|ok|yo|hello|oh|ay|eh|hay|hair|he|a|o)\s*(?:iris|irish|irene|aries|siri|aires|airis|virus|eres|eyes|is|i\s*r\s*i\s*s)\b[,.!?\s]*(.*)/i
+const WAKE_WORD_DIRECT_REGEX = /^\s*(?:iris|irish|airis|aires)\b[,.!?\s]*(.*)/i
+
+function extractWakeWordQuery(text) {
+  if (!text || typeof text !== 'string') return null
+  const m1 = text.match(WAKE_WORD_PREFIX_REGEX)
+  if (m1) return (m1[1] || '').trim()
+  const m2 = text.match(WAKE_WORD_DIRECT_REGEX)
+  if (m2) return (m2[1] || '').trim()
+  return null
+}
 
 let recognition = null
 try {
@@ -365,6 +377,7 @@ export default function useVoiceEngine() {
   }, [stopSpeaking, stopVoiceInput, setChatLog, setIsLiveVoice])
 
   // System-wide Digital Assistant Trigger (ACTION_ASSIST / VOICE_COMMAND / Quick Settings Tile)
+  // & Incoming Call Hands-Free Wake (Bixby / Gemini Call Assist)
   useEffect(() => {
     if (!isNative) return
     const triggerAssist = () => {
@@ -385,13 +398,28 @@ export default function useVoiceEngine() {
     const handle = addVoiceAssistListener(() => {
       triggerAssist()
     })
+    const callHandle = addCallStateListener((data) => {
+      if (data?.state === 'RINGING') {
+        window.__iris_incoming_call_ringing = true
+        playActivationTone().catch(() => {})
+        HapticFeedback.double()
+        setActivePage('home')
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
+        }, 120)
+      } else {
+        window.__iris_incoming_call_ringing = false
+      }
+    })
     return () => {
       if (handle && typeof handle.remove === 'function') handle.remove()
       else if (handle && typeof handle.then === 'function') handle.then(h => h?.remove?.())
+      if (callHandle && typeof callHandle.remove === 'function') callHandle.remove()
+      else if (callHandle && typeof callHandle.then === 'function') callHandle.then(h => h?.remove?.())
     }
   }, [handleOpenLiveMode, setActivePage])
 
-  // "Hey Iris" / "Hi Iris" Smart Screen-On Wake Word Standby Engine
+  // "Hey Iris" / "Hi Iris" / "Iris" Smart Screen-On Wake Word Standby Engine
   // Strictly releases the microphone when the screen is off or app is backgrounded (!isAppActive)
   useEffect(() => {
     if (!isNative || !wakeWordEnabled || !isAppActive) {
@@ -401,9 +429,12 @@ export default function useVoiceEngine() {
 
     let cancelled = false
     let partialTriggered = false
+    let partialDebounceTimer = null
+    let latestInlineQuery = ''
     isWakeLoopRunningRef.current = true
 
     const triggerWakeAction = async (inlineQuery) => {
+      playActivationTone().catch(() => {})
       HapticFeedback.double()
       const currentPage = useAppStore.getState().activePage
       if (currentPage === 'assistant') {
@@ -426,17 +457,20 @@ export default function useVoiceEngine() {
       if (cancelled || partialTriggered || isListeningRef.current || isSpeakingRef.current || isLiveVoiceRef.current || window.__iris_offline_assistant_active) return
       const partial = (data?.text || '').trim()
       if (!partial) return
-      const match = partial.match(WAKE_WORD_REGEX)
-      if (match) {
-        const inlineQuery = (match[1] || '').trim()
-        // If user just said "Hey Iris", trigger immediately on partial without waiting for silence timeout!
-        if (inlineQuery.length === 0) {
+      const inlineQuery = extractWakeWordQuery(partial)
+      if (inlineQuery !== null) {
+        latestInlineQuery = inlineQuery
+        if (partialDebounceTimer) clearTimeout(partialDebounceTimer)
+        partialDebounceTimer = setTimeout(() => {
+          if (cancelled || partialTriggered || isListeningRef.current || isSpeakingRef.current || isLiveVoiceRef.current || window.__iris_offline_assistant_active) return
           partialTriggered = true
+          const cmdToRun = latestInlineQuery
+          latestInlineQuery = ''
           NativeLauncher.stopOfflineSpeech().catch(() => {})
           setTimeout(() => {
-            triggerWakeAction('')
-          }, 120)
-        }
+            triggerWakeAction(cmdToRun)
+          }, 140)
+        }, inlineQuery.length === 0 ? 500 : 850)
       }
     })
 
@@ -449,28 +483,32 @@ export default function useVoiceEngine() {
           isLiveVoiceRef.current ||
           window.__iris_offline_assistant_active
         ) {
-          await new Promise(r => setTimeout(r, 900))
+          await new Promise(r => setTimeout(r, 700))
           continue
         }
 
         partialTriggered = false
+        latestInlineQuery = ''
         try {
           const res = await NativeLauncher.startOfflineSpeech()
+          if (partialDebounceTimer) {
+            clearTimeout(partialDebounceTimer)
+            partialDebounceTimer = null
+          }
           if (cancelled || partialTriggered || !useAIStore.getState().wakeWordEnabled) {
-            await new Promise(r => setTimeout(r, 800))
+            await new Promise(r => setTimeout(r, 750))
             continue
           }
           const transcript = (res?.text || '').trim()
-          const match = transcript.match(WAKE_WORD_REGEX)
-          if (match) {
-            const inlineQuery = (match[1] || '').trim()
+          const inlineQuery = extractWakeWordQuery(transcript)
+          if (inlineQuery !== null) {
             await triggerWakeAction(inlineQuery)
-            await new Promise(r => setTimeout(r, 1800))
+            await new Promise(r => setTimeout(r, 1500))
           }
         } catch {
-          // Silence timeout or recognizer busy -> pause before next standby window
+          // Silence timeout or recognizer stopped -> brief pause before next standby window
         }
-        await new Promise(r => setTimeout(r, 900))
+        await new Promise(r => setTimeout(r, 450))
       }
     }
 
@@ -479,6 +517,7 @@ export default function useVoiceEngine() {
     return () => {
       cancelled = true
       isWakeLoopRunningRef.current = false
+      if (partialDebounceTimer) clearTimeout(partialDebounceTimer)
       if (typeof wakePartialListener?.then === 'function') wakePartialListener.then(l => l.remove())
       else wakePartialListener?.remove?.()
       if (!isListeningRef.current && !isLiveVoiceRef.current && !window.__iris_offline_assistant_active) {

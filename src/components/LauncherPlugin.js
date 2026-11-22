@@ -201,11 +201,11 @@ export async function toggleFlashlight() {
   }
 }
 
-export async function makeCall(number) {
+export async function makeCall(number, speaker = false) {
   logNotification('TELEPHONY', `Initiating dialer bridge for target node: ${number}`, 'info')
   if (isNative) {
     try {
-      await NativeLauncher.makeCall({ number })
+      await NativeLauncher.makeCall({ number, speaker })
       return true
     } catch (e) {
       console.error(`Native Launcher: makeCall failed for number: ${number}`, e)
@@ -744,6 +744,19 @@ export async function getSystemWallpaper() {
 }
 
 
+
+export async function lookupContact(name) {
+  if (isNative) {
+    try {
+      if (NativeLauncher.lookupContact) {
+        return await NativeLauncher.lookupContact({ name })
+      }
+    } catch (e) {
+      console.error('Failed to lookup contact:', e)
+    }
+  }
+  return { found: false }
+}
 
 export async function lookupContactMultiple(name) {
   if (isNative) {
@@ -1394,5 +1407,59 @@ export async function consumeCopilotSavedItems() {
     return await NativeLauncher.consumeCopilotSavedItems()
   } catch (e) {
     return { tasks: [], notes: [] }
+  }
+}
+
+export async function playActivationTone() {
+  if (!isNative) return { played: false }
+  try {
+    return await NativeLauncher.playActivationTone()
+  } catch {
+    return { played: false }
+  }
+}
+
+export async function answerCall(speaker = false) {
+  if (!isNative) return { success: true, simulated: true, speaker }
+  try {
+    return await NativeLauncher.answerCall({ speaker })
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function endCall() {
+  if (!isNative) return { success: true, simulated: true }
+  try {
+    return await NativeLauncher.endCall()
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function setSpeakerphone(enable = true) {
+  if (!isNative) return { success: true, speaker: enable }
+  try {
+    return await NativeLauncher.setSpeakerphone({ enable })
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function setVolumeLevel(level = 50, stream = 'music') {
+  if (!isNative) return { success: true, level }
+  try {
+    return await NativeLauncher.setVolumeLevel({ level, stream })
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+}
+
+export function addCallStateListener(callback) {
+  if (!isNative) return { remove: () => {} }
+  try {
+    return NativeLauncher.addListener('onCallStateChanged', callback)
+  } catch {
+    return { remove: () => {} }
   }
 }

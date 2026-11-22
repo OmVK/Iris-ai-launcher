@@ -66,9 +66,14 @@ const rules = [
   // APP LAUNCHING (most specific first)
   { pattern: /^(?:please\s+|can\s+you\s+|could\s+you\s+|i\s+want\s+to\s+|would\s+you\s+)?(?:open|launch|start|run|open\s+up)\s+(?:the\s+)?(?:app\s+)?(.+?)(?:\s+app(?:lication)?)?$/i, handler: (m) => ({ type: 'open_app', app: m[1] }) },
 
-  // CALLING
-  { pattern: /^(?:call|dial)\s+(.+?)\s+on\s+speaker$/i, handler: (m) => ({ type: 'call', name: m[1], speaker: true }) },
-  { pattern: /^(?:call|dial)\s+(.+)$/i, handler: (m) => ({ type: 'call', name: m[1], speaker: false }) },
+  // CALLING & INCOMING CALL CONTROL
+  { pattern: /^(?:answer|pick\s+up|accept|take)(?:\s+(?:the\s+)?call)?\s+on\s+speaker(?:phone)?$/i, handler: () => ({ type: 'answer_call', speaker: true }) },
+  { pattern: /^(?:answer|pick\s+up|accept|take)(?:\s+(?:the\s+)?(?:call|phone))?$/i, handler: () => ({ type: 'answer_call', speaker: false }) },
+  { pattern: /^(?:decline|reject|end|hang\s+up|drop)(?:\s+(?:the\s+)?(?:call|phone))?$/i, handler: () => ({ type: 'end_call' }) },
+  { pattern: /^(?:turn\s+on|enable|switch\s+to)\s+speaker(?:phone)?$/i, handler: () => ({ type: 'speakerphone', enable: true }) },
+  { pattern: /^(?:turn\s+off|disable)\s+speaker(?:phone)?$/i, handler: () => ({ type: 'speakerphone', enable: false }) },
+  { pattern: /^(?:call|dial|phone|ring)\s+(.+?)\s+on\s+speaker(?:phone)?$/i, handler: (m) => ({ type: 'call', name: m[1], speaker: true }) },
+  { pattern: /^(?:call|dial|phone|ring)\s+(.+)$/i, handler: (m) => ({ type: 'call', name: m[1], speaker: false }) },
 
   // HELP
   { pattern: /^(?:what\s+can\s+you\s+do|help|commands?|show\s+me\s+what\s+you\s+can)$/i, handler: () => ({ type: 'help' }) },
@@ -91,10 +96,22 @@ const rules = [
   { pattern: /^(?:brightness\s+up|increase\s+brightness)$/i, handler: () => ({ type: 'brightness', level: 80 }) },
   { pattern: /^(?:brightness\s+down|decrease\s+brightness|dim\s+(?:the\s+)?screen)$/i, handler: () => ({ type: 'brightness', level: 20 }) },
 
-  // VOLUME
-  { pattern: /^(?:volume\s+up|increase\s+volume|louder)$/i, handler: () => ({ type: 'volume', direction: 'up' }) },
-  { pattern: /^(?:volume\s+down|decrease\s+volume|quieter)$/i, handler: () => ({ type: 'volume', direction: 'down' }) },
+  // VOLUME & MEDIA
+  { pattern: /^(?:set\s+)?volume\s+(?:to\s+)?(\d{1,3})\s*%?$/i, handler: (m) => ({ type: 'volume_level', level: parseInt(m[1], 10) }) },
+  { pattern: /^(?:volume\s+up|increase\s+volume|turn\s+up\s+(?:the\s+)?volume|louder)$/i, handler: () => ({ type: 'volume', direction: 'up' }) },
+  { pattern: /^(?:volume\s+down|decrease\s+volume|turn\s+down\s+(?:the\s+)?volume|quieter)$/i, handler: () => ({ type: 'volume', direction: 'down' }) },
   { pattern: /^(?:mute\s+(?:volume|audio)|shut\s+up)$/i, handler: () => ({ type: 'volume', direction: 'mute' }) },
+  { pattern: /^(?:play|resume|pause|stop)\s+(?:the\s+)?(?:music|song|track|audio)$/i, handler: () => ({ type: 'media', key: 'play_pause' }) },
+  { pattern: /^(?:next\s+(?:song|track)|skip\s+(?:song|track))$/i, handler: () => ({ type: 'media', key: 'next' }) },
+  { pattern: /^(?:previous\s+(?:song|track)|last\s+(?:song|track))$/i, handler: () => ({ type: 'media', key: 'previous' }) },
+
+  // NOTES & TASKS
+  { pattern: /^(?:take\s+a\s+note|save\s+a\s+note|note\s+to\s+self)[:\s]+(.+)$/i, handler: (m) => ({ type: 'save_note', text: m[1] }) },
+  { pattern: /^(?:read\s+(?:my\s+)?notes|what\s+are\s+my\s+notes)$/i, handler: () => ({ type: 'read_notes' }) },
+  { pattern: /^(?:add\s+(?:a\s+)?task|add\s+to\s+(?:my\s+)?to-?do(?:\s+list)?)[:\s]+(.+)$/i, handler: (m) => ({ type: 'add_task', text: m[1] }) },
+
+  // BATTERY
+  { pattern: /^(?:what\s+is\s+my\s+battery(?:\s+level)?|battery\s+level|check\s+battery|how\s+much\s+battery\s+do\s+i\s+have)$/i, handler: () => ({ type: 'check_battery' }) },
 
   // UNINSTALL / APP INFO
   { pattern: /^uninstall\s+(.+)$/i, handler: (m) => ({ type: 'uninstall_confirm', app: m[1] }) },
@@ -164,6 +181,42 @@ export async function processCommand(text) {
       case 'call':
         result.commands.push({ action: 'call', params: { name: match.name, speaker: match.speaker } })
         result.response = `Calling ${match.name}${match.speaker ? ' on speaker' : ''}.`
+        break
+      case 'answer_call':
+        result.sideEffects.push({ action: 'answer_call', params: { speaker: match.speaker } })
+        result.response = match.speaker ? 'Answering call on speaker.' : 'Answering call.'
+        result.keepListening = false
+        break
+      case 'end_call':
+        result.sideEffects.push({ action: 'end_call' })
+        result.response = 'Ending call.'
+        result.keepListening = false
+        break
+      case 'speakerphone':
+        result.sideEffects.push({ action: 'speakerphone', params: { enable: match.enable } })
+        result.response = match.enable ? 'Speakerphone on.' : 'Speakerphone off.'
+        break
+      case 'volume_level':
+        result.sideEffects.push({ action: 'set_volume_level', params: { level: match.level } })
+        result.response = `Volume set to ${match.level} percent.`
+        break
+      case 'media':
+        result.sideEffects.push({ action: 'media_key', params: { key: match.key } })
+        result.response = match.key === 'next' ? 'Next track.' : match.key === 'previous' ? 'Previous track.' : 'Toggling playback.'
+        break
+      case 'save_note':
+        result.sideEffects.push({ action: 'save_note', params: { text: match.text } })
+        result.response = `Saved note: ${match.text}.`
+        break
+      case 'read_notes':
+        result.sideEffects.push({ action: 'read_notes' })
+        break
+      case 'add_task':
+        result.sideEffects.push({ action: 'add_task', params: { text: match.text } })
+        result.response = `Added task: ${match.text}.`
+        break
+      case 'check_battery':
+        result.sideEffects.push({ action: 'check_battery_rive' })
         break
       case 'close':
         result.commands.push({ action: 'close_overlay' })

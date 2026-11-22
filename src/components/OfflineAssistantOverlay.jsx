@@ -94,7 +94,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
     const statusListener = LauncherPlugin.addListener('onSpeechStatus', (data) => {
       if (!mountedRef.current) return
       if (data.status === 'listening') {
-        setStatusText('Listening...')
+        setStatusText(window.__iris_incoming_call_ringing ? "Incoming Call — Say 'Answer call', 'Answer on speaker', or 'Decline'" : 'Listening...')
         setIsListening(true)
         setIsProcessing(false)
       } else if (data.status === 'processing') {
@@ -212,7 +212,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
         }
       } catch (_) {}
 
-      setStatusText('Listening...')
+      setStatusText(window.__iris_incoming_call_ringing ? "Incoming Call — Say 'Answer call', 'Answer on speaker', or 'Decline'" : 'Listening...')
       setIsListening(true)
       setIsProcessing(false)
 

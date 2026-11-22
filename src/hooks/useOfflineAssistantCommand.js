@@ -3,6 +3,7 @@ import { registerPlugin } from '@capacitor/core'
 import { processCommand } from '../utils/OfflineCommandEngine'
 import { handleSideEffect } from '../utils/offlineSideEffects'
 import { queryIrisAI } from '../utils/aiQueryBridge'
+import { executeDeviceAgentIntent } from '../utils/aiAgentTools'
 import { launchApp as nativeLaunch } from '../components/LauncherPlugin'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
@@ -126,41 +127,42 @@ export default function useOfflineAssistantCommand({
           result = { success: true, response: "Invalid selection. Please say 1, 2, or 3." }
         }
         pendingSuggestionsRef.current = []
-      } else if (/^(?:iris|hey\s+iris|hi\s+iris|ok\s+iris|hello\s+iris|ask\s+iris|ai|hey\s+ai|hi\s+ai|ok\s+ai|ask\s+ai|ask)\s+(.+)$/i.test(text.trim())) {
-        const query = text.trim().replace(/^(?:iris|hey\s+iris|hi\s+iris|ok\s+iris|hello\s+iris|ask\s+iris|ai|hey\s+ai|hi\s+ai|ok\s+ai|ask\s+ai|ask)\s+/i, '')
-        setStatusText('Connecting to Iris AI...')
-        try {
-          const aiResponse = await queryIrisAI(query, (chunk) => setStatusText(chunk), conversationHistoryRef.current)
-          result = { success: true, response: aiResponse }
-          shouldKeepListening = true
-        } catch (err) {
-          result = { success: false, response: err.message || 'Could not connect to Iris AI.' }
-        }
       } else {
-        result = await processCommand(text)
+        const cleanedInput = text.trim().replace(/^(?:hey\s+iris|hi\s+iris|ok\s+iris|okay\s+iris|hello\s+iris|yo\s+iris|iris|ask\s+iris|hey\s+ai|hi\s+ai|ask\s+ai)[,.\s]+/i, '').trim() || text.trim()
+        result = await processCommand(cleanedInput)
         
-        // If local engine didn't match a local hardware/app command, route through Iris AI brain with multi-turn history & web retrieval
+        // If local engine didn't match a direct rule, first check our comprehensive Gemini/Bixby device intent executor, then route to Iris AI brain
         if (!result.commands?.length && !result.sideEffects?.length && !result.requireMoreContext && !result.response) {
+          const deviceActionSummary = await executeDeviceAgentIntent(cleanedInput)
           try {
             setStatusText('Thinking...')
-            const aiResponse = await queryIrisAI(text.trim(), (chunk) => setStatusText(chunk), conversationHistoryRef.current)
+            const promptForAi = deviceActionSummary ? `${cleanedInput}\n${deviceActionSummary}` : cleanedInput
+            const aiResponse = await queryIrisAI(promptForAi, (chunk) => setStatusText(chunk), conversationHistoryRef.current)
             if (aiResponse) {
               result = { success: true, response: aiResponse }
               shouldKeepListening = true
+            } else if (deviceActionSummary) {
+              const firstAction = deviceActionSummary.split('\n').find(l => l.trim().startsWith('- '))?.replace(/^\s*-\s*/, '') || 'Done.'
+              result = { success: true, response: firstAction }
             }
           } catch (err) {
             console.warn('[Iris AI query failed]', err)
-            result = { success: true, response: err?.message || "I'm ready. What would you like to do?" }
+            if (deviceActionSummary) {
+              const firstAction = deviceActionSummary.split('\n').find(l => l.trim().startsWith('- '))?.replace(/^\s*-\s*/, '') || 'Done.'
+              result = { success: true, response: firstAction }
+            } else {
+              result = { success: true, response: err?.message || "I'm ready. What would you like to do?" }
+            }
           }
         }
 
         if (result.requireMoreContext) {
           setPendingContext(result.requireMoreContext)
           if (result.requireMoreContext === 'WAITING_FOR_UNINSTALL_CONFIRM') {
-            pendingUninstallAppRef.current = result.uninstallApp || text.replace(/^uninstall\s+/i, '')
+            pendingUninstallAppRef.current = result.uninstallApp || cleanedInput.replace(/^uninstall\s+/i, '')
           }
           if (result.requireMoreContext === 'WAITING_FOR_REMINDER_TEXT') {
-            pendingReminderTextRef.current = text
+            pendingReminderTextRef.current = cleanedInput
           }
         } else {
           setPendingContext(null)
