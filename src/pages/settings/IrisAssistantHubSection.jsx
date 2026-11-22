@@ -34,6 +34,15 @@ const WAKE_TARGET_OPTIONS = [
   { id: 'FULL_LIVE_AI', label: 'FULL IRIS AI LIVE' },
 ]
 
+const ACTIVATION_MODES = [
+  { id: 'SYSTEM_ASSIST', label: 'System Assistant', desc: 'Power Btn / Corner Swipe', icon: 'assistant', tag: '0% IDLE MIC' },
+  { id: 'DOCK_HOLD', label: 'Dock Hold (1s)', desc: 'Hold Bottom Home Dock', icon: 'touch_app', tag: '0% IDLE MIC' },
+  { id: 'HEY_IRIS', label: '"Hey Iris" Voice', desc: 'Voice Wake on Home', icon: 'hearing', tag: 'GREEN MIC DOT' },
+  { id: 'WRIST_SHAKE', label: 'Wrist Shake', desc: 'Flick Phone to Wake', icon: 'vibration', tag: '0% IDLE MIC' },
+  { id: 'HOME_GESTURE', label: 'Home Gesture', desc: 'Double Tap / Long Press', icon: 'back_hand', tag: '0% IDLE MIC' },
+  { id: 'MANUAL_ONLY', label: 'Manual Tap Only', desc: 'All Auto-Triggers Off', icon: 'block', tag: 'OFF' },
+]
+
 const SHAKE_SENSITIVITY_OPTIONS = [
   { id: 'LIGHT', label: 'LIGHT' },
   { id: 'NORMAL', label: 'NORMAL' },
@@ -41,7 +50,6 @@ const SHAKE_SENSITIVITY_OPTIONS = [
 ]
 
 const HOME_GESTURE_OPTIONS = [
-  { id: 'NONE', label: 'OFF' },
   { id: 'double_tap', label: 'DOUBLE TAP' },
   { id: 'long_press_empty', label: 'LONG PRESS' },
   { id: 'two_finger_swipe_up', label: '2-FINGER UP' },
@@ -50,13 +58,13 @@ const HOME_GESTURE_OPTIONS = [
 function getActiveAssistantGesture() {
   try {
     const raw = localStorage.getItem('iris_gesture_map')
-    if (!raw) return 'NONE'
+    if (!raw) return 'double_tap'
     const map = JSON.parse(raw)
     for (const slot of ['double_tap', 'long_press_empty', 'two_finger_swipe_up']) {
       if (map?.[slot]?.action === 'assistant') return slot
     }
   } catch {}
-  return 'NONE'
+  return 'double_tap'
 }
 
 function setAssistantGestureSlot(slotId) {
@@ -112,10 +120,8 @@ export default function IrisAssistantHubSection({
   const {
     voiceEnabled,
     setVoiceEnabled,
-    wakeWordEnabled,
-    setWakeWordEnabled,
-    shakeWakeEnabled,
-    setShakeWakeEnabled,
+    assistantActivationMode,
+    setAssistantActivationMode,
     shakeSensitivity,
     setShakeSensitivity,
     callAutoWakeEnabled,
@@ -134,7 +140,7 @@ export default function IrisAssistantHubSection({
     togglePrivate,
   } = useAssistantStore()
 
-  const { dockHoldAssistant, setDockHoldAssistant } = useThemeStore()
+  const { setDockHoldAssistant } = useThemeStore()
 
   const refreshRoleStatus = useCallback(async () => {
     const res = await getAssistantAndHomeRoleStatus()
@@ -144,7 +150,6 @@ export default function IrisAssistantHubSection({
         isDefaultAssistant: !!res.isDefaultAssistant,
       })
     }
-    setHomeGestureSlot(getActiveAssistantGesture())
   }, [])
 
   useEffect(() => {
@@ -157,6 +162,25 @@ export default function IrisAssistantHubSection({
       document.removeEventListener('visibilitychange', onVis)
     }
   }, [refreshRoleStatus])
+
+  const handleSelectActivationMode = (mode) => {
+    HapticFeedback.light()
+    setAssistantActivationMode(mode)
+    setDockHoldAssistant(mode === 'DOCK_HOLD')
+    if (mode === 'HOME_GESTURE') {
+      const slot = homeGestureSlot || 'double_tap'
+      setAssistantGestureSlot(slot)
+      setHomeGestureSlot(slot)
+    } else {
+      setAssistantGestureSlot('NONE')
+    }
+  }
+
+  const handleHomeGestureSelect = (slotId) => {
+    HapticFeedback.light()
+    setHomeGestureSlot(slotId)
+    setAssistantGestureSlot(slotId)
+  }
 
   const handleToggleVoice = (v) => {
     setVoiceEnabled(v)
@@ -172,12 +196,6 @@ export default function IrisAssistantHubSection({
     HapticFeedback.light()
     await requestDefaultLauncher()
     setTimeout(refreshRoleStatus, 600)
-  }
-
-  const handleHomeGestureSelect = (slotId) => {
-    HapticFeedback.light()
-    setAssistantGestureSlot(slotId)
-    setHomeGestureSlot(slotId)
   }
 
   const badge = (
@@ -234,9 +252,6 @@ export default function IrisAssistantHubSection({
                     {roleStatus.isDefaultHome ? 'ACTIVE DEFAULT' : 'NOT DEFAULT'}
                   </span>
                 </div>
-                <p className="text-[8px] font-mono text-white/60 leading-relaxed">
-                  Set IRIS as your default Android Home screen shell with Top Dynamic Island and Home Voice Overlay.
-                </p>
                 <button type="button" onClick={handleSetDefaultHome} className="w-full py-1.5 rounded-lg bg-primary-fixed-dim/20 hover:bg-primary-fixed-dim/30 border border-primary-fixed-dim/40 text-primary-fixed-dim font-mono font-bold text-[9px] uppercase tracking-wider transition-all active:scale-95">
                   {roleStatus.isDefaultHome ? 'CHANGE DEFAULT HOME APP' : 'SET AS DEFAULT HOME'}
                 </button>
@@ -254,9 +269,6 @@ export default function IrisAssistantHubSection({
                     {roleStatus.isDefaultAssistant ? 'ACTIVE DEFAULT' : 'NOT DEFAULT'}
                   </span>
                 </div>
-                <p className="text-[8px] font-mono text-white/60 leading-relaxed">
-                  Option 1: Wake IRIS from any app via Power Button hold, bottom-corner swipe, or Bluetooth headset button (0% idle mic).
-                </p>
                 <button type="button" onClick={() => openSystemSettings('assistant')} className="w-full py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-300 font-mono font-bold text-[9px] uppercase tracking-wider transition-all active:scale-95">
                   {roleStatus.isDefaultAssistant ? 'CONFIGURE DIGITAL ASSISTANT' : 'SET DEFAULT DIGITAL ASSISTANT'}
                 </button>
@@ -273,81 +285,71 @@ export default function IrisAssistantHubSection({
                   onClick={() => window.dispatchEvent(new CustomEvent('iris-activate-assistant'))}
                   className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-mono text-[7.5px] font-bold uppercase active:scale-95"
                 >
-                  TEST ACTIVATION NOW
+                  TEST NOW
                 </button>
               </div>
-              <SettingOptionGrid
-                options={WAKE_TARGET_OPTIONS}
-                value={assistantWakeTarget || 'HOME_OVERLAY'}
-                onChange={(v) => setAssistantWakeTarget(v)}
-                columns={2}
-              />
+              <SettingOptionGrid options={WAKE_TARGET_OPTIONS} value={assistantWakeTarget || 'HOME_OVERLAY'} onChange={setAssistantWakeTarget} columns={2} />
             </div>
 
-            <div className="space-y-2.5 pt-1 font-mono-data text-xs">
-              <p className="text-[8px] text-cyan-400 font-bold uppercase font-mono-data tracking-wider">
-                CHOOSE AI ACTIVATION TRIGGERS (ENABLE ANY COMBINATION)
-              </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[8px] text-cyan-400 font-bold uppercase font-mono-data tracking-wider">
+                  CHOOSE 1 PRIMARY AI ACTIVATION METHOD
+                </p>
+                <span className="text-[7px] font-mono text-white/45 uppercase">SINGLE EXCLUSIVE MODE</span>
+              </div>
 
-              <SettingToggle
-                label="Option 2: Bottom Dock Hold (1s)"
-                sublabel="HOLD_HOME_DOCK_TO_ACTIVATE_IRIS"
-                icon="touch_app"
-                value={dockHoldAssistant}
-                onChange={setDockHoldAssistant}
-              />
+              <div className="grid grid-cols-2 gap-1.5 font-mono">
+                {ACTIVATION_MODES.map((m) => {
+                  const isSelected = (assistantActivationMode || 'SYSTEM_ASSIST') === m.id
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectActivationMode(m.id)}
+                      className={`p-2.5 rounded-xl border text-left transition-all active:scale-95 flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-cyan-950/65 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,242,255,0.2)]'
+                          : 'bg-black/35 border-white/10 text-on-surface-variant/65 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <span className={`material-symbols-outlined text-xs ${isSelected ? 'text-cyan-400' : 'text-white/40'}`}>{m.icon}</span>
+                        <span className={`text-[6.5px] px-1.5 py-0.2 rounded border ${
+                          isSelected
+                            ? 'bg-cyan-500/25 border-cyan-400/60 text-cyan-200 font-bold'
+                            : 'bg-white/5 border-white/10 text-white/40'
+                        }`}>
+                          {isSelected ? 'ACTIVE' : m.tag}
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-bold truncate">{m.label}</span>
+                      <span className="text-[7px] text-white/45 truncate mt-0.5">{m.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
 
-              <SettingToggle
-                label="Option 3: Incoming Phone Call Auto-Wake"
-                sublabel="AUTO_WAKE_ON_RINGING_CALL_TO_SAY_ANSWER_OR_DECLINE"
-                icon="call"
-                value={callAutoWakeEnabled}
-                onChange={setCallAutoWakeEnabled}
-              />
-
-              <SettingToggle
-                label="Option 4: Wrist Shake / Flick to Activate"
-                sublabel="ACCELEROMETER_GESTURE_ZERO_IDLE_MIC"
-                icon="vibration"
-                value={shakeWakeEnabled}
-                onChange={setShakeWakeEnabled}
-              />
-              {shakeWakeEnabled && (
-                <div className="pl-3 border-l-2 border-cyan-500/40 space-y-1">
-                  <p className="text-[7.5px] text-on-surface-variant/60 uppercase">SHAKE SENSITIVITY THRESHOLD</p>
-                  <SettingOptionGrid
-                    options={SHAKE_SENSITIVITY_OPTIONS}
-                    value={shakeSensitivity || 'NORMAL'}
-                    onChange={(v) => setShakeSensitivity(v)}
-                    columns={3}
-                  />
+              {assistantActivationMode === 'WRIST_SHAKE' && (
+                <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 space-y-1.5">
+                  <p className="text-[8px] text-cyan-300 font-bold font-mono uppercase">WRIST SHAKE SENSITIVITY</p>
+                  <SettingOptionGrid options={SHAKE_SENSITIVITY_OPTIONS} value={shakeSensitivity || 'NORMAL'} onChange={setShakeSensitivity} columns={3} />
                 </div>
               )}
 
-              <SettingToggle
-                label={'Option 5: "Hey Iris" Voice Wake Word'}
-                sublabel={wakeWordEnabled ? 'LISTENING_ON_HOME_SHOWS_ANDROID_GREEN_MIC_DOT' : 'OFF_ZERO_IDLE_MIC_NO_GREEN_DOT'}
-                icon="hearing"
-                value={wakeWordEnabled}
-                onChange={setWakeWordEnabled}
-              />
+              {assistantActivationMode === 'HOME_GESTURE' && (
+                <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 space-y-1.5">
+                  <p className="text-[8px] text-cyan-300 font-bold font-mono uppercase">SELECT HOME SCREEN GESTURE</p>
+                  <SettingOptionGrid options={HOME_GESTURE_OPTIONS} value={homeGestureSlot} onChange={handleHomeGestureSelect} columns={3} />
+                </div>
+              )}
+            </div>
 
-              <div className="p-2.5 rounded-xl bg-black/35 border border-white/10 space-y-1.5">
-                <p className="text-[9px] text-white/90 font-bold">Option 6: Home Screen Touch Gesture Trigger</p>
-                <p className="text-[7.5px] text-on-surface-variant/50 uppercase">ASSIGN A HOME SCREEN GESTURE TO ACTIVATE IRIS AI</p>
-                <SettingOptionGrid
-                  options={HOME_GESTURE_OPTIONS}
-                  value={homeGestureSlot}
-                  onChange={handleHomeGestureSelect}
-                  columns={4}
-                />
-              </div>
-
-              <div className="pt-2 border-t border-white/10 space-y-2">
-                <SettingToggle label="Spoken Voice Replies (Home & Iris AI)" sublabel="UNIFIED_TTS_AUDIO_OUTPUT" icon="volume_up" value={voiceEnabled} onChange={handleToggleVoice} />
-                <SettingToggle label="Haptic Vibration Feedback" sublabel="VIBRATE_ON_ASSISTANT_AND_TOUCH" icon="sensors" value={haptics} onChange={handleHapticsChange} />
-                <SettingToggle label="Show App Drawer Search Bar" sublabel="SHOW_SEARCH_IN_DRAWER" icon="search" value={showDrawerSearch} onChange={setShowDrawerSearch} />
-              </div>
+            <div className="pt-2 border-t border-white/10 space-y-2 font-mono-data text-xs">
+              <SettingToggle label="Auto-Wake on Incoming Phone Calls" sublabel="SAY_ANSWER_CALL_OR_DECLINE_WHEN_RINGING" icon="call" value={callAutoWakeEnabled} onChange={setCallAutoWakeEnabled} />
+              <SettingToggle label="Spoken Voice Replies (Home & Iris AI)" sublabel="UNIFIED_TTS_AUDIO_OUTPUT" icon="volume_up" value={voiceEnabled} onChange={handleToggleVoice} />
+              <SettingToggle label="Haptic Vibration Feedback" sublabel="VIBRATE_ON_ASSISTANT_AND_TOUCH" icon="sensors" value={haptics} onChange={handleHapticsChange} />
+              <SettingToggle label="Show App Drawer Search Bar" sublabel="SHOW_SEARCH_IN_DRAWER" icon="search" value={showDrawerSearch} onChange={setShowDrawerSearch} />
             </div>
           </div>
         )}
@@ -356,10 +358,10 @@ export default function IrisAssistantHubSection({
           <div className="space-y-4">
             <div className="space-y-1.5">
               <p className="text-[8px] text-primary-fixed-dim font-bold uppercase font-mono-data tracking-wider">UNIFIED HOME &amp; IRIS AI PERSONA MODE</p>
-              <SettingOptionGrid options={PERSONA_OPTIONS} value={assistantPersona || 'CHAT'} onChange={(v) => setAssistantPersona(v)} columns={3} />
+              <SettingOptionGrid options={PERSONA_OPTIONS} value={assistantPersona || 'CHAT'} onChange={setAssistantPersona} columns={3} />
             </div>
             <div className="space-y-2 font-mono-data text-xs">
-              <SettingToggle label="Live Web Search Citations" sublabel="DUCKDUCKGO_AND_WIKIPEDIA_AUGMENTATION" icon="travel_explore" value={!!webSearchEnabled} onChange={(v) => setWebSearchEnabled(v)} />
+              <SettingToggle label="Live Web Search Citations" sublabel="DUCKDUCKGO_AND_WIKIPEDIA_AUGMENTATION" icon="travel_explore" value={!!webSearchEnabled} onChange={setWebSearchEnabled} />
               <SettingToggle label="Incognito Zero-Trace Mode" sublabel="DO_NOT_SAVE_VOICE_OR_CHAT_HISTORY" icon="visibility_off" value={!!isPrivateSession} onChange={() => togglePrivate()} />
             </div>
             <div className="pt-2 border-t border-white/10">

@@ -31,8 +31,9 @@ export const useAIStore = create((set, get) => ({
   voiceRate: (() => { try { const v = parseFloat(getLS('iris_voice_rate', '0.96')); return isNaN(v) ? 0.96 : v } catch { return 0.96 } })(),
   voiceTimbre: getLS('iris_voice_timbre', 'natural_female'),
   voiceEngineProvider: getLS('iris_voice_engine_provider', 'NATIVE'),
-  wakeWordEnabled: getLS('iris_wake_word_enabled', 'false') === 'true',
-  shakeWakeEnabled: getLS('iris_shake_wake_enabled', 'false') === 'true',
+  assistantActivationMode: getLS('iris_assistant_activation_mode', 'SYSTEM_ASSIST'),
+  wakeWordEnabled: getLS('iris_assistant_activation_mode', 'SYSTEM_ASSIST') === 'HEY_IRIS',
+  shakeWakeEnabled: getLS('iris_assistant_activation_mode', 'SYSTEM_ASSIST') === 'WRIST_SHAKE',
   shakeSensitivity: getLS('iris_shake_sensitivity', 'NORMAL'),
   callAutoWakeEnabled: getLS('iris_call_auto_wake', 'true') !== 'false',
   assistantWakeTarget: getLS('iris_assistant_wake_target', 'HOME_OVERLAY'),
@@ -124,8 +125,26 @@ export const useAIStore = create((set, get) => ({
   setVoicePitch: (v) => { localStorage.setItem('iris_voice_pitch', v); set({ voicePitch: v }) },
   setVoiceRate: (v) => { localStorage.setItem('iris_voice_rate', v); set({ voiceRate: v }) },
   setVoiceTimbre: (v) => { localStorage.setItem('iris_voice_timbre', v); set({ voiceTimbre: v }) },
-  setWakeWordEnabled: (v) => { localStorage.setItem('iris_wake_word_enabled', String(!!v)); set({ wakeWordEnabled: !!v }) },
-  setShakeWakeEnabled: (v) => { localStorage.setItem('iris_shake_wake_enabled', String(!!v)); set({ shakeWakeEnabled: !!v }) },
+  setAssistantActivationMode: (mode) => {
+    const isHeyIris = mode === 'HEY_IRIS'
+    const isShake = mode === 'WRIST_SHAKE'
+    localStorage.setItem('iris_assistant_activation_mode', mode)
+    localStorage.setItem('iris_wake_word_enabled', String(isHeyIris))
+    localStorage.setItem('iris_shake_wake_enabled', String(isShake))
+    set({
+      assistantActivationMode: mode,
+      wakeWordEnabled: isHeyIris,
+      shakeWakeEnabled: isShake,
+    })
+  },
+  setWakeWordEnabled: (v) => {
+    const mode = v ? 'HEY_IRIS' : 'SYSTEM_ASSIST'
+    get().setAssistantActivationMode(mode)
+  },
+  setShakeWakeEnabled: (v) => {
+    const mode = v ? 'WRIST_SHAKE' : 'SYSTEM_ASSIST'
+    get().setAssistantActivationMode(mode)
+  },
   setShakeSensitivity: (v) => { localStorage.setItem('iris_shake_sensitivity', v); set({ shakeSensitivity: v }) },
   setCallAutoWakeEnabled: (v) => { localStorage.setItem('iris_call_auto_wake', String(!!v)); set({ callAutoWakeEnabled: !!v }) },
   setAssistantWakeTarget: (v) => { localStorage.setItem('iris_assistant_wake_target', v); set({ assistantWakeTarget: v }) },
