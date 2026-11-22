@@ -111,7 +111,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     holdTimerRef.current = setTimeout(() => {
       holdTriggeredRef.current = true
       HapticFeedback.double()
-      window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
+      window.dispatchEvent(new CustomEvent('iris-activate-assistant'))
     }, 1000)
   }, [dockHoldAssistant])
 

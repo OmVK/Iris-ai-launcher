@@ -89,7 +89,7 @@ export default function useAppGestures({ activePage, setActivePage, setShowArcSe
       case 'open_home': setActivePage('home'); break
       case 'open_drawer': setActivePage('drawer'); break
       case 'open_settings': setActivePage('settings'); break
-      case 'assistant': setActivePage('assistant'); break
+      case 'assistant': window.dispatchEvent(new CustomEvent('iris-activate-assistant')); break
       case 'open_widgets': setActivePage('widgets'); break
       case 'open_folder': break
       case 'notifications': expandNotificationPanel(); break

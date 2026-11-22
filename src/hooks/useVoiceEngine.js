@@ -22,6 +22,18 @@ import {
 
 const NativeLauncher = registerPlugin('LauncherPlugin')
 
+const WAKE_WORD_PREFIX_REGEX = /\b(?:hey|hi|okay|ok|yo|hello|oh|ay|eh|hay|hair|he|a|o)\s*(?:iris|irish|irene|aries|siri|aires|airis|virus|eres|eyes|is|i\s*r\s*i\s*s)\b[,.!?\s]*(.*)/i
+const WAKE_WORD_DIRECT_REGEX = /^\s*(?:iris|irish|airis|aires)\b[,.!?\s]*(.*)/i
+
+function extractWakeWordQuery(text) {
+  if (!text || typeof text !== 'string') return null
+  const m1 = text.match(WAKE_WORD_PREFIX_REGEX)
+  if (m1) return (m1[1] || '').trim()
+  const m2 = text.match(WAKE_WORD_DIRECT_REGEX)
+  if (m2) return (m2[1] || '').trim()
+  return null
+}
+
 let recognition = null
 try {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -48,7 +60,16 @@ export default function useVoiceEngine() {
     setTextPrompt,
   } = useAssistantStore()
 
-  const { voiceEnabled, setLlmBackend, voicePitch, voiceRate, voiceTimbre, wakeWordEnabled } = useAIStore()
+  const {
+    voiceEnabled,
+    setLlmBackend,
+    voicePitch,
+    voiceRate,
+    voiceTimbre,
+    wakeWordEnabled,
+    shakeWakeEnabled,
+    shakeSensitivity,
+  } = useAIStore()
   const { isAppActive, setActivePage } = useAppStore()
 
   const lastTtsTextRef = useRef('')
@@ -364,70 +385,94 @@ export default function useVoiceEngine() {
     setChatLog(prev => prev.filter(item => !item.loading))
   }, [stopSpeaking, stopVoiceInput, setChatLog, setIsLiveVoice])
 
-  // System-wide Digital Assistant Trigger (ACTION_ASSIST / VOICE_COMMAND / Quick Settings Tile)
-  // & Incoming Call Hands-Free Wake (Bixby / Gemini Call Assist)
-  useEffect(() => {
-    if (!isNative) return
-    const triggerAssist = () => {
-      HapticFeedback.double()
-      const currentPage = useAppStore.getState().activePage
-      if (currentPage === 'assistant') {
-        handleOpenLiveMode()
+  const activateAssistant = useCallback((inlineQuery = '') => {
+    playActivationTone().catch(() => {})
+    HapticFeedback.double()
+    const targetMode = useAIStore.getState().assistantWakeTarget || 'HOME_OVERLAY'
+    const currentPage = useAppStore.getState().activePage
+    if (targetMode === 'FULL_LIVE_AI' || currentPage === 'assistant') {
+      setActivePage('assistant')
+      if (inlineQuery && inlineQuery.length >= 2 && submitPromptRef.current) {
+        isLiveVoiceRef.current = true
+        setIsLiveVoice(true)
+        submitPromptRef.current(inlineQuery)
       } else {
-        setActivePage('home')
         setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
-        }, 60)
+          handleOpenLiveMode()
+        }, 80)
       }
+    } else {
+      setActivePage('home')
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('iris-trigger-assistant', {
+          detail: inlineQuery && inlineQuery.length >= 2 ? { initialCommand: inlineQuery } : {}
+        }))
+      }, 60)
     }
+  }, [handleOpenLiveMode, setActivePage, setIsLiveVoice])
+
+  // System-wide Digital Assistant Trigger (ACTION_ASSIST / VOICE_COMMAND / Quick Settings Tile),
+  // Home Gesture / Dock Hold Trigger ('iris-activate-assistant'), & Incoming Call Hands-Free Auto-Wake
+  useEffect(() => {
+    const onCustomActivate = (e) => {
+      activateAssistant(e?.detail?.initialCommand || '')
+    }
+    window.addEventListener('iris-activate-assistant', onCustomActivate)
+
+    if (!isNative) {
+      return () => window.removeEventListener('iris-activate-assistant', onCustomActivate)
+    }
+
     consumePendingVoiceAssist().then((res) => {
-      if (res?.triggered) triggerAssist()
-    }).catch(() => { })
+      if (res?.triggered) activateAssistant('')
+    }).catch(() => {})
+
     const handle = addVoiceAssistListener(() => {
-      triggerAssist()
+      activateAssistant('')
     })
+
     const callHandle = addCallStateListener((data) => {
       if (data?.state === 'RINGING') {
         window.__iris_incoming_call_ringing = true
-        playActivationTone().catch(() => { })
-        HapticFeedback.double()
-        setActivePage('home')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
-        }, 120)
+        if (useAIStore.getState().callAutoWakeEnabled) {
+          playActivationTone().catch(() => {})
+          HapticFeedback.double()
+          setActivePage('home')
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
+          }, 120)
+        }
       } else {
         window.__iris_incoming_call_ringing = false
       }
     })
+
     return () => {
+      window.removeEventListener('iris-activate-assistant', onCustomActivate)
       if (handle && typeof handle.remove === 'function') handle.remove()
       else if (handle && typeof handle.then === 'function') handle.then(h => h?.remove?.())
       if (callHandle && typeof callHandle.remove === 'function') callHandle.remove()
       else if (callHandle && typeof callHandle.then === 'function') callHandle.then(h => h?.remove?.())
     }
-  }, [handleOpenLiveMode, setActivePage])
+  }, [activateAssistant, setActivePage])
 
-  // Zero-Mic Hands-Free Wake Engine (No 24/7 Green Mic Dot!)
-  // Uses hardware accelerometer shake/flick gesture while launcher is active on screen (0% idle mic usage),
-  // plus releases any active SpeechRecognizer immediately when app goes to background or screen turns off.
+  // Release any active SpeechRecognizer immediately when app goes to background or screen turns off
   useEffect(() => {
     if (!isAppActive && isNative) {
       isListeningRef.current = false
       setIsListening(false)
-      NativeLauncher.stopOfflineSpeech().catch(() => { })
+      NativeLauncher.stopOfflineSpeech().catch(() => {})
     }
   }, [isAppActive, setIsListening])
 
+  // Independent Option 1: Zero-Mic Wrist Shake / Flick to Activate
   useEffect(() => {
-    if (!isNative || !wakeWordEnabled || !isAppActive) {
-      isWakeLoopRunningRef.current = false
-      return
-    }
+    if (!isNative || !shakeWakeEnabled || !isAppActive) return
 
-    isWakeLoopRunningRef.current = true
     let lastTriggerTs = 0
     let shakeHits = 0
     let lastHitTs = 0
+    const threshold = shakeSensitivity === 'LIGHT' ? 18.5 : shakeSensitivity === 'FIRM' ? 27.5 : 22.5
 
     const onDeviceMotion = (e) => {
       if (
@@ -443,32 +488,112 @@ export default function useVoiceEngine() {
       if (!acc) return
       const mag = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2)
       const now = Date.now()
-      if (mag > 22.5) {
+      if (mag > threshold) {
         if (now - lastHitTs > 900) shakeHits = 0
         shakeHits += 1
         lastHitTs = now
         if (shakeHits >= 2 && now - lastTriggerTs > 3500) {
           shakeHits = 0
           lastTriggerTs = now
-          playActivationTone().catch(() => { })
-          HapticFeedback.double()
-          const currentPage = useAppStore.getState().activePage
-          if (currentPage === 'assistant') {
-            handleOpenLiveMode()
-          } else {
-            setActivePage('home')
-            window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
-          }
+          activateAssistant('')
         }
       }
     }
 
     window.addEventListener('devicemotion', onDeviceMotion, { passive: true })
     return () => {
-      isWakeLoopRunningRef.current = false
       window.removeEventListener('devicemotion', onDeviceMotion)
     }
-  }, [wakeWordEnabled, isAppActive, handleOpenLiveMode, setActivePage])
+  }, [shakeWakeEnabled, shakeSensitivity, isAppActive, activateAssistant])
+
+  // Independent Option 2: "Hey Iris" / "Hi Iris" Voice Wake Word Standby (Only runs when explicitly enabled)
+  useEffect(() => {
+    if (!isNative || !wakeWordEnabled || !isAppActive) {
+      isWakeLoopRunningRef.current = false
+      if (isNative && !isListeningRef.current && !isLiveVoiceRef.current && !window.__iris_offline_assistant_active) {
+        NativeLauncher.stopOfflineSpeech().catch(() => {})
+      }
+      return
+    }
+
+    let cancelled = false
+    let partialTriggered = false
+    let partialDebounceTimer = null
+    let latestInlineQuery = ''
+    isWakeLoopRunningRef.current = true
+
+    const wakePartialListener = NativeLauncher.addListener('onSpeechPartial', (data) => {
+      if (cancelled || partialTriggered || isListeningRef.current || isSpeakingRef.current || isLiveVoiceRef.current || window.__iris_offline_assistant_active) return
+      const partial = (data?.text || '').trim()
+      if (!partial) return
+      const inlineQuery = extractWakeWordQuery(partial)
+      if (inlineQuery !== null) {
+        latestInlineQuery = inlineQuery
+        if (partialDebounceTimer) clearTimeout(partialDebounceTimer)
+        partialDebounceTimer = setTimeout(() => {
+          if (cancelled || partialTriggered || isListeningRef.current || isSpeakingRef.current || isLiveVoiceRef.current || window.__iris_offline_assistant_active) return
+          partialTriggered = true
+          const cmdToRun = latestInlineQuery
+          latestInlineQuery = ''
+          NativeLauncher.stopOfflineSpeech().catch(() => {})
+          setTimeout(() => {
+            activateAssistant(cmdToRun)
+          }, 140)
+        }, inlineQuery.length === 0 ? 500 : 850)
+      }
+    })
+
+    const runWakeLoop = async () => {
+      while (!cancelled && mountedRef.current && useAIStore.getState().wakeWordEnabled && useAppStore.getState().isAppActive) {
+        if (
+          document.hidden ||
+          isListeningRef.current ||
+          isSpeakingRef.current ||
+          isLiveVoiceRef.current ||
+          window.__iris_offline_assistant_active
+        ) {
+          await new Promise(r => setTimeout(r, 700))
+          continue
+        }
+
+        partialTriggered = false
+        latestInlineQuery = ''
+        try {
+          const res = await NativeLauncher.startOfflineSpeech()
+          if (partialDebounceTimer) {
+            clearTimeout(partialDebounceTimer)
+            partialDebounceTimer = null
+          }
+          if (cancelled || partialTriggered || !useAIStore.getState().wakeWordEnabled) {
+            await new Promise(r => setTimeout(r, 750))
+            continue
+          }
+          const transcript = (res?.text || '').trim()
+          const inlineQuery = extractWakeWordQuery(transcript)
+          if (inlineQuery !== null) {
+            activateAssistant(inlineQuery)
+            await new Promise(r => setTimeout(r, 1500))
+          }
+        } catch {
+          // Silence timeout or recognizer stopped
+        }
+        await new Promise(r => setTimeout(r, 500))
+      }
+    }
+
+    runWakeLoop()
+
+    return () => {
+      cancelled = true
+      isWakeLoopRunningRef.current = false
+      if (partialDebounceTimer) clearTimeout(partialDebounceTimer)
+      if (typeof wakePartialListener?.then === 'function') wakePartialListener.then(l => l.remove())
+      else wakePartialListener?.remove?.()
+      if (!isListeningRef.current && !isLiveVoiceRef.current && !window.__iris_offline_assistant_active) {
+        NativeLauncher.stopOfflineSpeech().catch(() => {})
+      }
+    }
+  }, [wakeWordEnabled, isAppActive, activateAssistant])
 
   const isLiveConfigured = useCallback(() => {
     const { llmBackend, geminiKey, groqKey } = useAIStore.getState()

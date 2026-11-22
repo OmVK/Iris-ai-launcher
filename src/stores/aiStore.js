@@ -32,6 +32,10 @@ export const useAIStore = create((set, get) => ({
   voiceTimbre: getLS('iris_voice_timbre', 'natural_female'),
   voiceEngineProvider: getLS('iris_voice_engine_provider', 'NATIVE'),
   wakeWordEnabled: getLS('iris_wake_word_enabled', 'false') === 'true',
+  shakeWakeEnabled: getLS('iris_shake_wake_enabled', 'false') === 'true',
+  shakeSensitivity: getLS('iris_shake_sensitivity', 'NORMAL'),
+  callAutoWakeEnabled: getLS('iris_call_auto_wake', 'true') !== 'false',
+  assistantWakeTarget: getLS('iris_assistant_wake_target', 'HOME_OVERLAY'),
   cartesiaKey: '',
   _keysLoaded: false,
 
@@ -121,4 +125,8 @@ export const useAIStore = create((set, get) => ({
   setVoiceRate: (v) => { localStorage.setItem('iris_voice_rate', v); set({ voiceRate: v }) },
   setVoiceTimbre: (v) => { localStorage.setItem('iris_voice_timbre', v); set({ voiceTimbre: v }) },
   setWakeWordEnabled: (v) => { localStorage.setItem('iris_wake_word_enabled', String(!!v)); set({ wakeWordEnabled: !!v }) },
+  setShakeWakeEnabled: (v) => { localStorage.setItem('iris_shake_wake_enabled', String(!!v)); set({ shakeWakeEnabled: !!v }) },
+  setShakeSensitivity: (v) => { localStorage.setItem('iris_shake_sensitivity', v); set({ shakeSensitivity: v }) },
+  setCallAutoWakeEnabled: (v) => { localStorage.setItem('iris_call_auto_wake', String(!!v)); set({ callAutoWakeEnabled: !!v }) },
+  setAssistantWakeTarget: (v) => { localStorage.setItem('iris_assistant_wake_target', v); set({ assistantWakeTarget: v }) },
 }))
