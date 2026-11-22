@@ -1296,20 +1296,20 @@ export async function saveCustomWallpaperNative(dataUri) {
 }
 
 export function addHomePressedListener(callback) {
-  if (!isNative) return { remove: () => {} }
+  if (!isNative) return { remove: () => { } }
   try {
     return NativeLauncher.addListener('onHomePressed', callback)
   } catch {
-    return { remove: () => {} }
+    return { remove: () => { } }
   }
 }
 
 export function addVoiceAssistListener(callback) {
-  if (!isNative) return { remove: () => {} }
+  if (!isNative) return { remove: () => { } }
   try {
     return NativeLauncher.addListener('onVoiceAssistTriggered', callback)
   } catch {
-    return { remove: () => {} }
+    return { remove: () => { } }
   }
 }
 
@@ -1456,10 +1456,19 @@ export async function setVolumeLevel(level = 50, stream = 'music') {
 }
 
 export function addCallStateListener(callback) {
-  if (!isNative) return { remove: () => {} }
+  if (!isNative) return { remove: () => { } }
   try {
     return NativeLauncher.addListener('onCallStateChanged', callback)
   } catch {
-    return { remove: () => {} }
+    return { remove: () => { } }
+  }
+}
+
+export async function getAssistantAndHomeRoleStatus() {
+  if (!isNative) return { isDefaultHome: true, isDefaultAssistant: true }
+  try {
+    return await NativeLauncher.getAssistantAndHomeRoleStatus()
+  } catch {
+    return { isDefaultHome: false, isDefaultAssistant: false }
   }
 }

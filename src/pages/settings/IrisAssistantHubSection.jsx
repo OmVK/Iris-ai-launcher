@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import SettingsSection from './SettingsSection'
 import { SettingToggle, SettingOptionGrid } from './SettingControls'
 import LLMBackendSection from './LLMBackendSection'
@@ -7,8 +7,13 @@ import ApiKeysSection from './ApiKeysSection'
 import { useAIStore } from '../../stores/aiStore'
 import { useAssistantStore } from '../../stores/assistantStore'
 import { useThemeStore } from '../../stores/themeStore'
+import { useAppStore } from '../../stores/appStore'
 import HapticFeedback from '../../utils/HapticFeedback'
-import { requestDefaultLauncher, openSystemSettings } from '../../components/LauncherPlugin'
+import {
+  requestDefaultLauncher,
+  openSystemSettings,
+  getAssistantAndHomeRoleStatus,
+} from '../../components/LauncherPlugin'
 
 const HUB_TABS = [
   { id: 'HOME_ROLES', label: 'HOME & ROLES', icon: 'home_app_logo' },
@@ -19,10 +24,10 @@ const HUB_TABS = [
 
 const PERSONA_OPTIONS = [
   { id: 'CHAT', label: 'CHAT (DEFAULT)' },
-  { id: 'COMMANDER', label: 'COMMANDER' },
   { id: 'CODER', label: 'CODER' },
   { id: 'TUTOR', label: 'TUTOR' },
-  { id: 'EXECUTIVE', label: 'EXECUTIVE' },
+  { id: 'RESEARCH', label: 'RESEARCH' },
+  { id: 'COMMANDER', label: 'COMMANDER' },
 ]
 
 export default function IrisAssistantHubSection({
@@ -44,7 +49,7 @@ export default function IrisAssistantHubSection({
   setShowDrawerSearch,
 }) {
   const [activeTab, setActiveTab] = useState('HOME_ROLES')
-  const [isDefaultHome, setIsDefaultHome] = useState(null)
+  const [roleStatus, setRoleStatus] = useState({ isDefaultHome: false, isDefaultAssistant: false })
   const [haptics, setHaptics] = useState(() => HapticFeedback.isEnabled())
 
   const {
@@ -56,16 +61,41 @@ export default function IrisAssistantHubSection({
   } = useAIStore()
 
   const {
-    persona,
-    setPersona,
-    forceWebSearch,
-    setForceWebSearch,
+    assistantPersona,
+    setAssistantPersona,
+    webSearchEnabled,
+    setWebSearchEnabled,
+    isPrivateSession,
+    togglePrivate,
   } = useAssistantStore()
 
   const {
     dockHoldAssistant,
     setDockHoldAssistant,
   } = useThemeStore()
+
+  const refreshRoleStatus = useCallback(async () => {
+    const res = await getAssistantAndHomeRoleStatus()
+    if (res) {
+      setRoleStatus({
+        isDefaultHome: !!res.isDefaultHome,
+        isDefaultAssistant: !!res.isDefaultAssistant,
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshRoleStatus()
+    const onVis = () => {
+      if (!document.hidden) refreshRoleStatus()
+    }
+    window.addEventListener('focus', refreshRoleStatus)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('focus', refreshRoleStatus)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [refreshRoleStatus])
 
   const handleToggleVoice = (v) => {
     setVoiceEnabled(v)
@@ -79,14 +109,26 @@ export default function IrisAssistantHubSection({
 
   const handleSetDefaultHome = async () => {
     HapticFeedback.light()
-    const res = await requestDefaultLauncher()
-    if (res?.alreadyDefault) setIsDefaultHome(true)
-    else setIsDefaultHome(false)
+    await requestDefaultLauncher()
+    setTimeout(refreshRoleStatus, 600)
+  }
+
+  const handleTestHomeVoice = () => {
+    HapticFeedback.double()
+    useAppStore.getState().setActivePage('home')
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
+    }, 80)
+  }
+
+  const handleOpenIrisAiPage = () => {
+    HapticFeedback.light()
+    useAppStore.getState().setActivePage('assistant')
   }
 
   const badge = (
     <span className="font-mono-data text-[8px] px-2 py-0.5 rounded bg-primary-fixed-dim/15 border border-primary-fixed-dim/40 text-primary-fixed-dim font-bold">
-      {`${llmBackend} // ${voiceEngineProvider}`}
+      {`${llmBackend} · ${assistantPersona || 'CHAT'} · ${voiceEngineProvider}`}
     </span>
   )
 
@@ -135,23 +177,23 @@ export default function IrisAssistantHubSection({
                     <span className="material-symbols-outlined text-sm text-primary-fixed-dim">home</span>
                     <span className="text-[9px] font-bold font-mono text-white uppercase tracking-wider">DEFAULT HOME LAUNCHER</span>
                   </div>
-                  {isDefaultHome !== null && (
-                    <span className={`text-[7px] font-mono px-1.5 py-0.5 rounded border ${
-                      isDefaultHome ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                    }`}>
-                      {isDefaultHome ? 'ACTIVE' : 'CHECK OS'}
-                    </span>
-                  )}
+                  <span className={`text-[7px] font-mono px-1.5 py-0.5 rounded border ${
+                    roleStatus.isDefaultHome
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  }`}>
+                    {roleStatus.isDefaultHome ? 'ACTIVE DEFAULT' : 'NOT DEFAULT'}
+                  </span>
                 </div>
                 <p className="text-[8px] font-mono text-white/60 leading-relaxed">
-                  Set IRIS as your default Android Home screen shell with integrated Top Dynamic Island and Home Voice Overlay.
+                  Set IRIS as your default Android Home screen shell with Top Dynamic Island and Home Voice Overlay.
                 </p>
                 <button
                   type="button"
                   onClick={handleSetDefaultHome}
                   className="w-full py-1.5 rounded-lg bg-primary-fixed-dim/20 hover:bg-primary-fixed-dim/30 border border-primary-fixed-dim/40 text-primary-fixed-dim font-mono font-bold text-[9px] uppercase tracking-wider transition-all active:scale-95"
                 >
-                  SET AS DEFAULT HOME
+                  {roleStatus.isDefaultHome ? 'CHANGE DEFAULT HOME APP' : 'SET AS DEFAULT HOME'}
                 </button>
               </div>
 
@@ -161,21 +203,44 @@ export default function IrisAssistantHubSection({
                     <span className="material-symbols-outlined text-sm text-cyan-400">assistant</span>
                     <span className="text-[9px] font-bold font-mono text-white uppercase tracking-wider">DEFAULT DIGITAL ASSISTANT</span>
                   </div>
-                  <span className="text-[7px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
-                    ZERO IDLE MIC
+                  <span className={`text-[7px] font-mono px-1.5 py-0.5 rounded border ${
+                    roleStatus.isDefaultAssistant
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  }`}>
+                    {roleStatus.isDefaultAssistant ? 'ACTIVE DEFAULT' : 'NOT DEFAULT'}
                   </span>
                 </div>
                 <p className="text-[8px] font-mono text-white/60 leading-relaxed">
-                  Wake IRIS from any app by holding the Power Button, swiping the bottom corner, or pressing your headset button.
+                  Wake IRIS from any app by holding the Power Button, swiping the bottom corner, or pressing your headset button (0% idle mic).
                 </p>
                 <button
                   type="button"
                   onClick={() => openSystemSettings('assistant')}
                   className="w-full py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-300 font-mono font-bold text-[9px] uppercase tracking-wider transition-all active:scale-95"
                 >
-                  SET DEFAULT DIGITAL ASSISTANT
+                  {roleStatus.isDefaultAssistant ? 'CONFIGURE DIGITAL ASSISTANT' : 'SET DEFAULT DIGITAL ASSISTANT'}
                 </button>
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleTestHomeVoice}
+                className="py-2 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/35 text-cyan-300 font-mono font-bold text-[8.5px] uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-xs">mic</span>
+                <span>TEST HOME VOICE</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenIrisAiPage}
+                className="py-2 px-3 rounded-xl bg-primary-fixed-dim/15 hover:bg-primary-fixed-dim/25 border border-primary-fixed-dim/35 text-primary-fixed-dim font-mono font-bold text-[8.5px] uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-xs">smart_toy</span>
+                <span>OPEN IRIS AI CHAT</span>
+              </button>
             </div>
 
             <div className="space-y-2.5 pt-1 font-mono-data text-xs">
@@ -222,23 +287,32 @@ export default function IrisAssistantHubSection({
           <div className="space-y-4">
             <div className="space-y-1.5">
               <p className="text-[8px] text-primary-fixed-dim font-bold uppercase font-mono-data tracking-wider">
-                DEFAULT IRIS AI PERSONA MODE
+                UNIFIED HOME &amp; IRIS AI PERSONA MODE
               </p>
               <SettingOptionGrid
                 options={PERSONA_OPTIONS}
-                value={persona || 'CHAT'}
-                onChange={(v) => setPersona(v)}
+                value={assistantPersona || 'CHAT'}
+                onChange={(v) => setAssistantPersona(v)}
                 columns={3}
               />
             </div>
 
-            <SettingToggle
-              label="Always Include Live Web Search"
-              sublabel="DUCKDUCKGO_AND_WIKIPEDIA_CITATIONS"
-              icon="travel_explore"
-              value={!!forceWebSearch}
-              onChange={(v) => setForceWebSearch(v)}
-            />
+            <div className="space-y-2 font-mono-data text-xs">
+              <SettingToggle
+                label="Live Web Search Citations"
+                sublabel="DUCKDUCKGO_AND_WIKIPEDIA_AUGMENTATION"
+                icon="travel_explore"
+                value={!!webSearchEnabled}
+                onChange={(v) => setWebSearchEnabled(v)}
+              />
+              <SettingToggle
+                label="Incognito Zero-Trace Mode"
+                sublabel="DO_NOT_SAVE_VOICE_OR_CHAT_HISTORY"
+                icon="visibility_off"
+                value={!!isPrivateSession}
+                onChange={() => togglePrivate()}
+              />
+            </div>
 
             <div className="pt-2 border-t border-white/10">
               <p className="text-[8px] text-primary-fixed-dim font-bold uppercase font-mono-data tracking-wider mb-2">

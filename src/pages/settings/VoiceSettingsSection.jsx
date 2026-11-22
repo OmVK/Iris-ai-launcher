@@ -3,8 +3,9 @@ import SettingsSection from './SettingsSection'
 import { SettingSlider, SettingToggle } from './SettingControls'
 import { useAIStore } from '../../stores/aiStore'
 import HapticFeedback from '../../utils/HapticFeedback'
-import { testCartesiaKey } from '../../utils/cartesiaTTS'
-import { openSystemSettings, speakTextNative } from '../../components/LauncherPlugin'
+import { testCartesiaKey, speakCartesia, getCartesiaKey } from '../../utils/cartesiaTTS'
+import { speakPiper } from '../../utils/piperTTS'
+import { openSystemSettings, speakTextNative, setVoiceSettingsNative } from '../../components/LauncherPlugin'
 
 export default function VoiceSettingsSection({ expandedSections, toggleSection, voicePitch, setVoicePitch, voiceRate, setVoiceRate, embedded = false }) {
   const [haptics, setHaptics] = useState(() => HapticFeedback.isEnabled())
@@ -21,9 +22,33 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
   } = useAIStore()
   
   const [keyInput, setKeyInput] = useState('')
-  const [testStatus, setTestStatus] = useState(null) // null | { loading: boolean, success: boolean, msg: string }
+  const [testStatus, setTestStatus] = useState(null)
   const [isSaved, setIsSaved] = useState(false)
-  const speakText = (txt) => { speakTextNative(txt).catch(() => {}) }
+
+  const speakText = async (txt, overrideTimbre) => {
+    const activeTimbre = overrideTimbre || voiceTimbre
+    const activeKey = keyInput.trim() || cartesiaKey || await getCartesiaKey()
+    if (voiceEngineProvider === 'CARTESIA' && activeKey) {
+      const ok = await speakCartesia(txt, activeTimbre, activeKey).catch(() => false)
+      if (ok) return
+    }
+    if (voiceEngineProvider === 'PIPER') {
+      const ok = await speakPiper(txt, activeTimbre).catch(() => false)
+      if (ok) return
+    }
+    if (voiceEngineProvider === 'WEB' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel()
+        const u = new SpeechSynthesisUtterance(txt)
+        u.pitch = voicePitch
+        u.rate = voiceRate
+        window.speechSynthesis.speak(u)
+        return
+      } catch {}
+    }
+    await setVoiceSettingsNative(voicePitch, voiceRate, activeTimbre).catch(() => {})
+    await speakTextNative(txt).catch(() => {})
+  }
 
   useEffect(() => {
     loadKeys()
@@ -84,7 +109,7 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
 
   const handleSelectVoice = (vId, label) => {
     setVoiceTimbre(vId)
-    speakText(`Voice engine updated to ${label}. All systems nominal.`)
+    speakText(`Voice engine updated to ${label}. All systems nominal.`, vId)
   }
 
   const handlePreview = () => {

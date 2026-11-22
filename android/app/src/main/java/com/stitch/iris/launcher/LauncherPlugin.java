@@ -491,6 +491,42 @@ public class LauncherPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    @PluginMethod
+    public void getAssistantAndHomeRoleStatus(PluginCall call) {
+        boolean isDefaultHome = false;
+        boolean isDefaultAssistant = false;
+        String pkg = getContext().getPackageName();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.app.role.RoleManager rm = (android.app.role.RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
+                if (rm != null) {
+                    isDefaultHome = rm.isRoleHeld(android.app.role.RoleManager.ROLE_HOME);
+                    isDefaultAssistant = rm.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
+                }
+            }
+            if (!isDefaultHome) {
+                Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+                homeIntent.addCategory(Intent.CATEGORY_HOME);
+                ResolveInfo ri = getContext().getPackageManager().resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
+                if (ri != null && ri.activityInfo != null && pkg.equals(ri.activityInfo.packageName)) {
+                    isDefaultHome = true;
+                }
+            }
+            if (!isDefaultAssistant) {
+                String assistComponent = Settings.Secure.getString(getContext().getContentResolver(), "assistant");
+                String voiceService = Settings.Secure.getString(getContext().getContentResolver(), "voice_interaction_service");
+                if ((assistComponent != null && assistComponent.contains(pkg)) ||
+                    (voiceService != null && voiceService.contains(pkg))) {
+                    isDefaultAssistant = true;
+                }
+            }
+        } catch (Exception ignored) {}
+        JSObject ret = new JSObject();
+        ret.put("isDefaultHome", isDefaultHome);
+        ret.put("isDefaultAssistant", isDefaultAssistant);
+        call.resolve(ret);
+    }
+
     private static long vaultAuthTimestamp = 0;
     private static String currentVaultToken = null;
     private static int failedVaultAttempts = 0;

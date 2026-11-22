@@ -59,7 +59,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
       mountedRef.current = false
       timeoutsRef.current.forEach(id => clearTimeout(id))
       timeoutsRef.current = []
-      LauncherPlugin.stopOfflineSpeech().catch(() => {})
+      LauncherPlugin.stopOfflineSpeech().catch(() => { })
     }
   }, [])
 
@@ -76,7 +76,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
       pendingReminderTextRef.current = ''
       speechInterruptRef.current = true
       stopSpeakingNative()
-      LauncherPlugin.stopOfflineSpeech().catch(() => {})
+      LauncherPlugin.stopOfflineSpeech().catch(() => { })
       window.__iris_offline_assistant_active = false
       return
     }
@@ -200,8 +200,8 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
         await LauncherPlugin.stopOfflineSpeech()
         // Brief delay to let native recognizer fully release
         await new Promise(r => setTimeout(r, 150))
-      } catch (_) {}
-      
+      } catch (_) { }
+
       try {
         const micStatus = await checkAndRequestPermission('RECORD_AUDIO')
         if (micStatus && !micStatus.granted && micStatus.sdkRequired) {
@@ -210,7 +210,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
           setIsProcessing(false)
           return
         }
-      } catch (_) {}
+      } catch (_) { }
 
       setStatusText(window.__iris_incoming_call_ringing ? "Incoming Call — Say 'Answer call', 'Answer on speaker', or 'Decline'" : 'Listening...')
       setIsListening(true)
@@ -232,14 +232,14 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
           setIsProcessing(false)
           setIsListening(false)
           const tid = setTimeout(() => {
-              if (mountedRef.current && isVisibleRef.current) startListening(retryCount + 1)
+            if (mountedRef.current && isVisibleRef.current) startListening(retryCount + 1)
           }, 150)
           timeoutsRef.current.push(tid)
         } else {
           setStatusText('I didn\'t catch that. Tap to try again.')
           setIsListening(false)
           setIsProcessing(false)
-          LauncherPlugin.stopOfflineSpeech().catch(() => {})
+          LauncherPlugin.stopOfflineSpeech().catch(() => { })
         }
       }
     } catch (e) {
@@ -256,7 +256,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
         timeoutsRef.current.push(tid)
       } else {
         setStatusText('Tap to try again.')
-        LauncherPlugin.stopOfflineSpeech().catch(() => {})
+        LauncherPlugin.stopOfflineSpeech().catch(() => { })
       }
     } finally {
       clearTimeout(unguardTimer)
@@ -277,7 +277,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
   if (!isVisible) return null
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-40 pointer-events-auto"
       onClick={() => {
         if (typeof onClose === 'function') onClose()
@@ -289,6 +289,7 @@ export default function OfflineAssistantOverlay({ isVisible, onClose, onOpen: _o
           isListening={isListening}
           isProcessing={isProcessing}
           onRetry={() => startListening(0)}
+          onClose={onClose}
         />
       </div>
     </div>
