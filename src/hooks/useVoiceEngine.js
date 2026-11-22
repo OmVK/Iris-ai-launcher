@@ -472,7 +472,17 @@ export default function useVoiceEngine() {
     let lastTriggerTs = 0
     let shakeHits = 0
     let lastHitTs = 0
-    const threshold = shakeSensitivity === 'LIGHT' ? 18.5 : shakeSensitivity === 'FIRM' ? 27.5 : 22.5
+
+    // Distinct 3-tier physics calibration:
+    // LIGHT  = 1 gentle wrist flick (linear accel > 7.2 m/s²)
+    // NORMAL = 2 medium back-and-forth shakes (linear accel > 14.5 m/s², 110ms+ apart)
+    // FIRM   = 3 strong vigorous shakes (linear accel > 23.5 m/s², 110ms+ apart)
+    const config =
+      shakeSensitivity === 'LIGHT'
+        ? { threshold: 7.2, requiredSwings: 1, windowMs: 600 }
+        : shakeSensitivity === 'FIRM'
+          ? { threshold: 23.5, requiredSwings: 3, windowMs: 1000 }
+          : { threshold: 14.5, requiredSwings: 2, windowMs: 800 }
 
     const onDeviceMotion = (e) => {
       if (
@@ -484,15 +494,31 @@ export default function useVoiceEngine() {
       ) {
         return
       }
-      const acc = e.accelerationIncludingGravity
-      if (!acc) return
-      const mag = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2)
+
+      let linearMag = 0
+      const pureAcc = e.acceleration
+      if (pureAcc && (pureAcc.x !== null || pureAcc.y !== null || pureAcc.z !== null)) {
+        linearMag = Math.sqrt((pureAcc.x || 0) ** 2 + (pureAcc.y || 0) ** 2 + (pureAcc.z || 0) ** 2)
+      } else {
+        const accG = e.accelerationIncludingGravity
+        if (!accG) return
+        const totalMag = Math.sqrt((accG.x || 0) ** 2 + (accG.y || 0) ** 2 + (accG.z || 0) ** 2)
+        linearMag = Math.abs(totalMag - 9.81)
+      }
+
       const now = Date.now()
-      if (mag > threshold) {
-        if (now - lastHitTs > 900) shakeHits = 0
+      if (now - lastTriggerTs < 3200) return
+
+      if (linearMag > config.threshold) {
+        // Ignore duplicate 60Hz samples from the same single swing peak (< 115ms)
+        if (now - lastHitTs < 115) return
+        if (now - lastHitTs > config.windowMs) {
+          shakeHits = 0
+        }
         shakeHits += 1
         lastHitTs = now
-        if (shakeHits >= 2 && now - lastTriggerTs > 3500) {
+
+        if (shakeHits >= config.requiredSwings) {
           shakeHits = 0
           lastTriggerTs = now
           activateAssistant('')

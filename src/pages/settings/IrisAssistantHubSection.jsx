@@ -44,9 +44,9 @@ const ACTIVATION_MODES = [
 ]
 
 const SHAKE_SENSITIVITY_OPTIONS = [
-  { id: 'LIGHT', label: 'LIGHT' },
-  { id: 'NORMAL', label: 'NORMAL' },
-  { id: 'FIRM', label: 'FIRM' },
+  { id: 'LIGHT', label: 'LIGHT (1 FLICK)' },
+  { id: 'NORMAL', label: 'NORMAL (2X)' },
+  { id: 'FIRM', label: 'FIRM (3X HARD)' },
 ]
 
 const HOME_GESTURE_OPTIONS = [

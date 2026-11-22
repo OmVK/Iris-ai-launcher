@@ -42,7 +42,7 @@ export default function Settings({
     notifPopupsEnabled, setNotifPopupsEnabled
   } = useThemeStore()
   const [expandedSections, setExpandedSections] = useState({
-    irisAssistantHub: true, wallpaperTheme: false, layoutConfig: false,
+    irisAssistantHub: false, wallpaperTheme: false, layoutConfig: false,
     appIcons: false, transitions: false, irisCopilot: false, tweaks: false,
     powerSave: false, factoryReset: false, vaultLock: false, about: false,
     gestures: false, appLock: false, backupRestore: false, advanced: false,
