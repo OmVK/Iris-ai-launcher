@@ -48,7 +48,7 @@ export default function useOfflineAssistantCommand({
   const handleCommand = useCallback(async (text) => {
     setIsProcessing(true)
     let didClose = false
-    let shouldKeepListening = true
+    let shouldKeepListening = false
     try {
       let result;
 
@@ -140,7 +140,7 @@ export default function useOfflineAssistantCommand({
             const aiResponse = await queryIrisAI(promptForAi, (chunk) => setStatusText(chunk), conversationHistoryRef.current)
             if (aiResponse) {
               result = { success: true, response: aiResponse }
-              shouldKeepListening = true
+              shouldKeepListening = false
             } else if (deviceActionSummary) {
               const firstAction = deviceActionSummary.split('\n').find(l => l.trim().startsWith('- '))?.replace(/^\s*-\s*/, '') || 'Done.'
               result = { success: true, response: firstAction }
@@ -232,10 +232,13 @@ export default function useOfflineAssistantCommand({
 
     } catch (e) {
       console.error('[Iris] handleCommand error:', e)
-      setStatusText("I'm listening...")
-      shouldKeepListening = true
+      setStatusText("Tap to try again.")
+      shouldKeepListening = false
     } finally {
       setIsProcessing(false)
+      if (!pendingContextRef.current && !shouldKeepListening) {
+        LauncherPlugin.stopOfflineSpeech().catch(() => {})
+      }
       if (isVisibleRef.current) {
         if (pendingContextRef.current) {
           const tid = setTimeout(() => {
@@ -258,7 +261,7 @@ export default function useOfflineAssistantCommand({
             if (mountedRef.current && isVisibleRef.current && !pendingContextRef.current) {
               if (typeof onClose === 'function') onClose()
             }
-          }, 3500)
+          }, 2200)
           timeoutsRef.current.push(tid)
         }
       }

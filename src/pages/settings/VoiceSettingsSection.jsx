@@ -187,9 +187,9 @@ export default function VoiceSettingsSection({ expandedSections, toggleSection, 
       <SettingToggle label="Haptic Vibration Feedback" sublabel="VIBRATE_ON_TOUCH_GESTURES" icon="vibration" value={haptics} onChange={handleHapticsChange} />
 
       <SettingToggle
-        label={'"Hey Iris" Voice Wake Word'}
-        sublabel="HANDS_FREE_WAKE_ON_LAUNCHER_SCREEN"
-        icon="hearing"
+        label="Hands-Free Shake & Call Auto-Wake"
+        sublabel="ZERO_IDLE_MIC_NO_24_7_GREEN_DOT"
+        icon="sensors"
         value={wakeWordEnabled}
         onChange={(v) => setWakeWordEnabled(v)}
       />

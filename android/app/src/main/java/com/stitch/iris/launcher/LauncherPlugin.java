@@ -249,6 +249,33 @@ public class LauncherPlugin extends Plugin {
         }).start();
     }
 
+    private void destroyCurrentRecognizer() {
+        if (currentRecognizer != null) {
+            try { currentRecognizer.stopListening(); } catch (Exception ignored) {}
+            try { currentRecognizer.cancel(); } catch (Exception ignored) {}
+            try { currentRecognizer.destroy(); } catch (Exception ignored) {}
+            currentRecognizer = null;
+        }
+    }
+
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> {
+                if (recognitionTimeoutRunnable != null) {
+                    recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
+                    recognitionTimeoutRunnable = null;
+                }
+                destroyCurrentRecognizer();
+                if (currentRecognitionCall != null) {
+                    try { currentRecognitionCall.reject("App paused"); } catch (Exception ignored) {}
+                    currentRecognitionCall = null;
+                }
+            });
+        }
+    }
+
     @Override
     public void handleOnDestroy() {
         // Release TTS to prevent resource leaks
@@ -2391,27 +2418,23 @@ public class LauncherPlugin extends Plugin {
                     currentRecognitionCall = null;
                 }
                 if (currentRecognizer != null) {
-                    try {
-                        currentRecognizer.cancel();
-                    } catch (Exception ignored) {}
+                    destroyCurrentRecognizer();
                 }
 
                 currentRecognitionCall = call;
 
-                if (currentRecognizer == null) {
-                    android.content.ComponentName googleRecog = new android.content.ComponentName(
-                        "com.google.android.tts",
-                        "com.google.android.apps.speech.tts.googletts.service.GoogleTTSRecognitionService"
-                    );
-                    try {
-                        PackageManager pm = getContext().getPackageManager();
-                        if (pm.getServiceInfo(googleRecog, 0) != null) {
-                            currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext(), googleRecog);
-                        }
-                    } catch (Exception ignored) {}
-                    if (currentRecognizer == null) {
-                        currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
+                android.content.ComponentName googleRecog = new android.content.ComponentName(
+                    "com.google.android.tts",
+                    "com.google.android.apps.speech.tts.googletts.service.GoogleTTSRecognitionService"
+                );
+                try {
+                    PackageManager pm = getContext().getPackageManager();
+                    if (pm.getServiceInfo(googleRecog, 0) != null) {
+                        currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext(), googleRecog);
                     }
+                } catch (Exception ignored) {}
+                if (currentRecognizer == null) {
+                    currentRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getContext());
                 }
                 Intent intent = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
                 intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -2452,9 +2475,7 @@ public class LauncherPlugin extends Plugin {
                             if (!isResolving) {
                                 isResolving = true;
                                 if (currentRecognitionCall == call) currentRecognitionCall = null;
-                                try {
-                                    if (currentRecognizer != null) currentRecognizer.cancel();
-                                } catch (Exception ignored) {}
+                                destroyCurrentRecognizer();
                                 if (lastPartial != null && !lastPartial.trim().isEmpty()) {
                                     JSObject ret = new JSObject();
                                     ret.put("text", lastPartial.trim());
@@ -2472,20 +2493,7 @@ public class LauncherPlugin extends Plugin {
                         if (isResolving) return;
                         isResolving = true;
                         if (currentRecognitionCall == call) currentRecognitionCall = null;
-
-                        // If recognizer hit ERROR_CLIENT (5) or ERROR_RECOGNIZER_BUSY (8), destroy and recreate on next run
-                        if (error == android.speech.SpeechRecognizer.ERROR_CLIENT ||
-                            error == android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
-                            error == android.speech.SpeechRecognizer.ERROR_SERVER) {
-                            try {
-                                if (currentRecognizer != null) {
-                                    currentRecognizer.destroy();
-                                    currentRecognizer = null;
-                                }
-                            } catch (Exception ignored) {
-                                currentRecognizer = null;
-                            }
-                        }
+                        destroyCurrentRecognizer();
 
                         if (lastPartial != null && !lastPartial.trim().isEmpty()) {
                             JSObject ret = new JSObject();
@@ -2502,6 +2510,7 @@ public class LauncherPlugin extends Plugin {
                         if (isResolving) return;
                         isResolving = true;
                         if (currentRecognitionCall == call) currentRecognitionCall = null;
+                        destroyCurrentRecognizer();
                         java.util.ArrayList<String> matches = results.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
                         String bestMatch = null;
                         if (matches != null && !matches.isEmpty()) {
@@ -2560,9 +2569,7 @@ public class LauncherPlugin extends Plugin {
                     recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
                     recognitionTimeoutRunnable = null;
                 }
-                if (currentRecognizer != null) {
-                    currentRecognizer.cancel();
-                }
+                destroyCurrentRecognizer();
                 if (currentRecognitionCall != null) {
                     try {
                         currentRecognitionCall.reject("Speech stopped by caller");
@@ -2584,9 +2591,7 @@ public class LauncherPlugin extends Plugin {
                     recognitionHandler.removeCallbacks(recognitionTimeoutRunnable);
                     recognitionTimeoutRunnable = null;
                 }
-                if (currentRecognizer != null) {
-                    currentRecognizer.cancel();
-                }
+                destroyCurrentRecognizer();
                 String text = call.getString("text", "");
                 if (text != null && !text.trim().isEmpty()) {
                     JSObject ret = new JSObject();
