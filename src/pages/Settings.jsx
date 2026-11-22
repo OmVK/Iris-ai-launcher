@@ -1,15 +1,11 @@
 import { useState } from 'react'
 import WallpaperThemeSection from './settings/WallpaperThemeSection'
-import ApiKeysSection from './settings/ApiKeysSection'
+import IrisAssistantHubSection from './settings/IrisAssistantHubSection'
 import LayoutConfigSection from './settings/LayoutConfigSection'
 import AppIconsSection from './settings/AppIconsSection'
 import TransitionsSection from './settings/TransitionsSection'
-import LLMBackendSection from './settings/LLMBackendSection'
-import VoiceSettingsSection from './settings/VoiceSettingsSection'
-import NeuralSkillsSection from './settings/NeuralSkillsSection'
 import CopilotSettingsSection from './settings/CopilotSettingsSection'
 import TweaksSection from './settings/TweaksSection'
-import LauncherEngineSection from './settings/LauncherEngineSection'
 import PowerSaveSection from './settings/PowerSaveSection'
 import FactoryResetSection from './settings/FactoryResetSection'
 import VaultLockSection from './settings/VaultLockSection'
@@ -46,11 +42,9 @@ export default function Settings({
     notifPopupsEnabled, setNotifPopupsEnabled
   } = useThemeStore()
   const [expandedSections, setExpandedSections] = useState({
-    wallpaperTheme: false, apiKeys: false, layoutConfig: false,
-    appIcons: false, transitions: false, llmBackend: false,
-    neuralSkills: false, irisCopilot: false, tweaks: false, launcherEngine: false,
-    powerSave: false, factoryReset: false, vaultLock: true,
-    voiceSettings: false, about: false,
+    irisAssistantHub: true, wallpaperTheme: false, layoutConfig: false,
+    appIcons: false, transitions: false, irisCopilot: false, tweaks: false,
+    powerSave: false, factoryReset: false, vaultLock: false, about: false,
     gestures: false, appLock: false, backupRestore: false, advanced: false,
   })
 
@@ -63,15 +57,29 @@ export default function Settings({
         <p className="font-mono-data text-[9px] text-on-surface-variant/40 mt-1 uppercase">UNAUTHORIZED MODIFICATION MAY CAUSE SYSTEM INSTABILITY</p>
       </div>
 
+      <IrisAssistantHubSection
+        expandedSections={expandedSections}
+        toggleSection={toggleSection}
+        llmBackend={llmBackend}
+        setLlmBackend={setLlmBackend}
+        geminiModel={geminiModel}
+        setGeminiModel={setGeminiModel}
+        geminiKey={geminiKey}
+        setGeminiKey={setGeminiKey}
+        groqKey={groqKey}
+        setGroqKey={setGroqKey}
+        voicePitch={voicePitch}
+        setVoicePitch={setVoicePitch}
+        voiceRate={voiceRate}
+        setVoiceRate={setVoiceRate}
+        showDrawerSearch={showDrawerSearch}
+        setShowDrawerSearch={setShowDrawerSearch}
+      />
+      <CopilotSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <WallpaperThemeSection expandedSections={expandedSections} toggleSection={toggleSection} themeColor={themeColor} setThemeColor={setThemeColor} wallpaper={wallpaper} setWallpaper={setWallpaper} hasCustomWallpaper={hasCustomWallpaper} setHasCustomWallpaper={setHasCustomWallpaper} activeLiveWallpaper={activeLiveWallpaper} setActiveLiveWallpaper={setActiveLiveWallpaper} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} />
-      <ApiKeysSection expandedSections={expandedSections} toggleSection={toggleSection} geminiKey={geminiKey} setGeminiKey={setGeminiKey} groqKey={groqKey} setGroqKey={setGroqKey} />
       <LayoutConfigSection expandedSections={expandedSections} toggleSection={toggleSection} dpiScale={dpiScale} setDpiScale={setDpiScale} gridColumns={gridColumns} setGridColumns={setGridColumns} gridRows={gridRows} setGridRows={setGridRows} layoutStyle={layoutStyle} setLayoutStyle={setLayoutStyle} homeIconSize={homeIconSize} setHomeIconSize={setHomeIconSize} drawerIconSize={drawerIconSize} setDrawerIconSize={setDrawerIconSize} drawerTextSize={drawerTextSize} setDrawerTextSize={setDrawerTextSize} homeTextSize={homeTextSize} setHomeTextSize={setHomeTextSize} drawerLayout={drawerLayout} setDrawerLayout={setDrawerLayout} dockColumns={dockColumns} setDockColumns={setDockColumns} dockBackground={dockBackground} setDockBackground={setDockBackground} homePages={homePages} setHomePages={setHomePages} />
       <AppIconsSection expandedSections={expandedSections} toggleSection={toggleSection} installedApps={installedApps} setInstalledApps={setInstalledApps} />
       <TransitionsSection expandedSections={expandedSections} toggleSection={toggleSection} globalIconTheme={globalIconTheme} setGlobalIconTheme={setGlobalIconTheme} pageTransitionEffect={pageTransitionEffect} setPageTransitionEffect={setPageTransitionEffect} pageTransitionSpeed={pageTransitionSpeed} setPageTransitionSpeed={setPageTransitionSpeed} pageTransitionEasing={pageTransitionEasing} setPageTransitionEasing={setPageTransitionEasing} />
-      <LLMBackendSection expandedSections={expandedSections} toggleSection={toggleSection} llmBackend={llmBackend} setLlmBackend={setLlmBackend} geminiModel={geminiModel} setGeminiModel={setGeminiModel} />
-      <VoiceSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} voicePitch={voicePitch} setVoicePitch={setVoicePitch} voiceRate={voiceRate} setVoiceRate={setVoiceRate} />
-      <NeuralSkillsSection expandedSections={expandedSections} toggleSection={toggleSection} showDrawerSearch={showDrawerSearch} setShowDrawerSearch={setShowDrawerSearch} />
-      <CopilotSettingsSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <TweaksSection expandedSections={expandedSections} toggleSection={toggleSection} glassOpacity={glassOpacity} setGlassOpacity={setGlassOpacity} showAppLabels={showAppLabels} setShowAppLabels={setShowAppLabels} use24HourClock={use24HourClock} setUse24HourClock={setUse24HourClock} fullscreenActive={fullscreenActive} setFullscreenActive={setFullscreenActive} darkGlassTheme={darkGlassTheme} setDarkGlassTheme={setDarkGlassTheme} notifPopupsEnabled={notifPopupsEnabled} setNotifPopupsEnabled={setNotifPopupsEnabled} />
 
       <div className="border-t border-white/5 pt-4">
@@ -83,7 +91,6 @@ export default function Settings({
       <BackupRestoreSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <AdvancedSection expandedSections={expandedSections} toggleSection={toggleSection} />
 
-      <LauncherEngineSection expandedSections={expandedSections} toggleSection={toggleSection} />
       <PowerSaveSection expandedSections={expandedSections} toggleSection={toggleSection} powerSaveMode={powerSaveMode} setPowerSaveMode={setPowerSaveMode} />
       <FactoryResetSection expandedSections={expandedSections} toggleSection={toggleSection} onResetApps={onResetApps} />
       {isVaultUnlocked && <VaultLockSection expandedSections={expandedSections} toggleSection={toggleSection} onResetVault={onResetVault} />}

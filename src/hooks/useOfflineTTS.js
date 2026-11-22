@@ -75,7 +75,7 @@ export default function useOfflineTTS({ speechInterruptRef }) {
     return new Promise((resolve) => {
       (async () => {
         if (speechInterruptRef.current) return resolve()
-        if (localStorage.getItem('assistant_tts_enabled') === 'false') {
+        if (!useAIStore.getState().voiceEnabled || localStorage.getItem('assistant_tts_enabled') === 'false') {
           const readTime = Math.max(1500, text.length * 50)
           if (onAudioStart) onAudioStart()
           setTimeout(resolve, readTime)

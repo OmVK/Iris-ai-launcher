@@ -9,7 +9,7 @@ import {
   fetchLiveGroqModels,
 } from '../../utils/modelResolver'
 
-export default function LLMBackendSection({ expandedSections, toggleSection, llmBackend, setLlmBackend, geminiModel, setGeminiModel }) {
+export default function LLMBackendSection({ expandedSections, toggleSection, llmBackend, setLlmBackend, geminiModel, setGeminiModel, embedded = false }) {
   const { geminiKey, groqKey, groqModel, setGroqModel } = useAIStore()
   const [genAIAvailable, setGenAIAvailable] = useState(null)
   const [genAIDeviceInfo, setGenAIDeviceInfo] = useState('')
@@ -57,15 +57,8 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
     }
   }, [geminiKey, groqKey, syncLiveModels])
 
-  return (
-    <SettingsSection
-      title="SYSTEM-WIDE LLM BACKEND"
-      icon="neurology"
-      sectionKey="llmBackend"
-      expandedSections={expandedSections}
-      toggleSection={toggleSection}
-      badge={<span className="flex h-2 w-2 rounded-full bg-primary-fixed-dim animate-pulse-cyan" />}
-    >
+  const content = (
+    <>
       <div className="grid grid-cols-2 gap-2">
         {[
           { id: 'OLLAMA', label: 'Ollama Engine (Local)', desc: 'Port 11434 LLM Services' },
@@ -146,6 +139,21 @@ export default function LLMBackendSection({ expandedSections, toggleSection, llm
           </p>
         </div>
       )}
+    </>
+  )
+
+  if (embedded) return <div className="space-y-3">{content}</div>
+
+  return (
+    <SettingsSection
+      title="SYSTEM-WIDE LLM BACKEND"
+      icon="neurology"
+      sectionKey="llmBackend"
+      expandedSections={expandedSections}
+      toggleSection={toggleSection}
+      badge={<span className="flex h-2 w-2 rounded-full bg-primary-fixed-dim animate-pulse-cyan" />}
+    >
+      {content}
     </SettingsSection>
   )
 }
