@@ -84,19 +84,84 @@ async function decrypt(blob) {
 
 const isNative = Capacitor.isNativePlatform()
 
+const PROTECTED_DATA_KEYS = new Set([
+  'iris_assistant_sessions',
+  'iris_voice_notes',
+  'iris_day_tasks',
+  'iris_custom_voice_macros',
+  'iris_notif_archive_v1',
+  'iris_notification_history',
+  'iris_memory_vault',
+  'iris_split_app_pairs',
+])
+
+const memoryVault = new Map()
+const rawGetItem = Storage.prototype.getItem.bind(localStorage)
+const rawSetItem = Storage.prototype.setItem.bind(localStorage)
+const rawRemoveItem = Storage.prototype.removeItem.bind(localStorage)
+
+let shieldInstalled = false
+function installEncryptedStorageShield() {
+  if (shieldInstalled) return
+  shieldInstalled = true
+
+  for (const key of PROTECTED_DATA_KEYS) {
+    const legacyPlain = rawGetItem(key)
+    if (legacyPlain) {
+      memoryVault.set(key, legacyPlain)
+    }
+  }
+
+  Storage.prototype.getItem = function (key) {
+    if (this === localStorage && PROTECTED_DATA_KEYS.has(key)) {
+      if (memoryVault.has(key)) return memoryVault.get(key)
+      const fallbackPlain = rawGetItem(key)
+      if (fallbackPlain) {
+        memoryVault.set(key, fallbackPlain)
+        return fallbackPlain
+      }
+      return null
+    }
+    return rawGetItem(key)
+  }
+
+  Storage.prototype.setItem = function (key, value) {
+    if (this === localStorage && PROTECTED_DATA_KEYS.has(key)) {
+      const strVal = String(value ?? '')
+      memoryVault.set(key, strVal)
+      rawRemoveItem(key)
+      setItem(key, strVal).catch(() => {})
+      return
+    }
+    return rawSetItem(key, value)
+  }
+
+  Storage.prototype.removeItem = function (key) {
+    if (this === localStorage && PROTECTED_DATA_KEYS.has(key)) {
+      memoryVault.delete(key)
+      rawRemoveItem(key)
+      removeItem(key)
+      return
+    }
+    return rawRemoveItem(key)
+  }
+}
+
+installEncryptedStorageShield()
+
 async function setItem(key, value) {
   try {
     if (!value) {
       if (isNative) await KeystoreStorage.removeItem(key)
-      else localStorage.removeItem(OLD_PREFIX + key)
-      localStorage.removeItem(KS_PREFIX + key)
+      else rawRemoveItem(OLD_PREFIX + key)
+      rawRemoveItem(KS_PREFIX + key)
       return
     }
     if (isNative) {
       await KeystoreStorage.setItem(key, value)
     } else {
       const encrypted = await encrypt(value)
-      localStorage.setItem(KS_PREFIX + key, encrypted)
+      rawSetItem(KS_PREFIX + key, encrypted)
     }
   } catch (e) {
     console.warn('SecureStorage.setItem failed:', e)
@@ -106,12 +171,21 @@ async function setItem(key, value) {
 async function getItem(key) {
   try {
     if (isNative) {
-      return await KeystoreStorage.getItem(key)
+      const nativeVal = await KeystoreStorage.getItem(key)
+      if (nativeVal) return nativeVal
     }
-    const ksValue = localStorage.getItem(KS_PREFIX + key)
-    if (ksValue) return await decrypt(ksValue)
-    const oldValue = localStorage.getItem(OLD_PREFIX + key)
-    if (oldValue) return await decrypt(oldValue)
+    const ksValue = rawGetItem(KS_PREFIX + key)
+    if (ksValue) {
+      const decrypted = await decrypt(ksValue)
+      if (decrypted) return decrypted
+    }
+    const oldValue = rawGetItem(OLD_PREFIX + key)
+    if (oldValue) {
+      const decrypted = await decrypt(oldValue)
+      if (decrypted) return decrypted
+    }
+    const rawVal = rawGetItem(key)
+    if (rawVal) return rawVal
   } catch (e) {
     console.warn('SecureStorage.getItem failed:', e)
   }
@@ -120,46 +194,92 @@ async function getItem(key) {
 
 function removeItem(key) {
   if (isNative) KeystoreStorage.removeItem(key)
-  localStorage.removeItem(KS_PREFIX + key)
-  localStorage.removeItem(OLD_PREFIX + key)
-  localStorage.removeItem(key)
+  rawRemoveItem(KS_PREFIX + key)
+  rawRemoveItem(OLD_PREFIX + key)
+  rawRemoveItem(key)
 }
 
 async function migrateAll() {
+  const API_KEYS = ['gemini_api_key', 'groq_api_key', 'nvidia_api_key', 'cartesia_api_key', 'huggingface_api_key']
   if (isNative) {
-    const API_KEYS = ['gemini_api_key', 'groq_api_key', 'nvidia_api_key', 'cartesia_api_key', 'huggingface_api_key']
     for (const key of API_KEYS) {
-      const ksValue = localStorage.getItem(KS_PREFIX + key)
-      if (ksValue) continue
-      const oldValue = localStorage.getItem(OLD_PREFIX + key)
+      const ksValue = rawGetItem(KS_PREFIX + key)
+      if (ksValue) {
+        rawRemoveItem(key)
+        rawRemoveItem(OLD_PREFIX + key)
+        continue
+      }
+      const oldValue = rawGetItem(OLD_PREFIX + key)
       if (oldValue) {
         try {
           const plaintext = await decrypt(oldValue)
-          await KeystoreStorage.setItem(key, plaintext)
-          localStorage.removeItem(OLD_PREFIX + key)
+          if (plaintext) {
+            await KeystoreStorage.setItem(key, plaintext)
+            rawRemoveItem(OLD_PREFIX + key)
+          }
         } catch {
-          localStorage.removeItem(OLD_PREFIX + key)
+          rawRemoveItem(OLD_PREFIX + key)
         }
+      }
+      const raw = rawGetItem(key)
+      if (raw) {
+        try {
+          await KeystoreStorage.setItem(key, raw)
+          rawRemoveItem(key)
+        } catch {}
       }
     }
   } else {
-    const API_KEYS = ['gemini_api_key', 'groq_api_key', 'nvidia_api_key', 'cartesia_api_key', 'huggingface_api_key']
     for (const key of API_KEYS) {
-      const ksValue = localStorage.getItem(KS_PREFIX + key)
-      if (ksValue) continue
-      const oldValue = localStorage.getItem(OLD_PREFIX + key)
+      const ksValue = rawGetItem(KS_PREFIX + key)
+      if (ksValue) {
+        rawRemoveItem(key)
+        rawRemoveItem(OLD_PREFIX + key)
+        continue
+      }
+      const oldValue = rawGetItem(OLD_PREFIX + key)
       if (oldValue) {
         try {
           const plaintext = await decrypt(oldValue)
-          const encrypted = await encrypt(plaintext)
-          localStorage.setItem(KS_PREFIX + key, encrypted)
-          localStorage.removeItem(OLD_PREFIX + key)
+          if (plaintext) {
+            const encrypted = await encrypt(plaintext)
+            rawSetItem(KS_PREFIX + key, encrypted)
+            rawRemoveItem(OLD_PREFIX + key)
+          }
         } catch {
-          localStorage.removeItem(OLD_PREFIX + key)
+          rawRemoveItem(OLD_PREFIX + key)
         }
+      }
+      const raw = rawGetItem(key)
+      if (raw) {
+        try {
+          const encrypted = await encrypt(raw)
+          rawSetItem(KS_PREFIX + key, encrypted)
+          rawRemoveItem(key)
+        } catch {}
       }
     }
   }
+
+  for (const dataKey of PROTECTED_DATA_KEYS) {
+    try {
+      const rawPlain = rawGetItem(dataKey)
+      if (rawPlain) {
+        memoryVault.set(dataKey, rawPlain)
+        await setItem(dataKey, rawPlain)
+        rawRemoveItem(dataKey)
+      } else {
+        const decrypted = await getItem(dataKey)
+        if (decrypted) {
+          memoryVault.set(dataKey, decrypted)
+        }
+      }
+    } catch {}
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent('IRIS_SECURE_VAULT_HYDRATED'))
+  } catch {}
 }
 
 export const SecureStorage = { setItem, getItem, removeItem, migrateAll }

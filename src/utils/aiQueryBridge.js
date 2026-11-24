@@ -4,6 +4,8 @@ import { SecureStorage } from './secureStorage'
 import { GenAI } from '../components/GenAIPlugin'
 import { getBackendPriorityChain, getSanitizedOllamaEndpoint } from './AIProviderManager'
 import { resolveWorkingGeminiModel, resolveWorkingGroqModel } from './modelResolver'
+import { getAIConfig } from '../components/LauncherPlugin'
+import { executeDeviceAgentIntent } from './aiAgentTools'
 
 const SEARCH_TRIGGER_PATTERNS = [
   /\b(?:who|what|where|when|why|how|latest|news|today|price|score|current|update|tell me about|explain|search|look up|president|minister|flavor|taste|science|weather|population|capital)\b/i
@@ -69,16 +71,30 @@ async function fetchWebSearch(query) {
   }
 }
 
-function sanitizeVoiceOutput(text) {
+function runEmbeddedOsCmds(rawText) {
+  if (!rawText || typeof rawText !== 'string') return
+  const matches = [...rawText.matchAll(/\[\[\s*CMD\s*:\s*([^\]]+)\]\]/gi)]
+  for (const m of matches) {
+    if (m[1]?.trim()) {
+      executeDeviceAgentIntent(m[1].trim()).catch(() => {})
+    }
+  }
+}
+
+function sanitizeVoiceOutput(text, executeCmds = false) {
   if (!text) return ''
+  if (executeCmds) runEmbeddedOsCmds(text)
   return text
+    .replace(/\[\[\s*CMD\s*:[^\]]*\]\]/gi, '')
+    .replace(/\[\[\s*CMD[^\]]*$/gi, '')
     .replace(/[*_~`#>[\]{}()]/g, '')
     .replace(/\b(?:assistant|system|iris):\s*/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
-function syncVoiceTurnToAssistantStore(userPrompt, aiReply, backendUsed) {
+function syncVoiceTurnToAssistantStore(userPrompt, aiReply, backendUsed, rawText = '') {
+  if (rawText) runEmbeddedOsCmds(rawText)
   try {
     const store = useAssistantStore.getState()
     if (store.isPrivateSession || !userPrompt || !aiReply) return
@@ -94,13 +110,50 @@ function syncVoiceTurnToAssistantStore(userPrompt, aiReply, backendUsed) {
   } catch {}
 }
 
+export function syncActionTurnToAssistantStore(userPrompt, actionReply) {
+  try {
+    const store = useAssistantStore.getState()
+    if (store.isPrivateSession || !userPrompt || !actionReply) return
+    const CleanPrompt = userPrompt.split('\n[REAL-TIME DEVICE OS ACTIONS')[0].trim()
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    store.setChatLog(prev => [
+      ...prev,
+      { id: `act_u_${Date.now()}`, time: nowTime, sender: 'USER', text: CleanPrompt, type: 'user' },
+      { id: `act_a_${Date.now() + 1}`, time: nowTime, sender: 'IRIS', text: actionReply, type: 'ai', provider: 'SYSTEM' }
+    ])
+    store.autoTitleSession(CleanPrompt)
+    store.persistSessions()
+  } catch {}
+}
+
 export async function queryIrisAI(prompt, onChunk, history = []) {
-  const { geminiKey: storeGemini, groqKey: storeGroq, llmBackend } = useAIStore.getState()
+  let { geminiKey, groqKey, llmBackend } = useAIStore.getState()
   const { assistantPersona = 'CHAT', webSearchEnabled = false, isPrivateSession = false } = useAssistantStore.getState()
 
-  const geminiKey = storeGemini || await SecureStorage.getItem('gemini_api_key') || ''
-  const groqKey = storeGroq || await SecureStorage.getItem('groq_api_key') || ''
-  const nvidiaKey = await SecureStorage.getItem('nvidia_api_key') || ''
+  if (!geminiKey && !groqKey) {
+    try {
+      await useAIStore.getState().loadKeys()
+      const refreshed = useAIStore.getState()
+      geminiKey = refreshed.geminiKey
+      groqKey = refreshed.groqKey
+    } catch {}
+  }
+
+  if (!geminiKey) {
+    geminiKey = await SecureStorage.getItem('gemini_api_key') || localStorage.getItem('gemini_api_key') || ''
+  }
+  if (!groqKey) {
+    groqKey = await SecureStorage.getItem('groq_api_key') || localStorage.getItem('groq_api_key') || ''
+  }
+  const nvidiaKey = await SecureStorage.getItem('nvidia_api_key') || localStorage.getItem('nvidia_api_key') || ''
+
+  if (!geminiKey || !groqKey) {
+    try {
+      const nativeCfg = await getAIConfig()
+      if (!geminiKey && nativeCfg?.geminiKey) geminiKey = nativeCfg.geminiKey
+      if (!groqKey && nativeCfg?.groqKey) groqKey = nativeCfg.groqKey
+    } catch {}
+  }
 
   let searchContext = ''
   if (webSearchEnabled || SEARCH_TRIGGER_PATTERNS.some(p => p.test(prompt))) {
@@ -108,17 +161,35 @@ export async function queryIrisAI(prompt, onChunk, history = []) {
   }
 
   const personaDirective = PERSONA_VOICE_DIRECTIVES[assistantPersona] || PERSONA_VOICE_DIRECTIVES.CHAT
-  const voiceSystemPrompt = `You are Iris, an intelligent AI assistant powering both the IRIS Home Launcher and IRIS AI.
+  const voiceSystemPrompt = `You are Iris, the native Android OS AI assistant integrated directly into the user's phone with real hardware, Telecom, app-launching, and Accessibility control.
 PERSONA (${assistantPersona}): ${personaDirective}
 ${isPrivateSession ? 'PRIVACY: Incognito Zero-Trace mode is active.' : ''}
 VOICE OUTPUT RULES:
-- Deliver your answer in 1 to 3 clear, natural spoken sentences.
+- Deliver your answer in 1 to 2 crisp, natural, Siri-style spoken sentences.
 - Never use markdown formatting (no asterisks, hashtags, or bullet symbols) since your answer is spoken aloud via TTS.
+- Whenever [REAL-TIME DEVICE OS ACTIONS EXECUTED BY IRIS] is included in the prompt, those actions have ALREADY been physically executed on the device. Confirm them naturally and never claim to be a text-only AI or in a simulated environment.
+- SELF-HEALING OS EXECUTION: If the user asks for a device/hardware action using indirect or slang phrasing (e.g. "it's dark in here", "kill the torch", "crank the sound up") and no [REAL-TIME DEVICE OS ACTIONS EXECUTED BY IRIS] tag is present, append [[CMD: <canonical command>]] at the very end of your sentence (e.g. [[CMD: turn on flashlight]], [[CMD: turn off flashlight]], [[CMD: set volume to 100%]], [[CMD: open youtube]]) and confirm it naturally.
 - Current date/time: ${new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
 ${searchContext ? `\n${searchContext}` : ''}`
 
   const preferred = llmBackend || 'GEMINI'
-  const chain = getBackendPriorityChain(preferred)
+  const hasKey = (b) => {
+    if (b === 'GEMINI') return !!geminiKey
+    if (b === 'GROQ') return !!groqKey
+    if (b === 'NVIDIA') return !!nvidiaKey
+    return true
+  }
+
+  let chain = getBackendPriorityChain(preferred).filter(hasKey)
+  if (preferred && hasKey(preferred)) {
+    chain = [preferred, ...chain.filter(b => b !== preferred)]
+  }
+
+  if (chain.length === 0) {
+    throw new Error('Please configure your Gemini, Groq, or NVIDIA API key in Settings > IRIS Home & AI Assistant.')
+  }
+
+  let lastError = null
 
   for (const backend of chain) {
     try {
@@ -154,7 +225,12 @@ ${searchContext ? `\n${searchContext}` : ''}`
             res = await doGeminiFetch(model)
           }
         }
-        if (!res.ok) continue
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          lastError = new Error(errData?.error?.message || `Gemini failed (HTTP ${res.status})`)
+          console.warn('[IRIS] Gemini failed:', lastError.message)
+          continue
+        }
 
         const reader = res.body.getReader()
         const decoder = new TextDecoder('utf-8')
@@ -178,7 +254,7 @@ ${searchContext ? `\n${searchContext}` : ''}`
             } catch {}
           }
         }
-        const finalOut = sanitizeVoiceOutput(fullText)
+        const finalOut = sanitizeVoiceOutput(fullText, true)
         if (finalOut) {
           syncVoiceTurnToAssistantStore(prompt, finalOut, 'GEMINI')
           return finalOut
@@ -215,9 +291,14 @@ ${searchContext ? `\n${searchContext}` : ''}`
             res = await doGroqFetch(groqModel)
           }
         }
-        if (!res.ok) continue
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          lastError = new Error(errData?.error?.message || `Groq failed (HTTP ${res.status})`)
+          console.warn('[IRIS] Groq failed:', lastError.message)
+          continue
+        }
         const data = await res.json()
-        const text = sanitizeVoiceOutput(data?.choices?.[0]?.message?.content || '')
+        const text = sanitizeVoiceOutput(data?.choices?.[0]?.message?.content || '', true)
         if (text) {
           if (onChunk) onChunk(text)
           syncVoiceTurnToAssistantStore(prompt, text, 'GROQ')
@@ -242,9 +323,14 @@ ${searchContext ? `\n${searchContext}` : ''}`
             max_tokens: 300
           })
         })
-        if (!res.ok) continue
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          lastError = new Error(errData?.error?.message || `NVIDIA failed (HTTP ${res.status})`)
+          console.warn('[IRIS] NVIDIA failed:', lastError.message)
+          continue
+        }
         const data = await res.json()
-        const text = sanitizeVoiceOutput(data?.choices?.[0]?.message?.content || '')
+        const text = sanitizeVoiceOutput(data?.choices?.[0]?.message?.content || '', true)
         if (text) {
           if (onChunk) onChunk(text)
           syncVoiceTurnToAssistantStore(prompt, text, 'NVIDIA')
@@ -265,9 +351,12 @@ ${searchContext ? `\n${searchContext}` : ''}`
             stream: false
           })
         })
-        if (!res.ok) continue
+        if (!res.ok) {
+          lastError = new Error(`Ollama failed (HTTP ${res.status})`)
+          continue
+        }
         const data = await res.json()
-        const text = sanitizeVoiceOutput(data?.response || '')
+        const text = sanitizeVoiceOutput(data?.response || '', true)
         if (text) {
           if (onChunk) onChunk(text)
           syncVoiceTurnToAssistantStore(prompt, text, 'OLLAMA')
@@ -277,15 +366,18 @@ ${searchContext ? `\n${searchContext}` : ''}`
 
       if (backend === 'ONDEVICE') {
         const nanoRes = await GenAI.generateResponse(`${voiceSystemPrompt}\n\nUser: ${prompt}`)
-        const text = sanitizeVoiceOutput(nanoRes?.response || '')
+        const text = sanitizeVoiceOutput(nanoRes?.response || '', true)
         if (text) {
           if (onChunk) onChunk(text)
           syncVoiceTurnToAssistantStore(prompt, text, 'ONDEVICE')
           return text
         }
       }
-    } catch {}
+    } catch (e) {
+      lastError = e
+    }
   }
 
+  if (lastError) throw lastError
   throw new Error('Please configure your Gemini, Groq, or NVIDIA API key in Settings > IRIS Home & AI Assistant.')
 }

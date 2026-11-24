@@ -29,11 +29,6 @@ const PERSONA_OPTIONS = [
   { id: 'COMMANDER', label: 'COMMANDER' },
 ]
 
-const WAKE_TARGET_OPTIONS = [
-  { id: 'HOME_OVERLAY', label: 'HOME VOICE PILL' },
-  { id: 'FULL_LIVE_AI', label: 'FULL IRIS AI LIVE' },
-]
-
 const ACTIVATION_MODES = [
   { id: 'SYSTEM_ASSIST', label: 'System Assistant', desc: 'Power Btn / Corner Swipe', icon: 'assistant', tag: '0% IDLE MIC' },
   { id: 'DOCK_HOLD', label: 'Dock Hold (1s)', desc: 'Hold Bottom Home Dock', icon: 'touch_app', tag: '0% IDLE MIC' },
@@ -126,8 +121,6 @@ export default function IrisAssistantHubSection({
     setShakeSensitivity,
     callAutoWakeEnabled,
     setCallAutoWakeEnabled,
-    assistantWakeTarget,
-    setAssistantWakeTarget,
     voiceEngineProvider,
   } = useAIStore()
 
@@ -275,20 +268,22 @@ export default function IrisAssistantHubSection({
               </div>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-black/35 border border-white/10 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[8px] text-primary-fixed-dim font-bold uppercase font-mono-data tracking-wider">
-                  WHEN ACTIVATED, OPEN INTERFACE
+            <div className="p-2.5 rounded-xl bg-black/35 border border-white/10 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[8px] text-cyan-400 font-bold uppercase font-mono-data tracking-wider">
+                  UNIFIED IRIS AI ARCHITECTURE
                 </p>
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent('iris-activate-assistant'))}
-                  className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-mono text-[7.5px] font-bold uppercase active:scale-95"
-                >
-                  TEST NOW
-                </button>
+                <p className="text-[7.5px] font-mono text-white/50 leading-relaxed mt-0.5">
+                  Voice HUD overlay across the launcher with 1-tap expansion to full workspace
+                </p>
               </div>
-              <SettingOptionGrid options={WAKE_TARGET_OPTIONS} value={assistantWakeTarget || 'HOME_OVERLAY'} onChange={setAssistantWakeTarget} columns={2} />
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('iris-activate-assistant'))}
+                className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-300 font-mono text-[8px] font-bold uppercase shrink-0 active:scale-95 transition-all"
+              >
+                TEST WAKE
+              </button>
             </div>
 
             <div className="space-y-2">

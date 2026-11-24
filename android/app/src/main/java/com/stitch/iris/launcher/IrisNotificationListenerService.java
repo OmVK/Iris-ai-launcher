@@ -360,6 +360,33 @@ public class IrisNotificationListenerService extends NotificationListenerService
                 || deletedIds.contains(sig);
     }
 
+    private static String readDecryptedArchiveString(SharedPreferences prefs) {
+        if (prefs == null) return "[]";
+        String raw = prefs.getString(KEY_NOTIFICATION_ARCHIVE, "[]");
+        if (raw == null || raw.isEmpty() || "[]".equals(raw)) return "[]";
+        if (raw.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX)) {
+            String dec = IrisKeystorePlugin.decryptNative(raw);
+            return (dec != null && !dec.isEmpty()) ? dec : "[]";
+        }
+        String enc = IrisKeystorePlugin.encryptNative(raw);
+        if (enc != null && !enc.isEmpty()) {
+            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, enc).apply();
+        }
+        return raw;
+    }
+
+    private static void writeEncryptedArchiveString(SharedPreferences prefs, String jsonStr, boolean syncCommit) {
+        if (prefs == null) return;
+        String safeJson = (jsonStr == null || jsonStr.isEmpty()) ? "[]" : jsonStr;
+        String enc = "[]".equals(safeJson) ? "[]" : IrisKeystorePlugin.encryptNative(safeJson);
+        String toStore = (enc != null && !enc.isEmpty()) ? enc : safeJson;
+        if (syncCommit) {
+            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, toStore).commit();
+        } else {
+            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, toStore).apply();
+        }
+    }
+
     public static synchronized void recordToNativeArchive(Context context, JSONObject incoming) {
         if (context == null || incoming == null) return;
         try {
@@ -373,7 +400,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
             if (isDeletedArchiveItem(deletedIds, incoming)) {
                 return;
             }
-            String raw = prefs.getString(KEY_NOTIFICATION_ARCHIVE, "[]");
+            String raw = readDecryptedArchiveString(prefs);
             JSONArray current = new JSONArray(raw);
 
             String pkg = incoming.optString("packageId", "");
@@ -398,7 +425,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
                     }
                 }
                 if (markedExisting) {
-                    prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, current.toString()).apply();
+                    writeEncryptedArchiveString(prefs, current.toString(), false);
                     return;
                 }
             }
@@ -421,7 +448,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
             for (int i = 0; i < current.length() && updated.length() < MAX_ARCHIVE_SIZE; i++) {
                 updated.put(current.getJSONObject(i));
             }
-            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, updated.toString()).apply();
+            writeEncryptedArchiveString(prefs, updated.toString(), false);
         } catch (Exception e) {
             Log.e(TAG, "Failed recording to native notification archive", e);
         }
@@ -431,7 +458,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
         if (context == null || sbn == null) return;
         try {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            String raw = prefs.getString(KEY_NOTIFICATION_ARCHIVE, "[]");
+            String raw = readDecryptedArchiveString(prefs);
             JSONArray current = new JSONArray(raw);
             String key = sbn.getKey();
             String pkg = sbn.getPackageName();
@@ -452,7 +479,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
                 }
             }
             if (changed) {
-                prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, current.toString()).apply();
+                writeEncryptedArchiveString(prefs, current.toString(), false);
             }
         } catch (Exception e) {
             Log.e(TAG, "Failed marking removed in native archive", e);
@@ -463,7 +490,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
         if (context == null) return new JSONArray();
         try {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            String raw = prefs.getString(KEY_NOTIFICATION_ARCHIVE, "[]");
+            String raw = readDecryptedArchiveString(prefs);
             return new JSONArray(raw);
         } catch (Exception e) {
             return new JSONArray();
@@ -489,7 +516,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
             java.util.Set<String> deletedIds = getDeletedArchiveIds(prefs);
             deletedIds.add(id);
 
-            String raw = prefs.getString(KEY_NOTIFICATION_ARCHIVE, "[]");
+            String raw = readDecryptedArchiveString(prefs);
             JSONArray current = new JSONArray(raw);
             JSONArray next = new JSONArray();
             for (int i = 0; i < current.length(); i++) {
@@ -509,7 +536,7 @@ public class IrisNotificationListenerService extends NotificationListenerService
                 }
             }
             saveDeletedArchiveIds(prefs, deletedIds);
-            prefs.edit().putString(KEY_NOTIFICATION_ARCHIVE, next.toString()).commit();
+            writeEncryptedArchiveString(prefs, next.toString(), true);
         } catch (Exception ignored) {}
     }
 

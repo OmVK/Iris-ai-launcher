@@ -73,6 +73,24 @@ export function extractOtpFromText(str) {
   return m[1] || m[2] || null
 }
 
+const SCAM_PATTERNS = [
+  { regex: /\b(?:account\s+(?:has\s+been\s+)?(?:suspended|blocked|frozen|locked|deactivated)|kyc\s+(?:expired|update\s+immediately|suspended)|pan\s+card\s+blocked)\b/i, reason: 'Urgent Account / KYC Suspension Phishing' },
+  { regex: /\b(?:bit\.ly|tinyurl\.com|t\.co|cutt\.ly|is\.gd|rb\.gy)\/[a-z0-9_-]+/i, reason: 'Masked Short-Link in Message' },
+  { regex: /https?:\/\/[^\s/]+\.(?:xyz|top|buzz|club|icu|loan|work|click|gq|tk)\b/i, reason: 'High-Risk Suspicious Domain Link' },
+  { regex: /\b(?:won\s+(?:a\s+)?(?:lottery|prize|jackpot|iphone|cash\s+reward)|claim\s+your\s+(?:prize|reward|refund)\s+(?:now|immediately))\b/i, reason: 'Fake Prize / Lottery Scam' },
+  { regex: /\b(?:parcel\s+(?:on\s+hold|detained|customs\s+fee)|delivery\s+failed.*update\s+address.*https?:\/\/)\b/i, reason: 'Fake Parcel / Delivery Fee Scam' },
+  { regex: /\b(?:share\s+your\s+(?:otp|pin|password|cvv)|never\s+share.*(?:fraud|scam))\b/i, reason: 'Sensitive Credential / OTP Alert' },
+]
+
+export function detectScamRisk(str) {
+  if (!str) return null
+  const text = String(str)
+  for (const p of SCAM_PATTERNS) {
+    if (p.regex.test(text)) return p.reason
+  }
+  return null
+}
+
 function formatRecord(notif, installedApps = []) {
   const pkg = notif.packageId || notif.packageName || ''
   const matchedApp = installedApps.find(a => a.packageId === pkg || a.id === pkg)
@@ -83,6 +101,7 @@ function formatRecord(notif, installedApps = []) {
   const rawTitle = (notif.title || '').trim()
   const rawText = (notif.text || notif.message || '').trim()
   const otpCode = notif.otpCode || extractOtpFromText(`${rawTitle} ${rawText}`)
+  const scamRisk = notif.scamRisk || detectScamRisk(`${rawTitle} ${rawText}`)
 
   return {
     id: notif.id || `${ts}_${Math.random().toString(36).substring(2, 7)}`,
@@ -103,6 +122,7 @@ function formatRecord(notif, installedApps = []) {
     dismissedFromSystem: !!notif.dismissedFromSystem,
     canReply: !!notif.canReply,
     otpCode: otpCode || null,
+    scamRisk: scamRisk || null,
   }
 }
 

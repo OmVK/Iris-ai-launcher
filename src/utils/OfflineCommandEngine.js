@@ -8,7 +8,7 @@ const WORD_NUM_MAP = {
 function parseDurationSeconds(text) {
   if (!text) return 30
   const clean = text.toLowerCase().replace(/^for\s+/i, '').trim()
-  
+
   // Direct digit check (e.g. "30s", "30 seconds", "1 minute", "45")
   const digitMatch = clean.match(/(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes)?/i)
   if (digitMatch) {
@@ -136,8 +136,22 @@ const rules = [
   { pattern: /^(?:read\s+(?:my\s+)?notifications|check\s+(?:my\s+)?notifications|any\s+(?:new\s+)?notifications)$/i, handler: () => ({ type: 'notifications' }) }
 ]
 
+const MULTI_TASK_CHAIN_REGEX = /\b(?:and\s+then|then|after\s+that|afterwards|followed\s+by|split\s*screen|side\s+by\s+side)\b|\bpair$|\s+(?:and|also|,)\s+(?:open|launch|start|take|capture|turn|switch|set|enable|disable|toggle|call|dial|text|sms|send|play|pause|stop|mute|unmute|boost|clear|optimize|lock|wait|remind|add|save|search|navigate|go|scroll|tap|click|type|enter)\b|\btake\s+a?\s*screenshot\b|^(?:when\s+i\s+say|create\s+(?:a\s+)?(?:custom\s+)?command|in\s+\d+\s*(?:minutes?|mins?|seconds?|secs?)|after\s+\d+\s*(?:minutes?|mins?|seconds?|secs?)|my\s+(?:screen|eyes|battery|phone|storage|briefing)|(?:keep\s+)?scroll(?:ing)?\s*(?:up|down|faster|slower)?|auto\s*scroll|stop\s+scrolling|swipe\s+(?:up|down)|tap\s+|click\s+|press\s+|type\s+|enter\s+|write\s+(?:professionally|casually|politely)|polish(?:\s+this)?|dictate\s+in\s+|translate\s+to\s+|brief\s+me|now\s+brief|daily\s+brief|evening\s+brief|catch\s+me\s+up|summarize\s+(?:my\s+)?notifications|notification\s+(?:digest|summary)|is\s+this\s+(?:screen|message|link|page|a)\s+(?:safe|scam)|check\s+for\s+scam|scan\s+for\s+(?:scam|phishing)|remember\s+|memorize\s+|save\s+this\s+screen|snap\s+(?:this\s+screen\s+)?to\s+memory|forget\s+|where\s+did\s+i\s+park|show\s+(?:my\s+)?memories|what\s+did\s+i\s+tell\s+you|what(?:'s|\s+is)\s+my\s+otp|copy\s+(?:the\s+)?otp|did\s+anyone\s+message|reply\s+to|(?:turn\s+on|turn\s+off|enable|disable|toggle)\s+(?:mobile\s+)?(?:hotspot|auto\s*rotate|rotation|location|gps|battery\s+saver|power\s+saving|dark\s+mode|dark\s+theme|eye\s+comfort|night\s+light|nfc)|play\s+.+\s+on\s+(?:youtube|spotify)|search\s+(?:youtube|spotify|amazon)\s+for|navigate\s+to|directions\s+to|share\s+.*screen|copy\s+.*screen|save\s+what\s+i\s+copied|open\s+(?:the\s+)?copied\s+link)/i
+
+function isSavedCustomMacro(cleaned) {
+  try {
+    const macros = JSON.parse(localStorage.getItem('iris_custom_macros') || '{}')
+    return Boolean(macros[cleaned.toLowerCase()])
+  } catch {
+    return false
+  }
+}
+
 function matchCommand(text) {
   const cleaned = text.trim().replace(/[.,!?]+$/g, '').trim()
+  if (MULTI_TASK_CHAIN_REGEX.test(cleaned) || isSavedCustomMacro(cleaned)) {
+    return { type: 'fallback', text: cleaned }
+  }
   for (const rule of rules) {
     const m = cleaned.match(rule.pattern)
     if (m) return rule.handler(m)

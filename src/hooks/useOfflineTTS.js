@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import { useAIStore } from '../stores/aiStore'
+import { useAssistantStore } from '../stores/assistantStore'
 import { getCartesiaKey, speakCartesia } from '../utils/cartesiaTTS'
 import { speakPiper } from '../utils/piperTTS'
 import { speakTextNative as pluginSpeakNative, setVoiceSettingsNative, isNative } from '../components/LauncherPlugin'
@@ -51,6 +52,7 @@ export default function useOfflineTTS({ speechInterruptRef }) {
   useEffect(() => {
     const audioRef = activeAudioRef
     return () => {
+      useAssistantStore.getState().setIsSpeaking(false)
       if (audioRef.current) audioRef.current.pause()
       if (audioContextRef.current) {
         audioContextRef.current.close().catch(() => { })
@@ -82,14 +84,20 @@ export default function useOfflineTTS({ speechInterruptRef }) {
           return
         }
         clearIdleTimer()
+        useAssistantStore.getState().setIsSpeaking(true)
         const jobId = Date.now().toString() + Math.random()
 
         if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
-        safetyTimerRef.current = setTimeout(() => { ttsResolvers.current.delete(jobId); resolve() }, 30000)
+        safetyTimerRef.current = setTimeout(() => {
+          useAssistantStore.getState().setIsSpeaking(false)
+          ttsResolvers.current.delete(jobId)
+          resolve()
+        }, 30000)
 
         const wrappedResolve = () => {
           if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
           ttsResolvers.current.delete(jobId)
+          useAssistantStore.getState().setIsSpeaking(false)
           resolve()
         }
         ttsResolvers.current.set(jobId, { resolve: wrappedResolve })
@@ -169,6 +177,7 @@ export default function useOfflineTTS({ speechInterruptRef }) {
   }
 
   const stopSpeakingNative = () => {
+    useAssistantStore.getState().setIsSpeaking(false)
     audioQueueRef.current = []
     isPlayingRef.current = false
     if (activeAudioRef.current) { activeAudioRef.current.pause() }

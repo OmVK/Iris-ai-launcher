@@ -163,6 +163,21 @@ public class IrisFloatingCopilot {
     private final Set<String> deepScanBuffer = new LinkedHashSet<>();
     private SpeechRecognizer speechRecognizer;
     private boolean isVoiceListening = false;
+    private android.content.BroadcastReceiver lockStateReceiver;
+
+    public static boolean isScreenLocked(Context ctx) {
+        if (ctx == null) return true;
+        try {
+            android.app.KeyguardManager km = (android.app.KeyguardManager) ctx.getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null) {
+                if (km.isKeyguardLocked()) return true;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1 && km.isDeviceLocked()) return true;
+            }
+            android.os.PowerManager pm = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+            if (pm != null && !pm.isInteractive()) return true;
+        } catch (Exception ignored) {}
+        return false;
+    }
 
     public static synchronized void initialize(AccessibilityService service) {
         if (instance == null) {
@@ -192,6 +207,30 @@ public class IrisFloatingCopilot {
         createCardView();
         updateVisualStyles();
         registerClipboardTrigger();
+        registerLockStateReceiver();
+    }
+
+    private void registerLockStateReceiver() {
+        try {
+            lockStateReceiver = new android.content.BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent == null || intent.getAction() == null) return;
+                    String act = intent.getAction();
+                    if (Intent.ACTION_SCREEN_OFF.equals(act) || isScreenLocked(service)) {
+                        mainHandler.post(() -> {
+                            hideCard();
+                            hidePill();
+                        });
+                    }
+                }
+            };
+            android.content.IntentFilter filter = new android.content.IntentFilter();
+            filter.addAction(Intent.ACTION_SCREEN_OFF);
+            filter.addAction(Intent.ACTION_SCREEN_ON);
+            filter.addAction(Intent.ACTION_USER_PRESENT);
+            service.registerReceiver(lockStateReceiver, filter);
+        } catch (Exception ignored) {}
     }
 
     private void registerClipboardTrigger() {
@@ -199,7 +238,7 @@ public class IrisFloatingCopilot {
             ClipboardManager cm = (ClipboardManager) service.getSystemService(Context.CLIPBOARD_SERVICE);
             if (cm != null) {
                 cm.addPrimaryClipChangedListener(() -> {
-                    if (!isEnabled || !clipboardTrigger) return;
+                    if (!isEnabled || !clipboardTrigger || isScreenLocked(service)) return;
                     try {
                         ClipData clip = cm.getPrimaryClip();
                         if (clip != null && clip.getItemCount() > 0) {
@@ -311,7 +350,7 @@ public class IrisFloatingCopilot {
         }
         this.currentPackage = newPackage;
         mainHandler.post(() -> {
-            if (!isEnabled || newPackage.equals("com.android.systemui")) {
+            if (!isEnabled || newPackage.equals("com.android.systemui") || isScreenLocked(service)) {
                 hidePill();
                 hideCard();
                 return;
@@ -336,7 +375,13 @@ public class IrisFloatingCopilot {
 
     public void onUserInputActive() {
         mainHandler.post(() -> {
-            if (!isEnabled) return;
+            if (!isEnabled || isScreenLocked(service)) {
+                if (isScreenLocked(service)) {
+                    hidePill();
+                    hideCard();
+                }
+                return;
+            }
             boolean isHome = currentPackage.equals(service.getPackageName());
             if (isHome && !showOnHome) return;
             showPill();
@@ -374,9 +419,9 @@ public class IrisFloatingCopilot {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
         if (backend != null) editor.putString(KEY_BACKEND, backend);
-        if (apiKey != null && !apiKey.isEmpty()) editor.putString(KEY_API_KEY, apiKey);
-        if (geminiKey != null && !geminiKey.isEmpty()) editor.putString(KEY_GEMINI_KEY, geminiKey);
-        if (groqKey != null && !groqKey.isEmpty()) editor.putString(KEY_GROQ_KEY, groqKey);
+        if (apiKey != null && !apiKey.isEmpty()) editor.putString(KEY_API_KEY, IrisKeystorePlugin.encryptNative(apiKey));
+        if (geminiKey != null && !geminiKey.isEmpty()) editor.putString(KEY_GEMINI_KEY, IrisKeystorePlugin.encryptNative(geminiKey));
+        if (groqKey != null && !groqKey.isEmpty()) editor.putString(KEY_GROQ_KEY, IrisKeystorePlugin.encryptNative(groqKey));
         if (model != null && !model.isEmpty()) editor.putString(KEY_MODEL, model);
         if (groqModel != null && !groqModel.isEmpty()) editor.putString(KEY_GROQ_MODEL, groqModel);
         editor.apply();
@@ -1127,6 +1172,11 @@ public class IrisFloatingCopilot {
     }
 
     public void showPill() {
+        if (isScreenLocked(service)) {
+            hideCard();
+            hidePill();
+            return;
+        }
         cancelAutoHide();
         if (pillView != null) {
             pillView.animate().cancel();
@@ -1159,6 +1209,11 @@ public class IrisFloatingCopilot {
     }
 
     public void toggleCard() {
+        if (isScreenLocked(service)) {
+            hideCard();
+            hidePill();
+            return;
+        }
         if (isCardAttached) {
             hideCard();
         } else {
@@ -1167,6 +1222,11 @@ public class IrisFloatingCopilot {
     }
 
     public void showCard() {
+        if (isScreenLocked(service)) {
+            hideCard();
+            hidePill();
+            return;
+        }
         cancelAutoHide();
         if (!isCardAttached && cardView != null) {
             try {
@@ -1200,6 +1260,10 @@ public class IrisFloatingCopilot {
     private void cleanup() {
         hideCard();
         hidePill();
+        if (lockStateReceiver != null) {
+            try { service.unregisterReceiver(lockStateReceiver); } catch (Exception ignored) {}
+            lockStateReceiver = null;
+        }
         if (speechRecognizer != null) {
             try { speechRecognizer.destroy(); } catch (Exception ignored) {}
             speechRecognizer = null;
@@ -2239,9 +2303,27 @@ public class IrisFloatingCopilot {
     private String queryLLMDirect(String systemPrompt, String userPrompt) throws Exception {
         SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String backend = prefs.getString(KEY_BACKEND, "GEMINI");
-        String apiKey = prefs.getString(KEY_API_KEY, "");
-        String geminiKey = prefs.getString(KEY_GEMINI_KEY, "");
-        String groqKey = prefs.getString(KEY_GROQ_KEY, "");
+        String rawApiKey = prefs.getString(KEY_API_KEY, "");
+        String rawGeminiKey = prefs.getString(KEY_GEMINI_KEY, "");
+        String rawGroqKey = prefs.getString(KEY_GROQ_KEY, "");
+        if ((!rawApiKey.isEmpty() && !rawApiKey.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX))
+                || (!rawGeminiKey.isEmpty() && !rawGeminiKey.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX))
+                || (!rawGroqKey.isEmpty() && !rawGroqKey.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX))) {
+            SharedPreferences.Editor ed = prefs.edit();
+            if (!rawApiKey.isEmpty() && !rawApiKey.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX)) {
+                ed.putString(KEY_API_KEY, IrisKeystorePlugin.encryptNative(rawApiKey));
+            }
+            if (!rawGeminiKey.isEmpty() && !rawGeminiKey.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX)) {
+                ed.putString(KEY_GEMINI_KEY, IrisKeystorePlugin.encryptNative(rawGeminiKey));
+            }
+            if (!rawGroqKey.isEmpty() && !rawGroqKey.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX)) {
+                ed.putString(KEY_GROQ_KEY, IrisKeystorePlugin.encryptNative(rawGroqKey));
+            }
+            ed.apply();
+        }
+        String apiKey = IrisKeystorePlugin.decryptNative(rawApiKey);
+        String geminiKey = IrisKeystorePlugin.decryptNative(rawGeminiKey);
+        String groqKey = IrisKeystorePlugin.decryptNative(rawGroqKey);
         String model = prefs.getString(KEY_MODEL, "gemini-2.5-flash");
 
         String effectiveKey = apiKey;

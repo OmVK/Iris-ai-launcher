@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react'
 import { SettingToggle } from './SettingControls'
 import SettingsSection from './SettingsSection'
-import { isAccessibilityServiceEnabled, isUsageStatsEnabled, isNotificationAccessGranted, openPermissionSettings } from '../../components/LauncherPlugin'
+import {
+  isAccessibilityServiceEnabled,
+  isUsageStatsEnabled,
+  isNotificationAccessGranted,
+  openPermissionSettings,
+  authenticateBiometric,
+  setDeveloperDebugMode,
+  getDeveloperDebugStatus,
+} from '../../components/LauncherPlugin'
 import HapticFeedback from '../../utils/HapticFeedback'
 import { useThemeStore } from '../../stores/themeStore'
 import { useNotificationStore } from '../../stores/notificationStore'
@@ -10,6 +18,7 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
   const { notifPopupsEnabled, setNotifPopupsEnabled } = useThemeStore()
   const [settings, setSettings] = useState({
     debugMode: false,
+    debugRemainingMin: 0,
     accessibilityEnabled: false,
     notificationAccessEnabled: false,
     overlayEnabled: false,
@@ -18,16 +27,23 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
   })
 
   useEffect(() => {
-    const savedDebug = localStorage.getItem('iris_debug_mode') === 'true'
     const savedOverlay = localStorage.getItem('iris_overlay_enabled') === 'true'
     const savedHaptics = HapticFeedback.isEnabled()
-    setSettings(s => ({ ...s, debugMode: savedDebug, overlayEnabled: savedOverlay, hapticsEnabled: savedHaptics }))
+    setSettings(s => ({ ...s, overlayEnabled: savedOverlay, hapticsEnabled: savedHaptics }))
 
     const checkPerms = async () => {
       const a11y = await isAccessibilityServiceEnabled()
       const usage = await isUsageStatsEnabled()
       const notif = await isNotificationAccessGranted()
-      setSettings(s => ({ ...s, accessibilityEnabled: a11y, usageStatsEnabled: usage, notificationAccessEnabled: notif }))
+      const dbg = await getDeveloperDebugStatus()
+      setSettings(s => ({
+        ...s,
+        accessibilityEnabled: a11y,
+        usageStatsEnabled: usage,
+        notificationAccessEnabled: notif,
+        debugMode: Boolean(dbg?.active),
+        debugRemainingMin: Math.ceil((dbg?.remainingSec || 0) / 60),
+      }))
     }
     checkPerms()
 
@@ -36,9 +52,26 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
     return () => window.removeEventListener('focus', onFocus)
   }, [])
 
-  const handleToggle = (key, value) => {
+  const handleToggle = async (key, value) => {
+    if (key === 'debugMode') {
+      if (value) {
+        const auth = await authenticateBiometric()
+        if (!auth?.success) return
+        const res = await setDeveloperDebugMode(true, 15)
+        localStorage.setItem('iris_debug_mode', 'true')
+        setSettings(s => ({
+          ...s,
+          debugMode: Boolean(res?.active),
+          debugRemainingMin: Math.ceil((res?.remainingSec || 900) / 60),
+        }))
+      } else {
+        await setDeveloperDebugMode(false, 15)
+        localStorage.setItem('iris_debug_mode', 'false')
+        setSettings(s => ({ ...s, debugMode: false, debugRemainingMin: 0 }))
+      }
+      return
+    }
     setSettings(s => ({ ...s, [key]: value }))
-    if (key === 'debugMode') localStorage.setItem('iris_debug_mode', value ? 'true' : 'false')
     if (key === 'overlayEnabled') localStorage.setItem('iris_overlay_enabled', value ? 'true' : 'false')
     if (key === 'hapticsEnabled') HapticFeedback.setEnabled(value)
   }
@@ -46,6 +79,16 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
   return (
     <SettingsSection title="ADVANCED & SYSTEM HAPTICS" icon="tune" sectionKey="advanced" expandedSections={expandedSections} toggleSection={toggleSection}>
       <div className="space-y-3">
+        <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2.5">
+          <span className="material-symbols-outlined text-emerald-400 text-base">shield_lock</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10.5px] font-bold text-emerald-300 tracking-wide">ZERO-TRUST KNOX AES-256-GCM SHIELD ACTIVE</p>
+            <p className="text-[9.5px] text-white/60 leading-snug">
+              API keys, AI searches, chats, voice notes &amp; notifications are hardware-encrypted at rest. ADB logcat &amp; WebView inspector are locked by default.
+            </p>
+          </div>
+        </div>
+
         <SettingToggle
           icon="vibration"
           label="Haptic Vibration Feedback"
@@ -56,8 +99,12 @@ export default function AdvancedSection({ expandedSections, toggleSection }) {
 
         <SettingToggle
           icon="bug_report"
-          label="Debug Mode"
-          sublabel="Enable detailed logging"
+          label="Biometric Developer Debug (15m Auto-Off)"
+          sublabel={
+            settings.debugMode
+              ? `Active (${settings.debugRemainingMin || 15}m left) — Verbose ADB logs & WebView inspector unlocked`
+              : 'Requires fingerprint — Unlocks verbose ADB logs for 15 minutes'
+          }
           value={settings.debugMode}
           onChange={(v) => handleToggle('debugMode', v)}
         />

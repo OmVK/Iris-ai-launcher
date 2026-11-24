@@ -1367,6 +1367,15 @@ export async function syncAIConfig(backend, apiKey, model, geminiKey, groqKey, g
   }
 }
 
+export async function getAIConfig() {
+  if (!isNative) return { backend: 'GEMINI', geminiKey: '', groqKey: '', apiKey: '', model: 'gemini-2.5-flash', groqModel: 'llama-3.3-70b-versatile' }
+  try {
+    return await NativeLauncher.getAIConfig()
+  } catch (e) {
+    return { backend: 'GEMINI', geminiKey: '', groqKey: '', apiKey: '', model: 'gemini-2.5-flash', groqModel: 'llama-3.3-70b-versatile' }
+  }
+}
+
 export async function getCopilotSettings() {
   if (!isNative) {
     return {
@@ -1470,5 +1479,71 @@ export async function getAssistantAndHomeRoleStatus() {
     return await NativeLauncher.getAssistantAndHomeRoleStatus()
   } catch {
     return { isDefaultHome: false, isDefaultAssistant: false }
+  }
+}
+
+export async function setDeveloperDebugMode(enable = false, minutes = 15) {
+  if (!isNative) return { active: enable, remainingSec: enable ? minutes * 60 : 0 }
+  try {
+    return await NativeLauncher.setDeveloperDebugMode({ enable, minutes })
+  } catch {
+    return { active: false, remainingSec: 0 }
+  }
+}
+
+export async function getDeveloperDebugStatus() {
+  if (!isNative) return { active: false, remainingSec: 0 }
+  try {
+    return await NativeLauncher.getDeveloperDebugStatus()
+  } catch {
+    return { active: false, remainingSec: 0 }
+  }
+}
+
+export async function clickScreenElement(text = '') {
+  if (!isNative) return { success: false, matchedText: '' }
+  try {
+    return await NativeLauncher.clickScreenElement({ text })
+  } catch {
+    return { success: false, matchedText: '' }
+  }
+}
+
+export async function toggleQuickSetting(tile = '') {
+  if (!isNative) return { success: false, matchedTile: '' }
+  try {
+    return await NativeLauncher.toggleQuickSetting({ tile })
+  } catch {
+    return { success: false, matchedTile: '' }
+  }
+}
+
+export async function launchSplitScreenPair(firstPackage = '', secondPackage = '') {
+  if (!isNative) return { success: false }
+  try {
+    return await NativeLauncher.launchSplitScreenPair({ firstPackage, secondPackage })
+  } catch {
+    return { success: false }
+  }
+}
+
+export async function getUniversalDeviceProfile() {
+  if (!isNative) {
+    return {
+      manufacturer: 'Browser',
+      brand: 'Web',
+      model: 'Simulator',
+      cutoutType: 'CENTER_HOLE',
+      cutoutGapWidthDp: 44,
+      recommendedWidthDp: 212,
+      recommendedHeightDp: 35,
+      recommendedTopMarginDp: 6,
+      refreshRate: 60,
+    }
+  }
+  try {
+    return await NativeLauncher.getUniversalDeviceProfile()
+  } catch {
+    return null
   }
 }

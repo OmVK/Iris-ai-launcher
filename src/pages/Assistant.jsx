@@ -894,6 +894,34 @@ export default function Assistant({
                       <span>{wakeWordEnabled ? 'Hey Iris: ON' : 'Hey Iris'}</span>
                     </button>
 
+                    {/* Smart Multi-Task Routines */}
+                    <button
+                      type="button"
+                      onClick={() => submitPrompt('Good morning')}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-amber-300/90 hover:text-amber-200 shrink-0 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">wb_sunny</span>
+                      <span>Morning</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => submitPrompt('Focus mode')}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-purple-300/90 hover:text-purple-200 shrink-0 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">self_improvement</span>
+                      <span>Focus Mode</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => submitPrompt('Boost RAM and check battery status')}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-emerald-300/90 hover:text-emerald-200 shrink-0 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">bolt</span>
+                      <span>Boost &amp; Status</span>
+                    </button>
+
                     {/* Diagnostics Terminal */}
                     <button
                       type="button"

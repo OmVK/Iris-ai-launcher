@@ -6,14 +6,14 @@ import HapticFeedback from '../utils/HapticFeedback'
 
 export default function BottomNavBar({ activePage, setActivePage, showAppLabels = true }) {
   const { dockColumns, dockBackground, dockHoldAssistant } = useThemeStore()
-  const { isListening, isSpeaking } = useAssistantStore()
+  const { isListening, isSpeaking, isGenerating } = useAssistantStore()
   const { activeGlow } = useNotificationStore()
   const [collapsed, setCollapsed] = useState(false)
   const collapseTimer = useRef(null)
   const navRef = useRef(null)
   const holdTimerRef = useRef(null)
 
-  const isAiActive = isListening || isSpeaking
+  const isAiActive = isListening || isSpeaking || isGenerating
 
   const tabs = useMemo(() => [
     { id: 'home', label: 'Home', icon: 'home_app_logo', filled: true },

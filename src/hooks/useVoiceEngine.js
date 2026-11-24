@@ -83,6 +83,7 @@ export default function useVoiceEngine() {
   const backendIsGeneratingRef = useRef(false)
   const backendAbortRef = useRef(null)
   const startVoiceInputRef = useRef(null)
+  const lastActivateTimeRef = useRef(0)
 
   useEffect(() => {
     mountedRef.current = true
@@ -386,12 +387,13 @@ export default function useVoiceEngine() {
   }, [stopSpeaking, stopVoiceInput, setChatLog, setIsLiveVoice])
 
   const activateAssistant = useCallback((inlineQuery = '') => {
+    const now = Date.now()
+    if (now - lastActivateTimeRef.current < 600) return
+    lastActivateTimeRef.current = now
     playActivationTone().catch(() => {})
     HapticFeedback.double()
-    const targetMode = useAIStore.getState().assistantWakeTarget || 'HOME_OVERLAY'
     const currentPage = useAppStore.getState().activePage
-    if (targetMode === 'FULL_LIVE_AI' || currentPage === 'assistant') {
-      setActivePage('assistant')
+    if (currentPage === 'assistant') {
       if (inlineQuery && inlineQuery.length >= 2 && submitPromptRef.current) {
         isLiveVoiceRef.current = true
         setIsLiveVoice(true)
@@ -402,14 +404,11 @@ export default function useVoiceEngine() {
         }, 80)
       }
     } else {
-      setActivePage('home')
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('iris-trigger-assistant', {
-          detail: inlineQuery && inlineQuery.length >= 2 ? { initialCommand: inlineQuery } : {}
-        }))
-      }, 60)
+      window.dispatchEvent(new CustomEvent('iris-trigger-assistant', {
+        detail: inlineQuery && inlineQuery.length >= 2 ? { initialCommand: inlineQuery } : {}
+      }))
     }
-  }, [handleOpenLiveMode, setActivePage, setIsLiveVoice])
+  }, [handleOpenLiveMode, setIsLiveVoice])
 
   // System-wide Digital Assistant Trigger (ACTION_ASSIST / VOICE_COMMAND / Quick Settings Tile),
   // Home Gesture / Dock Hold Trigger ('iris-activate-assistant'), & Incoming Call Hands-Free Auto-Wake
@@ -437,10 +436,7 @@ export default function useVoiceEngine() {
         if (useAIStore.getState().callAutoWakeEnabled) {
           playActivationTone().catch(() => {})
           HapticFeedback.double()
-          setActivePage('home')
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
-          }, 120)
+          window.dispatchEvent(new CustomEvent('iris-trigger-assistant'))
         }
       } else {
         window.__iris_incoming_call_ringing = false

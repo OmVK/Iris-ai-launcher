@@ -2,9 +2,10 @@ import { useCallback } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import { processCommand } from '../utils/OfflineCommandEngine'
 import { handleSideEffect } from '../utils/offlineSideEffects'
-import { queryIrisAI } from '../utils/aiQueryBridge'
-import { executeDeviceAgentIntent } from '../utils/aiAgentTools'
+import { queryIrisAI, syncActionTurnToAssistantStore } from '../utils/aiQueryBridge'
+import { executeDeviceAgentIntent, updateLastAgentReply } from '../utils/aiAgentTools'
 import { launchApp as nativeLaunch } from '../components/LauncherPlugin'
+import { useAssistantStore } from '../stores/assistantStore'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
@@ -22,7 +23,7 @@ export default function useOfflineAssistantCommand({
   pendingContextRef, pendingSuggestionsRef, pendingUninstallAppRef,
   pendingReminderTextRef, speechInterruptRef, conversationHistoryRef,
   mountedRef, timeoutsRef, isVisibleRef,
-  setStatusText, setIsProcessing,
+  setStatusText, setIsProcessing, setUserTranscript,
   startListening, onClose,
   dispatchCommand, speakTextNative,
 }) {
@@ -47,8 +48,12 @@ export default function useOfflineAssistantCommand({
 
   const handleCommand = useCallback(async (text) => {
     setIsProcessing(true)
+    if (typeof setUserTranscript === 'function') setUserTranscript(text)
+    useAssistantStore.getState().setActiveUserTranscript(text)
+    useAssistantStore.getState().setIsGenerating(true)
     let didClose = false
     let shouldKeepListening = false
+    let aiQueryRan = false
     try {
       let result;
 
@@ -130,28 +135,46 @@ export default function useOfflineAssistantCommand({
       } else {
         const cleanedInput = text.trim().replace(/^(?:hey\s+iris|hi\s+iris|ok\s+iris|okay\s+iris|hello\s+iris|yo\s+iris|iris|ask\s+iris|hey\s+ai|hi\s+ai|ask\s+ai)[,.\s]+/i, '').trim() || text.trim()
         result = await processCommand(cleanedInput)
-        
-        // If local engine didn't match a direct rule, first check our comprehensive Gemini/Bixby device intent executor, then route to Iris AI brain
+
         if (!result.commands?.length && !result.sideEffects?.length && !result.requireMoreContext && !result.response) {
-          const deviceActionSummary = await executeDeviceAgentIntent(cleanedInput)
-          try {
-            setStatusText('Thinking...')
-            const promptForAi = deviceActionSummary ? `${cleanedInput}\n${deviceActionSummary}` : cleanedInput
-            const aiResponse = await queryIrisAI(promptForAi, (chunk) => setStatusText(chunk), conversationHistoryRef.current)
-            if (aiResponse) {
-              result = { success: true, response: aiResponse }
-              shouldKeepListening = false
-            } else if (deviceActionSummary) {
-              const firstAction = deviceActionSummary.split('\n').find(l => l.trim().startsWith('- '))?.replace(/^\s*-\s*/, '') || 'Done.'
-              result = { success: true, response: firstAction }
+          const deviceActionSummary = await executeDeviceAgentIntent(cleanedInput, (liveBadges) => {
+            if (Array.isArray(liveBadges) && liveBadges.length > 0) {
+              setStatusText(liveBadges.map((b) => b.label).join('  →  '))
             }
-          } catch (err) {
-            console.warn('[Iris AI query failed]', err)
-            if (deviceActionSummary) {
-              const firstAction = deviceActionSummary.split('\n').find(l => l.trim().startsWith('- '))?.replace(/^\s*-\s*/, '') || 'Done.'
-              result = { success: true, response: firstAction }
-            } else {
-              result = { success: true, response: err?.message || "I'm ready. What would you like to do?" }
+          })
+
+          const actionLines = deviceActionSummary
+            ? deviceActionSummary
+                .split('\n')
+                .filter((l) => l.trim().startsWith('- '))
+                .map((l) => l.replace(/^\s*-\s*/, '').trim())
+            : []
+
+          const hasKnowledgeQuestion = /\b(?:who|what|why|how|when|where|explain|tell\s+me|summarize|analyze|write|draft|translate|joke|story|weather|news|meaning|define|difference)\b/i.test(cleanedInput)
+
+          if (actionLines.length > 0 && !hasKnowledgeQuestion) {
+            const conciseSummary = actionLines.join(' ')
+            result = { success: true, response: conciseSummary }
+            shouldKeepListening = false
+          } else {
+            try {
+              setStatusText('Thinking...')
+              const promptForAi = deviceActionSummary ? `${cleanedInput}\n${deviceActionSummary}` : cleanedInput
+              const aiResponse = await queryIrisAI(promptForAi, (chunk) => setStatusText(chunk), conversationHistoryRef.current)
+              if (aiResponse) {
+                result = { success: true, response: aiResponse }
+                shouldKeepListening = false
+                aiQueryRan = true
+              } else if (actionLines.length > 0) {
+                result = { success: true, response: actionLines.join(' ') }
+              }
+            } catch (err) {
+              console.warn('[Iris AI query failed]', err)
+              if (actionLines.length > 0) {
+                result = { success: true, response: actionLines.join(' ') }
+              } else {
+                result = { success: true, response: err?.message || "I'm ready. What would you like to do?" }
+              }
             }
           }
         }
@@ -212,9 +235,20 @@ export default function useOfflineAssistantCommand({
         }
       }
 
+      if (responseText) {
+        updateLastAgentReply(responseText)
+        if (!didClose && /\?\s*$/.test(responseText.trim())) {
+          shouldKeepListening = true
+        }
+      }
+
       // Action commands (e.g. open app) close immediately
       if (didClose) {
         setStatusText(responseText)
+        useAssistantStore.getState().setActiveAiResponse(responseText)
+        if (!aiQueryRan && responseText && result.success) {
+          syncActionTurnToAssistantStore(text, responseText)
+        }
         if (!speechInterruptRef.current && localStorage.getItem('assistant_tts_enabled') !== 'false') {
           speakTextNative(responseText).catch(() => {})
         }
@@ -223,11 +257,19 @@ export default function useOfflineAssistantCommand({
 
       // Speak response aloud for conversation & AI queries
       if (!speechInterruptRef.current && responseText) {
+        useAssistantStore.getState().setActiveAiResponse(responseText)
+        if (!aiQueryRan && responseText && result.success) {
+          syncActionTurnToAssistantStore(text, responseText)
+        }
         await speakTextNative(responseText, () => {
           setStatusText(responseText)
         })
       } else {
         setStatusText(responseText)
+        useAssistantStore.getState().setActiveAiResponse(responseText)
+        if (!aiQueryRan && responseText && result.success) {
+          syncActionTurnToAssistantStore(text, responseText)
+        }
       }
 
     } catch (e) {
@@ -236,6 +278,7 @@ export default function useOfflineAssistantCommand({
       shouldKeepListening = false
     } finally {
       setIsProcessing(false)
+      useAssistantStore.getState().setIsGenerating(false)
       if (!pendingContextRef.current && !shouldKeepListening) {
         LauncherPlugin.stopOfflineSpeech().catch(() => {})
       }
@@ -254,19 +297,22 @@ export default function useOfflineAssistantCommand({
             if (mountedRef.current && isVisibleRef.current) {
               startListening()
             }
-          }, 300)
+          }, 350)
           timeoutsRef.current.push(tid)
         } else {
+          const currentReply = useAssistantStore.getState().activeAiResponse || ''
+          const wordCount = currentReply.trim().split(/\s+/).filter(Boolean).length
+          const dynamicHoldMs = Math.min(7200, Math.max(2400, wordCount * 260))
           const tid = setTimeout(() => {
-            if (mountedRef.current && isVisibleRef.current && !pendingContextRef.current) {
+            if (mountedRef.current && isVisibleRef.current && !pendingContextRef.current && !window.__iris_typing_followup) {
               if (typeof onClose === 'function') onClose()
             }
-          }, 2200)
+          }, dynamicHoldMs)
           timeoutsRef.current.push(tid)
         }
       }
     }
-  }, [pendingContext, setPendingContext, pendingContextRef, pendingSuggestionsRef, pendingUninstallAppRef, pendingReminderTextRef, speechInterruptRef, conversationHistoryRef, mountedRef, timeoutsRef, isVisibleRef, setStatusText, setIsProcessing, startListening, onClose, dispatchCommand, speakTextNative, handleNotifications])
+  }, [pendingContext, setPendingContext, pendingContextRef, pendingSuggestionsRef, pendingUninstallAppRef, pendingReminderTextRef, speechInterruptRef, conversationHistoryRef, mountedRef, timeoutsRef, isVisibleRef, setStatusText, setIsProcessing, setUserTranscript, startListening, onClose, dispatchCommand, speakTextNative, handleNotifications])
 
   return { handleCommand }
 }

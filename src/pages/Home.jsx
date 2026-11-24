@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
+import React, { useEffect, useCallback, useMemo } from 'react'
 import { launchApp } from '../components/LauncherPlugin'
 import { IRIS_ICON_PACK } from '../utils/IrisIconPack'
-import OfflineAssistantOverlay from '../components/OfflineAssistantOverlay'
 import HudIcon from '../components/HudIcon'
 import HudFallbackIcon from '../components/HudFallbackIcon'
 import HomeGrid from '../components/HomeGrid'
@@ -43,9 +42,6 @@ export default function Home({
 }) {
   const { gridColumns, gridRows, homeIconSize, homeTextSize, layoutStyle, homePages, activeHomePage, setActiveHomePage, homeScreenFolders, setHomeScreenFolders, iconShape } = useThemeStore()
 
-  const [showOfflineAssistant, setShowOfflineAssistant] = useState(false)
-  const [, setAssistantState] = useState({ isListening: false, isProcessing: false })
-
   const {
     activeContextMenu, setActiveContextMenu,
     toastText, setToastText,
@@ -54,17 +50,6 @@ export default function Home({
     handleTriggerUninstall,
     handleOpenAppInfo
   } = useAppContextMenu({ setInstalledApps, onToggleAppLock })
-
-  useEffect(() => {
-    const handler = (e) => {
-      setShowOfflineAssistant(true)
-      if (e?.detail?.initialCommand) {
-        window.__iris_pending_wake_command = e.detail.initialCommand
-      }
-    }
-    window.addEventListener('iris-trigger-assistant', handler)
-    return () => window.removeEventListener('iris-trigger-assistant', handler)
-  }, [])
 
 
   useEffect(() => {
@@ -238,19 +223,6 @@ export default function Home({
         onOpenAppInfo={handleOpenAppInfo}
         onClose={() => setActiveContextMenu(null)}
       />
-
-      <Suspense fallback={null}>
-        <OfflineAssistantOverlay
-          isVisible={showOfflineAssistant}
-          onClose={() => setShowOfflineAssistant(false)}
-          onOpen={() => setShowOfflineAssistant(true)}
-          appsList={installedApps}
-          onStateChange={setAssistantState}
-          isAppActive={isAppActive}
-        />
-      </Suspense>
-
-
     </div>
   )
 }

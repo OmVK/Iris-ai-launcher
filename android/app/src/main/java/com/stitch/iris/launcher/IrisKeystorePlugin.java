@@ -25,6 +25,47 @@ public class IrisKeystorePlugin extends Plugin {
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
+    public static final String NATIVE_ENC_PREFIX = "ENC_V1:";
+
+    public static synchronized String encryptNative(String plaintext) {
+        if (plaintext == null || plaintext.isEmpty()) return "";
+        if (plaintext.startsWith(NATIVE_ENC_PREFIX)) return plaintext;
+        try {
+            SecretKey key = getOrCreateKeyStatic();
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, key);
+            byte[] iv = cipher.getIV();
+            byte[] ciphertext = cipher.doFinal(plaintext.getBytes("UTF-8"));
+            return NATIVE_ENC_PREFIX
+                    + Base64.getEncoder().encodeToString(iv)
+                    + "."
+                    + Base64.getEncoder().encodeToString(ciphertext);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static synchronized String decryptNative(String stored) {
+        if (stored == null || stored.isEmpty()) return "";
+        if (!stored.startsWith(NATIVE_ENC_PREFIX)) {
+            return stored;
+        }
+        try {
+            String payload = stored.substring(NATIVE_ENC_PREFIX.length());
+            String[] parts = payload.split("\\.", 2);
+            if (parts.length != 2) return "";
+            byte[] iv = Base64.getDecoder().decode(parts[0]);
+            byte[] ciphertext = Base64.getDecoder().decode(parts[1]);
+            SecretKey key = getOrCreateKeyStatic();
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            cipher.init(Cipher.DECRYPT_MODE, key, spec);
+            byte[] plaintext = cipher.doFinal(ciphertext);
+            return new String(plaintext, "UTF-8");
+        } catch (Exception e) {
+            return "";
+        }
+    }
 
     @PluginMethod
     public void storeValue(PluginCall call) {
@@ -34,7 +75,7 @@ public class IrisKeystorePlugin extends Plugin {
             return;
         }
         try {
-            SecretKey key = getOrCreateKey();
+            SecretKey key = getOrCreateKeyStatic();
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, key);
             byte[] iv = cipher.getIV();
@@ -67,7 +108,7 @@ public class IrisKeystorePlugin extends Plugin {
             byte[] iv = Base64.getDecoder().decode(parts[0]);
             byte[] ciphertext = Base64.getDecoder().decode(parts[1]);
 
-            SecretKey key = getOrCreateKey();
+            SecretKey key = getOrCreateKeyStatic();
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
             cipher.init(Cipher.DECRYPT_MODE, key, spec);
@@ -95,7 +136,7 @@ public class IrisKeystorePlugin extends Plugin {
         }
     }
 
-    private SecretKey getOrCreateKey() throws Exception {
+    private static synchronized SecretKey getOrCreateKeyStatic() throws Exception {
         KeyStore ks = KeyStore.getInstance(KEYSTORE_PROVIDER);
         ks.load(null);
 

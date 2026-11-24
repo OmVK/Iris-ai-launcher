@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { SecureStorage } from '../utils/secureStorage'
 import { getLS } from '../utils/storage'
-import { syncAIConfig } from '../components/LauncherPlugin'
+import { syncAIConfig, getAIConfig } from '../components/LauncherPlugin'
 import { fetchLiveGeminiModels, fetchLiveGroqModels } from '../utils/modelResolver'
 
 const DEPRECATED_GEMINI_MODELS = new Set(['gemini-1.0-pro', 'gemini-pro', 'gemini-1.5-flash', 'gemini-1.5-pro'])
@@ -41,10 +41,32 @@ export const useAIStore = create((set, get) => ({
   _keysLoaded: false,
 
   loadKeys: async () => {
-    await SecureStorage.migrateAll()
-    const geminiKey = await SecureStorage.getItem('gemini_api_key') || ''
-    const groqKey = await SecureStorage.getItem('groq_api_key') || ''
-    const cartesiaKey = await SecureStorage.getItem('cartesia_api_key') || localStorage.getItem('cartesia_api_key') || ''
+    try {
+      await SecureStorage.migrateAll()
+    } catch {}
+    let geminiKey = ''
+    let groqKey = ''
+    let cartesiaKey = ''
+    try {
+      geminiKey = await SecureStorage.getItem('gemini_api_key') || localStorage.getItem('gemini_api_key') || ''
+      groqKey = await SecureStorage.getItem('groq_api_key') || localStorage.getItem('groq_api_key') || ''
+      cartesiaKey = await SecureStorage.getItem('cartesia_api_key') || localStorage.getItem('cartesia_api_key') || ''
+    } catch {}
+
+    if (!geminiKey || !groqKey) {
+      try {
+        const nativeCfg = await getAIConfig()
+        if (!geminiKey && nativeCfg?.geminiKey) {
+          geminiKey = nativeCfg.geminiKey
+          SecureStorage.setItem('gemini_api_key', geminiKey).catch(() => {})
+        }
+        if (!groqKey && nativeCfg?.groqKey) {
+          groqKey = nativeCfg.groqKey
+          SecureStorage.setItem('groq_api_key', groqKey).catch(() => {})
+        }
+      } catch {}
+    }
+
     set({ geminiKey, groqKey, cartesiaKey, _keysLoaded: true })
     syncToNative(get().llmBackend, geminiKey, groqKey, get().geminiModel, get().groqModel)
 

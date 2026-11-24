@@ -32,10 +32,25 @@ public class MainActivity extends BridgeActivity {
         // Disable WebView user gesture requirement for audio playback & boost renderer priority
         if (bridge != null && bridge.getWebView() != null) {
             android.webkit.WebView webView = bridge.getWebView();
+            try {
+                android.webkit.WebView.setWebContentsDebuggingEnabled(LauncherPlugin.isDeveloperDebugActive());
+            } catch (Exception ignored) {}
             webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 webView.setRendererPriorityPolicy(android.webkit.WebView.RENDERER_PRIORITY_IMPORTANT, false);
             }
+            webView.setWebChromeClient(new com.getcapacitor.BridgeWebChromeClient(bridge) {
+                @Override
+                public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                    if (LauncherPlugin.isDeveloperDebugActive()) {
+                        return super.onConsoleMessage(consoleMessage);
+                    }
+                    if (consoleMessage != null && consoleMessage.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                        android.util.Log.e("IrisWebView", "JS Error at line " + consoleMessage.lineNumber() + " [REDACTED]");
+                    }
+                    return true;
+                }
+            });
             webView.setWebViewClient(new com.getcapacitor.BridgeWebViewClient(bridge) {
                 @Override
                 public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView view, android.webkit.WebResourceRequest request) {
@@ -134,7 +149,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void handleAssistIntent(Intent intent) {
-        if (intent == null) return;
+        if (intent == null || IrisFloatingCopilot.isScreenLocked(this)) return;
         String action = intent.getAction();
         boolean isAssist = Intent.ACTION_ASSIST.equals(action)
                 || "android.intent.action.VOICE_COMMAND".equals(action)

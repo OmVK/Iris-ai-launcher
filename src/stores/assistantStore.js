@@ -55,6 +55,7 @@ export const useAssistantStore = create((set, get) => ({
   isPrivateSession: false,
   webSearchEnabled: false,
   isLiveScreenOpen: false,
+  showVoiceOverlay: false,
   activeUserTranscript: '',
   activeAiResponse: '',
   showLiveConfigModal: false,
@@ -78,6 +79,7 @@ export const useAssistantStore = create((set, get) => ({
   setIsPrivateSession: (v) => set({ isPrivateSession: v }),
   setWebSearchEnabled: (v) => set({ webSearchEnabled: v }),
   setIsLiveScreenOpen: (v) => set({ isLiveScreenOpen: v }),
+  setShowVoiceOverlay: (v) => set({ showVoiceOverlay: v }),
   setActiveUserTranscript: (v) => set({ activeUserTranscript: v }),
   setActiveAiResponse: (v) => set({ activeAiResponse: v }),
   setShowLiveConfigModal: (v) => set({ showLiveConfigModal: v }),
@@ -96,6 +98,12 @@ export const useAssistantStore = create((set, get) => ({
   setActiveSessionId: (v) => {
     try { localStorage.setItem('iris_assistant_active_session', v) } catch {}
     set({ activeSessionId: v })
+  },
+
+  hydrateEncryptedSessions: () => {
+    const loaded = loadSessions()
+    const log = loadChatLog(loaded)
+    set({ sessions: loaded, chatLog: log })
   },
 
   autoTitleSession: (firstPromptText) => {
@@ -209,3 +217,11 @@ export const useAssistantStore = create((set, get) => ({
     }
   },
 }))
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('IRIS_SECURE_VAULT_HYDRATED', () => {
+    try {
+      useAssistantStore.getState().hydrateEncryptedSessions()
+    } catch {}
+  })
+}

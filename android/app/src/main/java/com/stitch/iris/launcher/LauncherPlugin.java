@@ -59,8 +59,14 @@ public class LauncherPlugin extends Plugin {
     private volatile PluginCall currentRecognitionCall = null;
     private final android.os.Handler recognitionHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable recognitionTimeoutRunnable = null;
+    private Runnable developerDebugAutoOffRunnable = null;
+    private static volatile long developerDebugUntilMs = 0L;
     private volatile boolean callMonitorRegistered = false;
     private static final java.util.concurrent.ConcurrentHashMap<String, byte[]> iconMemoryCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static boolean isDeveloperDebugActive() {
+        return System.currentTimeMillis() < developerDebugUntilMs;
+    }
 
     public static byte[] getOrCreateAppIconBytes(Context context, String packageId) {
         if (context == null || packageId == null || packageId.isEmpty()) return null;
@@ -468,6 +474,10 @@ public class LauncherPlugin extends Plugin {
     private static volatile boolean pendingVoiceAssistTrigger = false;
 
     public static void onVoiceAssistTriggered() {
+        if (instance != null && IrisFloatingCopilot.isScreenLocked(instance.getContext())) {
+            pendingVoiceAssistTrigger = false;
+            return;
+        }
         playAssistantChime();
         if (instance != null) {
             try {
@@ -970,10 +980,115 @@ public class LauncherPlugin extends Plugin {
         call.reject("Flashlight control failed");
     }
 
+    private boolean tryStartComponent(String pkg, String cls) {
+        try {
+            Intent i = new Intent();
+            i.setClassName(pkg, cls);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean tryStartAction(String action) {
+        try {
+            Intent i = new Intent(action);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     @PluginMethod
     public void openSystemSettings(PluginCall call) {
-        String setting = call.getString("setting", call.getString("type", "wifi"));
+        String setting = call.getString("setting", call.getString("type", "wifi")).toLowerCase().trim();
+        String brand = (Build.MANUFACTURER + " " + Build.BRAND).toLowerCase();
         try {
+            if ("wifi_panel".equals(setting) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (tryStartAction("android.settings.panel.action.INTERNET_CONNECTIVITY")) {
+                    call.resolve();
+                    return;
+                }
+            }
+            if ("volume_panel".equals(setting) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (tryStartAction("android.settings.panel.action.VOLUME")) {
+                    call.resolve();
+                    return;
+                }
+            }
+            if ("nfc".equals(setting)) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && tryStartAction("android.settings.panel.action.NFC")) {
+                    call.resolve();
+                    return;
+                }
+                if (tryStartAction(android.provider.Settings.ACTION_NFC_SETTINGS)) {
+                    call.resolve();
+                    return;
+                }
+            }
+            if ("hotspot".equals(setting) || "tethering".equals(setting)) {
+                if (tryStartComponent("com.android.settings", "com.android.settings.TetherSettings")
+                        || tryStartComponent("com.android.settings", "com.android.settings.Settings$TetherSettingsActivity")
+                        || tryStartAction("android.settings.TETHER_SETTINGS")
+                        || tryStartAction(android.provider.Settings.ACTION_WIRELESS_SETTINGS)) {
+                    call.resolve();
+                    return;
+                }
+            }
+            if ("autostart".equals(setting) || "background_apps".equals(setting)) {
+                if (brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco")) {
+                    if (tryStartComponent("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")) {
+                        call.resolve();
+                        return;
+                    }
+                } else if (brand.contains("samsung")) {
+                    if (tryStartComponent("com.samsung.android.lool", "com.samsung.android.sm.battery.ui.BatteryActivity")
+                            || tryStartComponent("com.samsung.android.sm", "com.samsung.android.sm.ui.battery.BatteryActivity")) {
+                        call.resolve();
+                        return;
+                    }
+                } else if (brand.contains("oneplus") || brand.contains("oppo") || brand.contains("realme")) {
+                    if (tryStartComponent("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity")
+                            || tryStartComponent("com.oneplus.security", "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity")) {
+                        call.resolve();
+                        return;
+                    }
+                } else if (brand.contains("vivo") || brand.contains("iqoo")) {
+                    if (tryStartComponent("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")) {
+                        call.resolve();
+                        return;
+                    }
+                }
+                if (tryStartAction(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) {
+                    call.resolve();
+                    return;
+                }
+            }
+            if ("data_usage".equals(setting)) {
+                if (tryStartAction("android.settings.DATA_USAGE_SETTINGS")
+                        || tryStartAction(android.provider.Settings.ACTION_WIRELESS_SETTINGS)) {
+                    call.resolve();
+                    return;
+                }
+            }
+            if ("connected_devices".equals(setting) || "cast".equals(setting)) {
+                if (tryStartAction(android.provider.Settings.ACTION_CAST_SETTINGS)
+                        || tryStartAction(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)) {
+                    call.resolve();
+                    return;
+                }
+            }
+            if ("refresh_rate".equals(setting) || "eye_comfort".equals(setting) || "dark_mode".equals(setting)) {
+                if (tryStartAction(android.provider.Settings.ACTION_DISPLAY_SETTINGS)) {
+                    call.resolve();
+                    return;
+                }
+            }
+
             Intent intent;
             switch (setting) {
                 case "wifi":
@@ -992,6 +1107,7 @@ public class LauncherPlugin extends Plugin {
                     intent = new Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS);
                     break;
                 case "battery":
+                case "battery_saver":
                     intent = new Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS);
                     break;
                 case "storage":
@@ -1037,7 +1153,14 @@ public class LauncherPlugin extends Plugin {
             getContext().startActivity(intent);
             call.resolve();
         } catch (Exception e) {
-            call.reject("Failed to open settings: " + e.getMessage());
+            try {
+                Intent fallback = new Intent(android.provider.Settings.ACTION_SETTINGS);
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(fallback);
+                call.resolve();
+            } catch (Exception e2) {
+                call.reject("Failed to open settings: " + e.getMessage());
+            }
         }
     }
 
@@ -1539,9 +1662,16 @@ public class LauncherPlugin extends Plugin {
             int devOpt = Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0);
             ret.put("isDevOptionsEnabled", devOpt == 1);
 
-            // 4. USB Debugging / ADB
+            // 4. USB Debugging / ADB & Wireless Debugging
             int adb = Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.ADB_ENABLED, 0);
             ret.put("isAdbEnabled", adb == 1);
+            int wirelessAdb = 0;
+            try {
+                wirelessAdb = Settings.Global.getInt(ctx.getContentResolver(), "adb_wifi_enabled", 0);
+            } catch (Exception ignored) {}
+            ret.put("isWirelessAdbEnabled", wirelessAdb == 1);
+            ret.put("isDeveloperDebugActive", isDeveloperDebugActive());
+            ret.put("developerDebugRemainingSec", isDeveloperDebugActive() ? Math.max(0L, (developerDebugUntilMs - System.currentTimeMillis()) / 1000L) : 0L);
 
             // 5. Root / SU Binary Check
             boolean isRooted = false;
@@ -1569,6 +1699,58 @@ public class LauncherPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("Failed to retrieve security posture", e);
         }
+    }
+
+    @PluginMethod
+    public void setDeveloperDebugMode(PluginCall call) {
+        boolean enable = Boolean.TRUE.equals(call.getBoolean("enable", false));
+        int minutes = Math.max(1, Math.min(30, call.getInt("minutes", 15)));
+        if (developerDebugAutoOffRunnable != null) {
+            recognitionHandler.removeCallbacks(developerDebugAutoOffRunnable);
+            developerDebugAutoOffRunnable = null;
+        }
+        if (enable) {
+            developerDebugUntilMs = System.currentTimeMillis() + (minutes * 60 * 1000L);
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    try {
+                        android.webkit.WebView.setWebContentsDebuggingEnabled(true);
+                    } catch (Exception ignored) {}
+                });
+            }
+            developerDebugAutoOffRunnable = () -> {
+                developerDebugUntilMs = 0L;
+                try {
+                    android.webkit.WebView.setWebContentsDebuggingEnabled(false);
+                } catch (Exception ignored) {}
+                JSObject evt = new JSObject();
+                evt.put("active", false);
+                evt.put("remainingSec", 0);
+                notifyListeners("onDeveloperDebugChanged", evt);
+            };
+            recognitionHandler.postDelayed(developerDebugAutoOffRunnable, minutes * 60 * 1000L);
+        } else {
+            developerDebugUntilMs = 0L;
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    try {
+                        android.webkit.WebView.setWebContentsDebuggingEnabled(false);
+                    } catch (Exception ignored) {}
+                });
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("active", isDeveloperDebugActive());
+        ret.put("remainingSec", isDeveloperDebugActive() ? Math.max(0L, (developerDebugUntilMs - System.currentTimeMillis()) / 1000L) : 0L);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getDeveloperDebugStatus(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("active", isDeveloperDebugActive());
+        ret.put("remainingSec", isDeveloperDebugActive() ? Math.max(0L, (developerDebugUntilMs - System.currentTimeMillis()) / 1000L) : 0L);
+        call.resolve(ret);
     }
 
     @PluginMethod
@@ -2107,10 +2289,17 @@ public class LauncherPlugin extends Plugin {
             call.resolve(ret);
             return;
         }
+        if (!"lock_screen".equals(action) && IrisFloatingCopilot.isScreenLocked(getContext())) {
+            ret.put("success", false);
+            ret.put("error", "Device is locked");
+            call.resolve(ret);
+            return;
+        }
         boolean ok = false;
         try {
             switch (action) {
                 case "lock_screen":
+                    service.stopContinuousScroll();
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                         ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN);
                     }
@@ -2122,6 +2311,12 @@ public class LauncherPlugin extends Plugin {
                     break;
                 case "recents":
                     ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS);
+                    break;
+                case "back":
+                    ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
+                    break;
+                case "home":
+                    ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
                     break;
                 case "split_screen":
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -2137,6 +2332,32 @@ public class LauncherPlugin extends Plugin {
                 case "power_dialog":
                     ok = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_POWER_DIALOG);
                     break;
+                case "scroll_down":
+                    ok = service.performScrollStep("down");
+                    break;
+                case "scroll_up":
+                    ok = service.performScrollStep("up");
+                    break;
+                case "auto_scroll_down":
+                    service.startContinuousScroll("down", 2400);
+                    ok = true;
+                    break;
+                case "auto_scroll_up":
+                    service.startContinuousScroll("up", 2400);
+                    ok = true;
+                    break;
+                case "auto_scroll_fast":
+                    service.startContinuousScroll("down", 1350);
+                    ok = true;
+                    break;
+                case "auto_scroll_slow":
+                    service.startContinuousScroll("down", 3800);
+                    ok = true;
+                    break;
+                case "stop_scroll":
+                    service.stopContinuousScroll();
+                    ok = true;
+                    break;
             }
         } catch (Exception e) {
             Log.e(TAG, "Error performing accessibility action: " + action, e);
@@ -2147,10 +2368,291 @@ public class LauncherPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void toggleQuickSetting(PluginCall call) {
+        String tile = call.getString("tile", "").toLowerCase().trim();
+        JSObject ret = new JSObject();
+        if (IrisFloatingCopilot.isScreenLocked(getContext())) {
+            ret.put("success", false);
+            ret.put("error", "Device is locked");
+            call.resolve(ret);
+            return;
+        }
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        if (service == null) {
+            ret.put("success", false);
+            ret.put("needsPermission", true);
+            call.resolve(ret);
+            return;
+        }
+        String[] candidates;
+        switch (tile) {
+            case "hotspot":
+                candidates = new String[] { "Mobile Hotspot", "Hotspot", "Personal hotspot", "Wi-Fi hotspot" };
+                break;
+            case "autorotate":
+            case "rotation":
+                candidates = new String[] { "Auto-rotate", "Auto rotate", "Portrait", "Landscape" };
+                break;
+            case "location":
+            case "gps":
+                candidates = new String[] { "Location", "GPS" };
+                break;
+            case "battery_saver":
+            case "power_saving":
+                candidates = new String[] { "Power saving", "Battery Saver", "Battery saver", "Ultra battery saver" };
+                break;
+            case "dark_mode":
+            case "dark_theme":
+                candidates = new String[] { "Dark mode", "Dark theme" };
+                break;
+            case "eye_comfort":
+            case "night_light":
+                candidates = new String[] { "Eye comfort shield", "Night Light", "Eye comfort", "Reading mode", "Eye care" };
+                break;
+            case "nfc":
+                candidates = new String[] { "NFC" };
+                break;
+            case "bluetooth":
+                candidates = new String[] { "Bluetooth" };
+                break;
+            case "wifi":
+                candidates = new String[] { "Wi-Fi", "WiFi", "Internet" };
+                break;
+            case "airplane":
+                candidates = new String[] { "Airplane mode", "Flight mode" };
+                break;
+            default:
+                candidates = new String[] { tile };
+                break;
+        }
+        service.toggleQuickSettingsTile(candidates, (matched) -> {
+            ret.put("success", matched != null);
+            ret.put("matchedTile", matched != null ? matched : "");
+            ret.put("needsPermission", false);
+            call.resolve(ret);
+        });
+    }
+
+    @PluginMethod
+    public void launchSplitScreenPair(PluginCall call) {
+        String firstPkg = call.getString("firstPackage", "").trim();
+        String secondPkg = call.getString("secondPackage", "").trim();
+        JSObject ret = new JSObject();
+        if (IrisFloatingCopilot.isScreenLocked(getContext())) {
+            ret.put("success", false);
+            ret.put("error", "Device is locked");
+            call.resolve(ret);
+            return;
+        }
+        if (firstPkg.isEmpty() || secondPkg.isEmpty()) {
+            ret.put("success", false);
+            ret.put("error", "Both firstPackage and secondPackage are required");
+            call.resolve(ret);
+            return;
+        }
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        if (service == null) {
+            ret.put("success", false);
+            ret.put("needsPermission", true);
+            call.resolve(ret);
+            return;
+        }
+        try {
+            PackageManager pm = getContext().getPackageManager();
+            Intent intentA = pm.getLaunchIntentForPackage(firstPkg);
+            Intent intentB = pm.getLaunchIntentForPackage(secondPkg);
+            if (intentA == null || intentB == null) {
+                ret.put("success", false);
+                ret.put("error", "Could not resolve launch intents for pair");
+                call.resolve(ret);
+                return;
+            }
+            intentA.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            getContext().startActivity(intentA);
+
+            recognitionHandler.postDelayed(() -> {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN);
+                    }
+                } catch (Exception ignored) {}
+
+                recognitionHandler.postDelayed(() -> {
+                    try {
+                        intentB.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            intentB.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+                        }
+                        getContext().startActivity(intentB);
+                        ret.put("success", true);
+                        ret.put("firstPackage", firstPkg);
+                        ret.put("secondPackage", secondPkg);
+                        call.resolve(ret);
+                    } catch (Exception e2) {
+                        ret.put("success", false);
+                        ret.put("error", e2.getMessage());
+                        call.resolve(ret);
+                    }
+                }, 720);
+            }, 820);
+        } catch (Exception e) {
+            ret.put("success", false);
+            ret.put("error", e.getMessage());
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
+    public void getUniversalDeviceProfile(PluginCall call) {
+        if (getActivity() == null) {
+            call.reject("Activity unavailable");
+            return;
+        }
+        getActivity().runOnUiThread(() -> {
+            try {
+                JSObject ret = new JSObject();
+                Context ctx = getContext();
+                android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                float density = dm.density > 0 ? dm.density : 2.75f;
+                int screenWidthDp = Math.round(dm.widthPixels / density);
+                int screenHeightDp = Math.round(dm.heightPixels / density);
+
+                String manufacturer = Build.MANUFACTURER != null ? Build.MANUFACTURER : "Android";
+                String brand = Build.BRAND != null ? Build.BRAND : "Android";
+                String model = Build.MODEL != null ? Build.MODEL : "Phone";
+                ret.put("manufacturer", manufacturer);
+                ret.put("brand", brand);
+                ret.put("model", model);
+                ret.put("sdkInt", Build.VERSION.SDK_INT);
+                ret.put("screenWidthDp", screenWidthDp);
+                ret.put("screenHeightDp", screenHeightDp);
+
+                float refreshRate = 60f;
+                try {
+                    android.view.Display display = getActivity().getWindowManager().getDefaultDisplay();
+                    if (display != null) refreshRate = display.getRefreshRate();
+                } catch (Exception ignored) {}
+                ret.put("refreshRate", Math.round(refreshRate));
+
+                String cutoutType = "CENTER_HOLE";
+                int cutoutWidthDp = 42;
+                int cutoutHeightDp = 28;
+                int recommendedTopMarginDp = 6;
+                int recommendedWidthDp = 212;
+                int recommendedHeightDp = 35;
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    android.view.WindowInsets insets = getActivity().getWindow().getDecorView().getRootWindowInsets();
+                    if (insets != null && insets.getDisplayCutout() != null) {
+                        android.view.DisplayCutout dc = insets.getDisplayCutout();
+                        int safeTopDp = Math.round(dc.getSafeInsetTop() / density);
+                        java.util.List<android.graphics.Rect> rects = dc.getBoundingRects();
+                        if (rects != null && !rects.isEmpty()) {
+                            android.graphics.Rect topRect = rects.get(0);
+                            int cLeftDp = Math.round(topRect.left / density);
+                            int cRightDp = Math.round(topRect.right / density);
+                            int cTopDp = Math.round(topRect.top / density);
+                            int cWidthDp = Math.max(24, cRightDp - cLeftDp);
+                            int cHeightDp = Math.max(20, Math.round(topRect.height() / density));
+                            int centerDiffDp = Math.abs(((cLeftDp + cRightDp) / 2) - (screenWidthDp / 2));
+
+                            cutoutWidthDp = cWidthDp + 14;
+                            cutoutHeightDp = cHeightDp;
+                            recommendedTopMarginDp = Math.max(3, Math.min(12, cTopDp > 2 ? cTopDp - 1 : 5));
+                            recommendedHeightDp = Math.max(34, Math.min(44, Math.max(cHeightDp + 6, safeTopDp > 0 ? safeTopDp - recommendedTopMarginDp + 2 : 35)));
+
+                            if (centerDiffDp > 45) {
+                                cutoutType = "CORNER_HOLE";
+                                cutoutWidthDp = 16;
+                                recommendedWidthDp = 210;
+                            } else if (cWidthDp > 75) {
+                                cutoutType = "WIDE_NOTCH";
+                                recommendedWidthDp = Math.min(screenWidthDp - 36, cWidthDp + 150);
+                            } else if (cWidthDp > 42) {
+                                cutoutType = "WIDE_PILL";
+                                recommendedWidthDp = Math.min(screenWidthDp - 40, cWidthDp + 164);
+                            } else {
+                                cutoutType = "CENTER_HOLE";
+                                recommendedWidthDp = Math.max(204, Math.min(244, cWidthDp + 178));
+                            }
+                        }
+                    } else {
+                        cutoutType = "NO_CUTOUT";
+                        cutoutWidthDp = 16;
+                        recommendedTopMarginDp = 8;
+                        recommendedWidthDp = 214;
+                        recommendedHeightDp = 35;
+                    }
+                }
+
+                ret.put("cutoutType", cutoutType);
+                ret.put("cutoutGapWidthDp", cutoutWidthDp);
+                ret.put("cutoutHeightDp", cutoutHeightDp);
+                ret.put("recommendedWidthDp", recommendedWidthDp);
+                ret.put("recommendedHeightDp", recommendedHeightDp);
+                ret.put("recommendedTopMarginDp", recommendedTopMarginDp);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Failed probing device profile: " + e.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void clickScreenElement(PluginCall call) {
+        String text = call.getString("text", "").trim();
+        JSObject ret = new JSObject();
+        if (IrisFloatingCopilot.isScreenLocked(getContext())) {
+            ret.put("success", false);
+            ret.put("error", "Device is locked");
+            call.resolve(ret);
+            return;
+        }
+        IrisAccessibilityService service = IrisAccessibilityService.getInstance();
+        if (service == null) {
+            ret.put("success", false);
+            ret.put("needsPermission", true);
+            call.resolve(ret);
+            return;
+        }
+        String matched = service.clickElementByText(text);
+        ret.put("success", matched != null);
+        ret.put("matchedText", matched != null ? matched : "");
+        ret.put("needsPermission", false);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void executeShellCommand(PluginCall call) {
         String command = call.getString("command", "").trim();
         if (command.isEmpty()) {
             call.reject("Empty shell command");
+            return;
+        }
+        String lowerCmd = command.toLowerCase();
+        if (lowerCmd.contains("/data/") || lowerCmd.contains("shared_prefs") || lowerCmd.contains("leveldb")
+                || lowerCmd.contains("databases") || lowerCmd.contains("keystore") || lowerCmd.contains(";")
+                || lowerCmd.contains("&&") || lowerCmd.contains("||") || lowerCmd.contains("|")
+                || lowerCmd.contains("`") || lowerCmd.contains("$(") || lowerCmd.contains(">")
+                || lowerCmd.contains("<")) {
+            JSObject blocked = new JSObject();
+            blocked.put("output", "Blocked by IRIS Zero-Trust Sandbox: restricted path or shell operator.");
+            blocked.put("exitCode", 126);
+            blocked.put("durationMs", 0);
+            call.resolve(blocked);
+            return;
+        }
+        String firstToken = lowerCmd.split("\\s+")[0];
+        java.util.Set<String> allowedBins = new java.util.HashSet<>(java.util.Arrays.asList(
+                "ping", "uptime", "df", "free", "ip", "ifconfig", "netstat",
+                "ps", "top", "getprop", "uname", "date", "id", "whoami", "dumpsys"
+        ));
+        if (!allowedBins.contains(firstToken)) {
+            JSObject blocked = new JSObject();
+            blocked.put("output", "Blocked by IRIS Zero-Trust Sandbox: command '" + firstToken + "' is not in diagnostic allowlist.");
+            blocked.put("exitCode", 126);
+            blocked.put("durationMs", 0);
+            call.resolve(blocked);
             return;
         }
         new Thread(() -> {
@@ -2360,6 +2862,37 @@ public class LauncherPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getAIConfig(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences(IrisFloatingCopilot.PREFS_NAME, android.content.Context.MODE_PRIVATE);
+        String rawGemini = prefs.getString("copilot_gemini_key", "");
+        String rawGroq = prefs.getString("copilot_groq_key", "");
+        String rawApi = prefs.getString("copilot_api_key", "");
+        if ((!rawGemini.isEmpty() && !rawGemini.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX))
+                || (!rawGroq.isEmpty() && !rawGroq.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX))
+                || (!rawApi.isEmpty() && !rawApi.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX))) {
+            android.content.SharedPreferences.Editor ed = prefs.edit();
+            if (!rawGemini.isEmpty() && !rawGemini.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX)) {
+                ed.putString("copilot_gemini_key", IrisKeystorePlugin.encryptNative(rawGemini));
+            }
+            if (!rawGroq.isEmpty() && !rawGroq.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX)) {
+                ed.putString("copilot_groq_key", IrisKeystorePlugin.encryptNative(rawGroq));
+            }
+            if (!rawApi.isEmpty() && !rawApi.startsWith(IrisKeystorePlugin.NATIVE_ENC_PREFIX)) {
+                ed.putString("copilot_api_key", IrisKeystorePlugin.encryptNative(rawApi));
+            }
+            ed.apply();
+        }
+        JSObject ret = new JSObject();
+        ret.put("backend", prefs.getString("copilot_backend", "GEMINI"));
+        ret.put("geminiKey", IrisKeystorePlugin.decryptNative(rawGemini));
+        ret.put("groqKey", IrisKeystorePlugin.decryptNative(rawGroq));
+        ret.put("apiKey", IrisKeystorePlugin.decryptNative(rawApi));
+        ret.put("model", prefs.getString("copilot_model", "gemini-2.5-flash"));
+        ret.put("groqModel", prefs.getString("copilot_groq_model", "llama-3.3-70b-versatile"));
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void expandNotificationPanel(PluginCall call) {
         try {
             Object statusBarService = getContext().getSystemService("statusbar");
@@ -2431,6 +2964,10 @@ public class LauncherPlugin extends Plugin {
 
     @PluginMethod
     public void startOfflineSpeech(PluginCall call) {
+        if (IrisFloatingCopilot.isScreenLocked(getContext())) {
+            call.reject("Device is locked");
+            return;
+        }
         getActivity().runOnUiThread(() -> {
             try {
                 if (ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -2558,12 +3095,20 @@ public class LauncherPlugin extends Plugin {
                             }
                         }
                         if (bestMatch != null) {
-                            android.util.Log.d("IrisSpeech", "Final speech matched: " + bestMatch);
+                            if (isDeveloperDebugActive()) {
+                                android.util.Log.d("IrisSpeech", "Final speech matched: " + bestMatch);
+                            } else {
+                                android.util.Log.d("IrisSpeech", "Final speech matched [REDACTED len=" + bestMatch.length() + ", status=OK]");
+                            }
                             JSObject ret = new JSObject();
                             ret.put("text", bestMatch);
                             call.resolve(ret);
                         } else if (lastPartial != null && !lastPartial.trim().isEmpty()) {
-                            android.util.Log.d("IrisSpeech", "Fallback partial speech matched: " + lastPartial);
+                            if (isDeveloperDebugActive()) {
+                                android.util.Log.d("IrisSpeech", "Fallback partial speech matched: " + lastPartial);
+                            } else {
+                                android.util.Log.d("IrisSpeech", "Fallback partial speech matched [REDACTED len=" + lastPartial.trim().length() + ", status=OK]");
+                            }
                             JSObject ret = new JSObject();
                             ret.put("text", lastPartial.trim());
                             call.resolve(ret);
@@ -2578,7 +3123,9 @@ public class LauncherPlugin extends Plugin {
                             for (String m : matches) {
                                 if (m != null && !m.trim().isEmpty()) {
                                     lastPartial = m.trim();
-                                    android.util.Log.d("IrisSpeech", "Partial speech: " + lastPartial);
+                                    if (isDeveloperDebugActive()) {
+                                        android.util.Log.d("IrisSpeech", "Partial speech: " + lastPartial);
+                                    }
                                     notifyListeners("onSpeechPartial", new JSObject().put("text", lastPartial));
                                     break;
                                 }

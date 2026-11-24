@@ -15,6 +15,7 @@ function vibrate(pattern) {
   }
 }
 
+function selection() { vibrate(6) }
 function light() { vibrate(10) }
 function medium() { vibrate(25) }
 function heavy() { vibrate(50) }
@@ -27,6 +28,7 @@ export default {
   isEnabled,
   setEnabled,
   vibrate,
+  selection,
   light,
   medium,
   heavy,

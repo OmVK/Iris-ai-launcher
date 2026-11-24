@@ -34,12 +34,12 @@ const checkCloud = async (backend) => {
   try {
     if (backend === 'GEMINI') {
       const { geminiKey } = useAIStore.getState()
-      key = geminiKey
+      key = geminiKey || await SecureStorage.getItem('gemini_api_key') || localStorage.getItem('gemini_api_key')
     } else if (backend === 'GROQ') {
       const { groqKey } = useAIStore.getState()
-      key = groqKey
+      key = groqKey || await SecureStorage.getItem('groq_api_key') || localStorage.getItem('groq_api_key')
     } else if (backend === 'NVIDIA') {
-      key = await SecureStorage.getItem('nvidia_api_key')
+      key = await SecureStorage.getItem('nvidia_api_key') || localStorage.getItem('nvidia_api_key')
     }
   } catch {}
   if (!key) return { available: false, error: 'No API key configured' }
@@ -121,14 +121,14 @@ export const checkAllBackends = async (force = false) => {
   return results
 }
 
-const getAvailableBackends = () => {
-  return BACKENDS.filter(b => statusCache[b].available === true)
-}
-
-export const getBackendPriorityChain = () => {
-  const available = getAvailableBackends()
-  const chain = ['ONDEVICE', 'GEMINI', 'GROQ', 'NVIDIA', 'OLLAMA']
-  return chain.filter(b => available.includes(b))
+export const getBackendPriorityChain = (preferred) => {
+  const defaultOrder = ['GEMINI', 'GROQ', 'NVIDIA', 'ONDEVICE', 'OLLAMA']
+  const viable = defaultOrder.filter(b => statusCache[b]?.available !== false)
+  const base = viable.length > 0 ? viable : defaultOrder
+  if (preferred && base.includes(preferred)) {
+    return [preferred, ...base.filter(b => b !== preferred)]
+  }
+  return base
 }
 
 export const getBackendStatus = (backend) => {

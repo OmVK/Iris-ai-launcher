@@ -11,6 +11,7 @@ import LiveVoiceFAB from './components/LiveVoiceFAB'
 import LiveConfigModal from './components/LiveConfigModal'
 import FeatureTour from './components/FeatureTour'
 import GracefulDegradation from './components/GracefulDegradation'
+import IrisVoiceOverlay from './components/IrisVoiceOverlay'
 import PowerSaveManager from './utils/PowerSaveManager'
 import WallpaperManager from './utils/WallpaperManager'
 import Home from './pages/Home'
@@ -42,13 +43,24 @@ export default function App() {
   const { activePage, setActivePage, showChronoLock, setShowChronoLock, chronoTarget, setChronoTarget, isVaultUnlocked, setIsVaultUnlocked, showVaultExplorer, setShowVaultExplorer, vaultTab, setVaultTab, lockedApps, toggleAppLock, showArcSearch, setShowArcSearch, isAppActive, setIsAppActive, setupComplete, setSetupComplete } = useAppStore()
   const { themeColor, glassOpacity, wallpaper, hasCustomWallpaper, dpiScale, showAppLabels, use24HourClock, globalIconTheme, activeLiveWallpaper, pageTransitionEffect, pageTransitionSpeed, pageTransitionEasing, fullscreenActive, darkGlassTheme, wallpaperBlur, wallpaperVignette, setThemeColor, setGlassOpacity } = useThemeStore()
   const { llmBackend, setLlmBackend, geminiKey, geminiModel, groqKey, voicePitch, voiceRate } = useAIStore()
-  const { isLiveVoice, isListening, showLiveConfigModal, setShowLiveConfigModal, liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey } = useAssistantStore()
+  const { isLiveVoice, isListening, showVoiceOverlay, setShowVoiceOverlay, showLiveConfigModal, setShowLiveConfigModal, liveSetupEngine, setLiveSetupEngine, liveSetupKey, setLiveSetupKey } = useAssistantStore()
   const { installedApps, setInstalledApps, loadNativeApps, resetToDefaults } = useAppsStore()
   const { powerSaveMode, setPowerSaveMode } = usePowerStore()
   const [showFeatureTour, setShowFeatureTour] = useState(false)
   const [warmPages, setWarmPages] = useState({ widgets: false, assistant: false })
   const drawerSheetRef = useRef(null)
   const mainRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      setShowVoiceOverlay(true)
+      if (e?.detail?.initialCommand) {
+        window.__iris_pending_wake_command = e.detail.initialCommand
+      }
+    }
+    window.addEventListener('iris-trigger-assistant', handler)
+    return () => window.removeEventListener('iris-trigger-assistant', handler)
+  }, [setShowVoiceOverlay])
 
   useEffect(() => {
     if (activePage === 'widgets' && !warmPages.widgets) {
@@ -68,7 +80,10 @@ export default function App() {
 
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useAppGestures({ activePage, setActivePage, setShowArcSearch, launchApp: handleLaunchApp, drawerSheetRef, mainRef })
 
-  useEffect(() => { loadNativeApps() }, [loadNativeApps])
+  useEffect(() => {
+    loadNativeApps()
+    useAIStore.getState().loadKeys().catch(() => {})
+  }, [loadNativeApps])
 
   useEffect(() => {
     WallpaperManager.checkDailyRotation()
@@ -349,6 +364,15 @@ export default function App() {
           isAppActive={isAppActive}
         />
       </div>
+      {showVoiceOverlay && (
+        <IrisVoiceOverlay
+          isVisible={showVoiceOverlay}
+          onClose={() => setShowVoiceOverlay(false)}
+          appsList={installedApps}
+          isAppActive={isAppActive}
+          onNavigate={setActivePage}
+        />
+      )}
       <BottomNavBar activePage={activePage} setActivePage={setActivePage} showAppLabels={showAppLabels} />
       {showChronoLock && <ChronoPinLock onUnlockSuccess={handleUnlockSuccess} onClose={() => setShowChronoLock(false)} source={chronoTarget} />}
       {showVaultExplorer && (

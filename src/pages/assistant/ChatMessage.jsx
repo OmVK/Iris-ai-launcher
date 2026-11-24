@@ -211,6 +211,26 @@ export default function ChatMessage({
               </div>
             )}
 
+            {isIris && Array.isArray(msg.actionBadges) && msg.actionBadges.length > 0 && (
+              <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+                {msg.actionBadges.map((badge, bIdx) => (
+                  <div
+                    key={bIdx}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border backdrop-blur-md ${
+                      badge.ok
+                        ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-200'
+                        : 'bg-amber-500/15 border-amber-400/35 text-amber-200'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[13px]">
+                      {badge.ok ? (badge.icon || 'check_circle') : 'info'}
+                    </span>
+                    <span>{badge.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="font-sans selectable-text">
               {isIris ? <FormattedBlocks text={msg.text} /> : <span className="break-words whitespace-pre-wrap">{msg.text}</span>}
             </div>

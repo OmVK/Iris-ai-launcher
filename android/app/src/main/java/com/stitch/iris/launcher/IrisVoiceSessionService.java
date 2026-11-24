@@ -23,6 +23,11 @@ public class IrisVoiceSessionService extends VoiceInteractionSessionService {
         @Override
         public void onShow(Bundle args, int showFlags) {
             super.onShow(args, showFlags);
+            if (IrisFloatingCopilot.isScreenLocked(getContext())) {
+                Log.d(TAG, "Device is locked — blocking IRIS Voice AI activation on lock screen");
+                hide();
+                return;
+            }
             Log.d(TAG, "System Assist gesture triggered! Launching IRIS Voice AI");
             try {
                 LauncherPlugin.onVoiceAssistTriggered();
