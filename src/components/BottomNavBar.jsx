@@ -11,6 +11,8 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   const [collapsed, setCollapsed] = useState(false)
   const collapseTimer = useRef(null)
   const navRef = useRef(null)
+  const collapsedLayerRef = useRef(null)
+  const expandedLayerRef = useRef(null)
   const holdTimerRef = useRef(null)
 
   const isAiActive = isListening || isSpeaking || isGenerating
@@ -48,13 +50,8 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
     }
   }, [collapsed])
 
-  const handleNavClick = useCallback((id) => {
-    HapticFeedback.light()
-    setActivePage(id)
-    startCollapseTimer()
-  }, [setActivePage, startCollapseTimer])
-
   const handleExpand = useCallback(() => {
+    HapticFeedback.light()
     setCollapsed(false)
     startCollapseTimer()
   }, [startCollapseTimer])
@@ -66,18 +63,249 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   const colWidth = tabsToRender.length * 36
   const colHeight = 32
 
+  const activeWidth = collapsed ? colWidth : expWidth
+  const activeHeight = collapsed ? colHeight : expHeight
+  const activeRadius = collapsed ? 20 : 34
+
+  const springStateRef = useRef({
+    initialized: false,
+    w: activeWidth,
+    h: activeHeight,
+    r: activeRadius,
+    sx: 1,
+    sy: 1,
+    ty: 0,
+    vw: 0,
+    vh: 0,
+    vr: 0,
+    vsx: 0,
+    vsy: 0,
+    vty: 0,
+    targetW: activeWidth,
+    targetH: activeHeight,
+    targetR: activeRadius,
+    prevCollapsed: collapsed,
+    prevAiActive: isAiActive,
+    prevActivePage: activePage,
+    rafId: null,
+    lastTime: 0,
+  })
+
+  const runSpringLoop = useCallback(() => {
+    const s = springStateRef.current
+    const stepSpring = (now) => {
+      const el = navRef.current
+      if (!el) {
+        s.rafId = null
+        return
+      }
+      const dt = s.lastTime ? Math.min(0.032, Math.max(0.001, (now - s.lastTime) / 1000)) : 1 / 120
+      s.lastTime = now
+
+      const STEP = 1 / 240
+      let rem = dt
+      const kDim = 215
+      const cDim = 13.2
+      const kScale = 240
+      const cScale = 13.8
+
+      while (rem > 0) {
+        const hStep = Math.min(STEP, rem)
+        rem -= hStep
+
+        const aw = -kDim * (s.w - s.targetW) - cDim * s.vw
+        s.vw += aw * hStep
+        s.w += s.vw * hStep
+
+        const ah = -kDim * (s.h - s.targetH) - cDim * s.vh
+        s.vh += ah * hStep
+        s.h += s.vh * hStep
+
+        const ar = -kDim * (s.r - s.targetR) - cDim * s.vr
+        s.vr += ar * hStep
+        s.r += s.vr * hStep
+
+        const asx = -kScale * (s.sx - 1) - cScale * s.vsx
+        s.vsx += asx * hStep
+        s.sx += s.vsx * hStep
+
+        const asy = -kScale * (s.sy - 1) - cScale * s.vsy
+        s.vsy += asy * hStep
+        s.sy += s.vsy * hStep
+
+        const aty = -kScale * (s.ty - 0) - cScale * s.vty
+        s.vty += aty * hStep
+        s.ty += s.vty * hStep
+      }
+
+      const clampedW = Math.max(96, s.w)
+      const clampedH = Math.max(24, s.h)
+      const clampedR = Math.max(12, s.r)
+      const clampedSx = Math.max(0.82, Math.min(1.22, s.sx))
+      const clampedSy = Math.max(0.82, Math.min(1.25, s.sy))
+
+      el.style.width = `${clampedW.toFixed(2)}px`
+      el.style.height = `${clampedH.toFixed(2)}px`
+      el.style.borderRadius = `${clampedR.toFixed(2)}px`
+      el.style.transform = `translate3d(0, ${s.ty.toFixed(2)}px, 0) scale3d(${clampedSx.toFixed(4)}, ${clampedSy.toFixed(4)}, 1)`
+
+      const spanH = Math.max(1, expHeight - colHeight)
+      const progress = Math.max(0, Math.min(1, (clampedH - colHeight) / spanH))
+      if (collapsedLayerRef.current) {
+        const colOp = Math.max(0, Math.min(1, 1 - progress * 1.45))
+        const colSc = 0.92 + (1 - progress) * 0.08
+        collapsedLayerRef.current.style.opacity = colOp.toFixed(3)
+        collapsedLayerRef.current.style.transform = `scale3d(${colSc.toFixed(3)}, ${colSc.toFixed(3)}, 1)`
+      }
+      if (expandedLayerRef.current) {
+        const expOp = Math.max(0, Math.min(1, (progress - 0.15) / 0.85))
+        const expSc = 0.92 + progress * 0.08
+        expandedLayerRef.current.style.opacity = expOp.toFixed(3)
+        expandedLayerRef.current.style.transform = `scale3d(${expSc.toFixed(3)}, ${expSc.toFixed(3)}, 1)`
+      }
+
+      const settled =
+        Math.abs(s.w - s.targetW) < 0.2 &&
+        Math.abs(s.h - s.targetH) < 0.2 &&
+        Math.abs(s.r - s.targetR) < 0.2 &&
+        Math.abs(s.sx - 1) < 0.002 &&
+        Math.abs(s.sy - 1) < 0.002 &&
+        Math.abs(s.ty) < 0.15 &&
+        Math.abs(s.vw) < 0.8 &&
+        Math.abs(s.vh) < 0.8 &&
+        Math.abs(s.vsx) < 0.01 &&
+        Math.abs(s.vsy) < 0.01 &&
+        Math.abs(s.vty) < 0.5
+
+      if (settled) {
+        s.w = s.targetW
+        s.h = s.targetH
+        s.r = s.targetR
+        s.sx = 1
+        s.sy = 1
+        s.ty = 0
+        s.vw = 0
+        s.vh = 0
+        s.vr = 0
+        s.vsx = 0
+        s.vsy = 0
+        s.vty = 0
+        el.style.width = `${s.targetW}px`
+        el.style.height = `${s.targetH}px`
+        el.style.borderRadius = `${s.targetR}px`
+        el.style.transform = 'translate3d(0, 0px, 0) scale3d(1, 1, 1)'
+        s.rafId = null
+        s.lastTime = 0
+      } else {
+        s.rafId = requestAnimationFrame(stepSpring)
+      }
+    }
+
+    if (!s.rafId) {
+      s.lastTime = 0
+      s.rafId = requestAnimationFrame(stepSpring)
+    }
+  }, [colHeight, expHeight])
+
+  useEffect(() => {
+    const s = springStateRef.current
+    if (!s.initialized) {
+      s.initialized = true
+      s.w = activeWidth
+      s.h = activeHeight
+      s.r = activeRadius
+      s.targetW = activeWidth
+      s.targetH = activeHeight
+      s.targetR = activeRadius
+      s.prevCollapsed = collapsed
+      s.prevAiActive = isAiActive
+      s.prevActivePage = activePage
+      return
+    }
+
+    if (collapsed !== s.prevCollapsed) {
+      if (!collapsed) {
+        // Expanding from compact pill -> full dock: upward & outward liquid spring burst
+        s.vw += 540
+        s.vh += 360
+        s.vsx += 1.35
+        s.vsy += 1.55
+        s.vty -= 85
+      } else {
+        // Collapsing from full dock -> compact pill: crisp inward cushion
+        s.vw -= 380
+        s.vh -= 280
+        s.vsx -= 0.95
+        s.vsy -= 1.15
+        s.vty += 60
+      }
+    }
+
+    if (isAiActive !== s.prevAiActive) {
+      s.vsx += isAiActive ? 1.15 : -0.75
+      s.vsy += isAiActive ? 1.25 : -0.85
+      s.vty += isAiActive ? -65 : 45
+    }
+
+    if (activePage !== s.prevActivePage && !collapsed) {
+      // Tactile micro-spring bounce when switching tabs
+      s.vsx += 0.92
+      s.vsy -= 0.78
+      s.vty -= 48
+    }
+
+    s.prevCollapsed = collapsed
+    s.prevAiActive = isAiActive
+    s.prevActivePage = activePage
+    s.targetW = activeWidth
+    s.targetH = activeHeight
+    s.targetR = activeRadius
+
+    runSpringLoop()
+  }, [activeWidth, activeHeight, activeRadius, collapsed, isAiActive, activePage, runSpringLoop])
+
+  useEffect(() => {
+    const s = springStateRef.current
+    return () => {
+      if (s.rafId) cancelAnimationFrame(s.rafId)
+    }
+  }, [])
+
+  const handleNavClick = useCallback((id) => {
+    HapticFeedback.light()
+    const s = springStateRef.current
+    if (s.initialized && id === activePage) {
+      s.vsx += 0.92
+      s.vsy -= 0.78
+      s.vty -= 48
+      runSpringLoop()
+    }
+    setActivePage(id)
+    startCollapseTimer()
+  }, [activePage, setActivePage, startCollapseTimer, runSpringLoop])
+
   const getDockBgStyle = () => {
     if (isAiActive) {
       return {
-        background: 'rgba(10, 14, 26, 0.96)'
+        background: 'rgba(6, 10, 20, 0.58)',
+        backdropFilter: 'blur(14px) saturate(165%)',
+        WebkitBackdropFilter: 'blur(14px) saturate(165%)',
       }
     }
     switch(dockBackground) {
       case 'none': return { background: 'transparent' }
       case 'solid': return { background: 'rgba(12, 16, 28, 1)' }
-      case 'gradient': return { background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.15), rgba(10, 14, 26, 0.96))' }
+      case 'gradient': return {
+        background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.14), rgba(6, 10, 20, 0.68))',
+        backdropFilter: 'blur(14px) saturate(165%)',
+        WebkitBackdropFilter: 'blur(14px) saturate(165%)',
+      }
       case 'blur':
-      default: return { background: 'rgba(10, 14, 26, 0.94)' }
+      default: return {
+        background: collapsed ? 'rgba(8, 12, 22, 0.72)' : 'rgba(6, 10, 20, 0.62)',
+        backdropFilter: 'blur(14px) saturate(165%)',
+        WebkitBackdropFilter: 'blur(14px) saturate(165%)',
+      }
     }
   }
 
@@ -172,24 +400,26 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
           onTouchEnd={e => e.stopPropagation()}
           className={`pointer-events-auto relative flex items-center justify-center overflow-hidden island-morph ${
             collapsed ? 'is-collapsed' : ''
-          } ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
-        style={{
+          }`}
+          style={{
           ...getDockBgStyle(),
+          transformOrigin: 'bottom center',
           border: isAiActive
-            ? undefined
+            ? '1px solid rgba(var(--primary-rgb), 0.7)'
             : (activeGlow
               ? `1px solid ${activeGlow.color}`
-              : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)')),
+              : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.1)')),
           boxShadow: isAiActive
-            ? undefined
+            ? '0 0 16px rgba(var(--primary-rgb), 0.35), 0 -6px 24px rgba(0, 0, 0, 0.45)'
             : (activeGlow
               ? `0 -4px 30px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}`
               : (dockBackground === 'none' ? 'none' : (collapsed
                 ? '0 -2px 10px rgba(0, 0, 0, 0.4)'
                 : '0 -6px 24px rgba(0, 0, 0, 0.6)'))),
-          width: collapsed ? colWidth : expWidth,
-          height: collapsed ? colHeight : expHeight,
-          borderRadius: collapsed ? 20 : 34,
+          width: `${springStateRef.current.w}px`,
+          height: `${springStateRef.current.h}px`,
+          borderRadius: `${springStateRef.current.r}px`,
+          transform: `translate3d(0, ${springStateRef.current.ty}px, 0) scale3d(${springStateRef.current.sx}, ${springStateRef.current.sy}, 1)`,
         }}
       >
         {activeGlow && (
@@ -201,11 +431,9 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
             }} 
           />
         )}
-        {isAiActive && (
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-purple-500 via-emerald-400 to-purple-500 shadow-[0_0_14px_#34d399] animate-pulse" />
-        )}
         {/* Collapsed State */}
-        <div 
+        <div
+          ref={collapsedLayerRef}
           className={`absolute inset-0 flex items-center justify-center island-content-layer ${
             collapsed ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'
           }`}
@@ -240,7 +468,8 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
         </div>
 
         {/* Expanded State */}
-        <div 
+        <div
+          ref={expandedLayerRef}
           className={`absolute inset-0 flex items-center justify-center island-content-layer ${
             collapsed ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100 pointer-events-auto'
           }`}

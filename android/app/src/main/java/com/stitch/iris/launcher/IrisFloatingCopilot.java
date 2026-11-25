@@ -25,6 +25,7 @@ import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.Choreographer;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -33,6 +34,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -94,6 +96,11 @@ public class IrisFloatingCopilot {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
     private static final Pattern PHONE_PATTERN = Pattern.compile("(?:\\+\\d{1,3}[\\s-]?)?(?:\\(\\d{2,4}\\)|\\d{2,4})[\\s.-]?\\d{3,4}[\\s.-]?\\d{3,4}");
     private static final Pattern COMPOSE_INTENT_PATTERN = Pattern.compile("(?i)^(?:write|tell|reply|compose|draft|message|email|say|send|text|let\\s+\\w+\\s+know|ask\\s+\\w+\\s+to)\\b");
+    private static final Pattern CHAT_TIMESTAMP_NOISE_PATTERN = Pattern.compile("(?i)^(?:\\d{1,2}:\\d{2}(?:\\s*[ap]m)?(?:\\s*[✓✔•editedreadseen]*)?|delivered|read|seen|sent|edited|typing\\.{0,3}|online|active\\s+now|last\\s+seen.*|tap\\s+here\\s+for\\s+contact\\s+info.*|end-to-end\\s+encrypted.*|message\\.{0,3}|type\\s+a\\s+message\\.{0,3}|write\\s+a\\s+message\\.{0,3}|reply\\.{0,3}|add\\s+a\\s+caption\\.{0,3}|back|navigate\\s+up|voice\\s+message|emoji|attach|camera|more\\s+options|call|video\\s+call|audio\\s+call|search|mute|pinned\\s+message)$");
+    private static final Pattern CHAT_DATE_DIVIDER_PATTERN = Pattern.compile("(?i)^(?:today|yesterday|\\d+\\s+unread\\s+messages?|unread\\s+messages?|new\\s+messages?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2}(?:,?\\s+\\d{4})?)$");
+    private static final Pattern TOPIC_CLOSURE_PATTERN = Pattern.compile("(?i)^(?:ok(?:ay)?|k+|done|got\\s+it|noted|thanks(?:\\s+a\\s+lot|\\s+bro|\\s+man|\\s+yaar)?|thank\\s+you(?:\\s+so\\s+much)?|thx|tysm|sounds\\s+good|all\\s+good|cool|alright|perfect|great(?:\\s+thanks)?|awesome|nice|sure(?:\\s+thing)?|no\\s+problem|np|welcome|you're\\s+welcome|see\\s+ya|see\\s+you(?:\\s+soon|\\s+later|\\s+tomorrow)?|bye+|good\\s+night|gn|take\\s+care|tc|haan\\s+ok|theek\\s+hai|accha\\s+ok|👍+|🙏+|✅+|👌+|❤️+)[.!\\s👍🙏✅👌]*$");
+    private static final Pattern NEW_TOPIC_OPENER_PATTERN = Pattern.compile("(?i)^(?:btw\\b|by\\s+the\\s+way\\b|also\\b|anyway\\b|on\\s+another\\s+note\\b|quick\\s+question\\b|one\\s+more\\s+thing\\b|hey\\b|hi\\b|hello\\b|yo\\b|listen\\b|sun\\b|suno\\b|bhai\\s+ek\\s+baat\\b|good\\s+morning\\b|good\\s+evening\\b|gm\\b|are\\s+you\\s+free\\b|what\\s+are\\s+you\\s+doing\\b|where\\s+are\\s+you\\b).*");
+    private static final Pattern TRAILING_TIME_CLEANER = Pattern.compile("\\s+\\d{1,2}:\\d{2}(?:\\s*[aApP][mM])?(?:\\s*[✓✔]+)?$");
 
     private static IrisFloatingCopilot instance;
     private final AccessibilityService service;
@@ -104,7 +111,7 @@ public class IrisFloatingCopilot {
     private boolean isEnabled = true;
     private int pillOpacity = 55;
     private int timeoutSec = 3;
-    private boolean showOnHome = true;
+    private boolean showOnHome = false;
     private String pillSize = "NORMAL";
     private String edgeSide = "RIGHT";
     private boolean autoKeyboard = true;
@@ -119,6 +126,8 @@ public class IrisFloatingCopilot {
     private boolean isCardAttached = false;
     private boolean hasActiveDraft = false;
     private String currentPackage = "";
+    private String lastForegroundAppPackage = "";
+    private long lastSystemUiOverlayTimestamp = 0L;
     private String currentAppLabel = "";
     private String currentScreenMode = "GENERAL";
 
@@ -127,12 +136,13 @@ public class IrisFloatingCopilot {
     private GradientDrawable pillBgDrawable;
     private WindowManager.LayoutParams pillParams;
     private View cardView;
+    private LinearLayout cardInnerLayout;
     private GradientDrawable cardBgDrawable;
     private WindowManager.LayoutParams cardParams;
 
     private final Runnable autoHideRunnable = () -> {
-        if (!isCardAttached && isPillAttached && pillView != null) {
-            pillView.animate().alpha(0f).setDuration(260).withEndAction(this::hidePill).start();
+        if (!isCardAttached && isPillAttached) {
+            hidePill();
         }
     };
 
@@ -233,12 +243,86 @@ public class IrisFloatingCopilot {
         } catch (Exception ignored) {}
     }
 
+    private boolean isTransientSystemOrKeyboardPackage(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return true;
+        String lower = pkg.toLowerCase();
+        return lower.equals("com.android.systemui")
+                || lower.contains("inputmethod")
+                || lower.contains("honeyboard")
+                || lower.contains("gboard")
+                || lower.contains("swiftkey")
+                || lower.contains("keyboard")
+                || lower.contains("cocktailbarservice")
+                || lower.contains("permissioncontroller")
+                || lower.contains("packageinstaller")
+                || lower.contains("biometrics")
+                || lower.contains("security.enhancer")
+                || lower.equals("android");
+    }
+
+    private boolean isBlockedNonCopilotApp(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return true;
+        if (pkg.equals(service.getPackageName())) return true;
+        String lower = pkg.toLowerCase();
+        // Launchers & System Utilities
+        if (lower.contains("launcher") || lower.contains("miui.home") || lower.contains("systemui")
+                || lower.contains("settings") || lower.contains("vending") || lower.contains("galaxyapps")
+                || lower.contains("camera") || lower.contains("gallery") || lower.contains("photos")
+                || lower.contains("deskclock") || lower.contains(".clock") || lower.contains("calculator")
+                || lower.contains("dialer") || lower.contains("incallui") || lower.contains("contacts")
+                || lower.contains("myfiles") || lower.contains("filemanager") || lower.contains("weather")
+                || lower.contains("authenticator")) {
+            return true;
+        }
+        // Video, Music & Media Streaming Apps
+        if (lower.contains("youtube") || lower.contains("spotify") || lower.contains("netflix")
+                || lower.contains("avod") || lower.contains("primevideo") || lower.contains("hotstar")
+                || lower.contains("jiocinema") || lower.contains("jiobeats") || lower.contains("jiosaavn")
+                || lower.contains("gaana") || lower.contains("wynk") || lower.contains("soundcloud")
+                || lower.contains("apple.android.music") || lower.contains("shazam") || lower.contains("vlc")
+                || lower.contains("videoplayer") || lower.contains("mxtech") || lower.contains("plex")
+                || lower.contains("twitch") || lower.contains("tiktok") || lower.contains("musically")) {
+            return true;
+        }
+        // Shopping, E-Commerce, Food Delivery, Ride & Travel Apps
+        if (lower.contains("amazon.mshop") || lower.contains("in.amazon") || lower.contains("windowshop")
+                || lower.contains("flipkart") || lower.contains("myntra") || lower.contains("meesho")
+                || lower.contains("ajio") || lower.contains("nykaa") || lower.contains("tatacliq")
+                || lower.contains("ebay") || lower.contains("alibaba") || lower.contains("aliexpress")
+                || lower.contains("shein") || lower.contains("temu") || lower.contains("swiggy")
+                || lower.contains("zomato") || lower.contains("blinkit") || lower.contains("grofers")
+                || lower.contains("zepto") || lower.contains("bigbasket") || lower.contains("dunzo")
+                || lower.contains("ubercab") || lower.contains("olacabs") || lower.contains("rapido")
+                || lower.contains("makemytrip") || lower.contains("goibibo") || lower.contains("irctc")
+                || lower.contains("booking") || lower.contains("airbnb") || lower.contains("apps.maps")
+                || lower.contains("waze")) {
+            return true;
+        }
+        // Banking, UPI & Payment Apps
+        if (lower.contains("paisa.user") || lower.contains("phonepe") || lower.contains("paytm")
+                || lower.contains("bharatpe") || lower.contains("cred") || lower.contains("freecharge")
+                || lower.contains("mobikwik") || lower.contains("paypal") || lower.contains("binance")
+                || lower.contains("coinbase") || lower.contains("zerodha") || lower.contains("groww")
+                || lower.contains("upstox") || lower.contains("bank") || lower.contains("upi")) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isCopilotTargetApp(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        if (isTransientSystemOrKeyboardPackage(pkg)) return false;
+        if (isBlockedNonCopilotApp(pkg)) return false;
+        return true;
+    }
+
     private void registerClipboardTrigger() {
         try {
             ClipboardManager cm = (ClipboardManager) service.getSystemService(Context.CLIPBOARD_SERVICE);
             if (cm != null) {
                 cm.addPrimaryClipChangedListener(() -> {
                     if (!isEnabled || !clipboardTrigger || isScreenLocked(service)) return;
+                    if (!isCopilotTargetApp(currentPackage)) return;
                     try {
                         ClipData clip = cm.getPrimaryClip();
                         if (clip != null && clip.getItemCount() > 0) {
@@ -260,7 +344,7 @@ public class IrisFloatingCopilot {
         this.isEnabled = prefs.getBoolean(KEY_ENABLED, true);
         this.pillOpacity = Math.max(15, Math.min(95, prefs.getInt(KEY_OPACITY, 55)));
         this.timeoutSec = Math.max(0, prefs.getInt(KEY_TIMEOUT_SEC, 3));
-        this.showOnHome = prefs.getBoolean(KEY_SHOW_ON_HOME, true);
+        this.showOnHome = false;
         this.pillSize = prefs.getString(KEY_PILL_SIZE, "NORMAL");
         this.edgeSide = prefs.getString(KEY_EDGE_SIDE, "RIGHT");
         this.autoKeyboard = prefs.getBoolean(KEY_AUTO_KEYBOARD, true);
@@ -278,48 +362,51 @@ public class IrisFloatingCopilot {
             if (!isEnabled) {
                 hidePill();
                 hideCard();
-            } else if (currentPackage.equals(service.getPackageName())) {
-                if (!showOnHome) {
-                    hidePill();
-                    hideCard();
-                } else {
-                    showPill();
-                }
-            } else if (!currentPackage.isEmpty() && !onlyWhenTyping) {
-                showPill();
+            } else {
+                syncKeyboardState(null, false);
             }
         });
     }
 
-    private int getPillSizeDp() {
-        if ("COMPACT".equalsIgnoreCase(pillSize)) return 36;
-        if ("LARGE".equalsIgnoreCase(pillSize)) return 52;
-        return 44;
+    private int getPillWidthDp() {
+        if ("COMPACT".equalsIgnoreCase(pillSize)) return 46;
+        if ("LARGE".equalsIgnoreCase(pillSize)) return 64;
+        return 54;
+    }
+
+    private int getPillHeightDp() {
+        if ("COMPACT".equalsIgnoreCase(pillSize)) return 64;
+        if ("LARGE".equalsIgnoreCase(pillSize)) return 88;
+        return 76;
+    }
+
+    private void applyEdgeTabCornerRadii(boolean isLeft) {
+        if (pillBgDrawable == null) return;
+        pillBgDrawable.setColor(Color.TRANSPARENT);
+        pillBgDrawable.setStroke(0, Color.TRANSPARENT);
     }
 
     private void updateVisualStyles() {
-        int pillAlpha = (int) (pillOpacity / 100.0f * 255);
-        int strokeAlpha = Math.min(255, pillAlpha + 65);
+        boolean isLeft = "LEFT".equalsIgnoreCase(edgeSide);
         if (pillBgDrawable != null) {
-            pillBgDrawable.setColor(Color.argb(pillAlpha, 2, 6, 23));
-            pillBgDrawable.setStroke(dpToPx(1.5f), Color.argb(strokeAlpha, 0, 242, 255));
+            applyEdgeTabCornerRadii(isLeft);
         }
         int cardOpacity = Math.max(60, Math.min(95, pillOpacity + 28));
         int cardAlpha = (int) (cardOpacity / 100.0f * 255);
         if (cardBgDrawable != null) {
-            cardBgDrawable.setColor(Color.argb(cardAlpha, 2, 6, 23));
+            cardBgDrawable.setColor(Color.argb(cardAlpha, 4, 8, 22));
+            cardBgDrawable.setStroke(dpToPx(0.8f), Color.parseColor("#24FFFFFF"));
         }
 
         if (pillParams != null) {
-            int sizePx = dpToPx(getPillSizeDp());
-            pillParams.width = sizePx;
-            pillParams.height = sizePx;
-            if ("LEFT".equalsIgnoreCase(edgeSide)) {
+            pillParams.width = dpToPx(getPillWidthDp());
+            pillParams.height = dpToPx(getPillHeightDp());
+            if (isLeft) {
                 pillParams.gravity = Gravity.TOP | Gravity.START;
-                pillParams.x = dpToPx(12);
-            } else if ("RIGHT".equalsIgnoreCase(edgeSide)) {
+                pillParams.x = 0;
+            } else {
                 pillParams.gravity = Gravity.TOP | Gravity.END;
-                pillParams.x = dpToPx(12);
+                pillParams.x = 0;
             }
             if (isPillAttached && pillView != null) {
                 try {
@@ -328,64 +415,153 @@ public class IrisFloatingCopilot {
             }
         }
         if (pillIconText != null) {
-            pillIconText.setTextSize(TypedValue.COMPLEX_UNIT_SP, "COMPACT".equalsIgnoreCase(pillSize) ? 16 : "LARGE".equalsIgnoreCase(pillSize) ? 24 : 20);
+            pillIconText.setText(isLeft ? ">" : "<");
+            pillIconText.setTextSize(TypedValue.COMPLEX_UNIT_SP, "COMPACT".equalsIgnoreCase(pillSize) ? 24 : "LARGE".equalsIgnoreCase(pillSize) ? 34 : 28);
         }
     }
 
     private void scheduleAutoHide() {
         mainHandler.removeCallbacks(autoHideRunnable);
-        if (timeoutSec > 0 && !isCardAttached && isPillAttached) {
-            mainHandler.postDelayed(autoHideRunnable, timeoutSec * 1000L);
-        }
     }
 
     private void cancelAutoHide() {
         mainHandler.removeCallbacks(autoHideRunnable);
     }
 
-    public void onPackageChanged(String newPackage) {
-        if (newPackage == null) return;
-        if (!newPackage.equals(this.currentPackage)) {
-            deepScanBuffer.clear();
+    private final Runnable keyboardWatchRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isPillAttached && !isCardAttached) return;
+            syncKeyboardState(null, false);
+            if (isPillAttached) {
+                mainHandler.postDelayed(this, 350L);
+            }
         }
-        this.currentPackage = newPackage;
+    };
+
+    public void syncKeyboardState(String hintPackage, boolean hasEditableFocusHint) {
         mainHandler.post(() -> {
-            if (!isEnabled || newPackage.equals("com.android.systemui") || isScreenLocked(service)) {
+            if (!isEnabled || isScreenLocked(service)) {
                 hidePill();
                 hideCard();
                 return;
             }
-            boolean isHome = newPackage.equals(service.getPackageName());
-            if (isHome) {
-                if (!showOnHome) {
-                    hidePill();
-                    hideCard();
-                } else if (!onlyWhenTyping) {
-                    showPill();
+
+            boolean imeWindowOpen = false;
+            boolean notificationShadeOpen = false;
+            String detectedAppPkg = "";
+            Rect imeBounds = new Rect();
+
+            try {
+                List<AccessibilityWindowInfo> windows = service.getWindows();
+                if (windows != null) {
+                    for (AccessibilityWindowInfo w : windows) {
+                        if (w == null) continue;
+                        int type = w.getType();
+                        Rect wb = new Rect();
+                        w.getBoundsInScreen(wb);
+
+                        if (type == AccessibilityWindowInfo.TYPE_INPUT_METHOD && wb.height() > dpToPx(80)) {
+                            imeWindowOpen = true;
+                            imeBounds.set(wb);
+                        }
+
+                        AccessibilityNodeInfo wRoot = w.getRoot();
+                        String wPkg = (wRoot != null && wRoot.getPackageName() != null)
+                                ? wRoot.getPackageName().toString()
+                                : "";
+                        if (!wPkg.isEmpty()) {
+                            String lowerWPkg = wPkg.toLowerCase();
+                            if ((lowerWPkg.contains("inputmethod") || lowerWPkg.contains("honeyboard")
+                                    || lowerWPkg.contains("gboard") || lowerWPkg.contains("swiftkey")
+                                    || lowerWPkg.contains("keyboard")) && wb.height() > dpToPx(80)) {
+                                imeWindowOpen = true;
+                                if (imeBounds.isEmpty()) imeBounds.set(wb);
+                            } else if (lowerWPkg.equals("com.android.systemui") && wb.height() > dpToPx(260)) {
+                                notificationShadeOpen = true;
+                            } else if (type == AccessibilityWindowInfo.TYPE_APPLICATION
+                                    && !wPkg.equals(service.getPackageName())
+                                    && !isTransientSystemOrKeyboardPackage(wPkg)
+                                    && detectedAppPkg.isEmpty()) {
+                                detectedAppPkg = wPkg;
+                            }
+                        }
+                    }
                 }
+            } catch (Exception ignored) {}
+
+            if (detectedAppPkg.isEmpty()) {
+                try {
+                    AccessibilityNodeInfo activeRoot = service.getRootInActiveWindow();
+                    if (activeRoot != null && activeRoot.getPackageName() != null) {
+                        String rootPkg = activeRoot.getPackageName().toString();
+                        if (rootPkg.equals("com.android.systemui")) {
+                            notificationShadeOpen = true;
+                        } else if (!isTransientSystemOrKeyboardPackage(rootPkg)) {
+                            detectedAppPkg = rootPkg;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (detectedAppPkg.isEmpty() && hintPackage != null && !isTransientSystemOrKeyboardPackage(hintPackage)) {
+                detectedAppPkg = hintPackage;
+            }
+            if (!detectedAppPkg.isEmpty()) {
+                if (!detectedAppPkg.equals(this.currentPackage)) {
+                    deepScanBuffer.clear();
+                }
+                this.currentPackage = detectedAppPkg;
+                this.lastForegroundAppPackage = detectedAppPkg;
+            }
+
+            if (notificationShadeOpen || currentPackage.isEmpty() || !isCopilotTargetApp(currentPackage)) {
+                hidePill();
+                if (notificationShadeOpen || currentPackage.equals(service.getPackageName())) {
+                    hideCard();
+                }
+                return;
+            }
+
+            if (imeWindowOpen) {
+                // Dock pill 1 full inch (160dp) higher above the top edge of the open keyboard
+                if (pillParams != null && imeBounds.top > dpToPx(160)) {
+                    int targetY = Math.max(dpToPx(96), imeBounds.top - dpToPx(218));
+                    if (Math.abs(pillParams.y - targetY) > dpToPx(8)) {
+                        pillParams.y = targetY;
+                        if (isPillAttached && pillView != null) {
+                            try {
+                                windowManager.updateViewLayout(pillView, pillParams);
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+                showPill();
+                mainHandler.removeCallbacks(keyboardWatchRunnable);
+                mainHandler.postDelayed(keyboardWatchRunnable, 350L);
             } else {
-                if (onlyWhenTyping) {
-                    hidePill();
-                } else {
-                    showPill();
+                // Keyboard is closed: hide the pill immediately (keep card open if user already opened card)
+                mainHandler.removeCallbacks(keyboardWatchRunnable);
+                hidePill();
+                if (hasEditableFocusHint) {
+                    // Keyboard may still be sliding up after EditText tap; re-check after 180ms
+                    mainHandler.postDelayed(() -> syncKeyboardState(hintPackage, false), 180L);
                 }
             }
         });
     }
 
+    public void onPackageChanged(String newPackage) {
+        if (newPackage == null || newPackage.isEmpty()) return;
+        syncKeyboardState(newPackage, false);
+    }
+
     public void onUserInputActive() {
-        mainHandler.post(() -> {
-            if (!isEnabled || isScreenLocked(service)) {
-                if (isScreenLocked(service)) {
-                    hidePill();
-                    hideCard();
-                }
-                return;
-            }
-            boolean isHome = currentPackage.equals(service.getPackageName());
-            if (isHome && !showOnHome) return;
-            showPill();
-        });
+        syncKeyboardState(null, true);
+    }
+
+    public void onUserInputActive(String eventPackage) {
+        syncKeyboardState(eventPackage, true);
     }
 
     public void setEnabled(boolean enabled) {
@@ -396,8 +572,8 @@ public class IrisFloatingCopilot {
             if (!enabled) {
                 hidePill();
                 hideCard();
-            } else if (!currentPackage.isEmpty() && (!currentPackage.equals(service.getPackageName()) || showOnHome)) {
-                showPill();
+            } else {
+                syncKeyboardState(null, false);
             }
         });
     }
@@ -437,19 +613,24 @@ public class IrisFloatingCopilot {
 
     private void createPillView() {
         FrameLayout frame = new FrameLayout(service);
-        int size = dpToPx(getPillSizeDp());
+        frame.setClipChildren(false);
+        frame.setClipToPadding(false);
+        frame.setBackgroundColor(Color.TRANSPARENT);
+        int wPx = dpToPx(getPillWidthDp());
+        int hPx = dpToPx(getPillHeightDp());
+        boolean isLeft = "LEFT".equalsIgnoreCase(edgeSide);
 
         pillBgDrawable = new GradientDrawable();
-        pillBgDrawable.setShape(GradientDrawable.OVAL);
-        pillBgDrawable.setColor(Color.argb((int) (pillOpacity / 100.0f * 255), 2, 6, 23));
-        pillBgDrawable.setStroke(dpToPx(1.5f), Color.parseColor("#00F2FF"));
-        frame.setBackground(pillBgDrawable);
+        applyEdgeTabCornerRadii(isLeft);
 
         pillIconText = new TextView(service);
-        pillIconText.setText("◈");
+        pillIconText.setText(isLeft ? ">" : "<");
         pillIconText.setTextColor(Color.parseColor("#00F2FF"));
-        pillIconText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        pillIconText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+        pillIconText.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        pillIconText.setShadowLayer(dpToPx(9), 0, 0, Color.parseColor("#EE00F2FF"));
         pillIconText.setGravity(Gravity.CENTER);
+        pillIconText.setBackgroundColor(Color.TRANSPARENT);
         FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -457,16 +638,16 @@ public class IrisFloatingCopilot {
         frame.addView(pillIconText, textParams);
 
         pillParams = new WindowManager.LayoutParams(
-                size, size,
+                wPx, hPx,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
                         : WindowManager.LayoutParams.TYPE_PHONE,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT
         );
-        pillParams.gravity = "LEFT".equalsIgnoreCase(edgeSide) ? (Gravity.TOP | Gravity.START) : (Gravity.TOP | Gravity.END);
-        pillParams.x = dpToPx(12);
-        pillParams.y = dpToPx(240);
+        pillParams.gravity = isLeft ? (Gravity.TOP | Gravity.START) : (Gravity.TOP | Gravity.END);
+        pillParams.x = 0;
+        pillParams.y = dpToPx(180);
 
         frame.setOnTouchListener(new View.OnTouchListener() {
             private int initialX, initialY;
@@ -478,7 +659,6 @@ public class IrisFloatingCopilot {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                         cancelAutoHide();
-                        v.animate().cancel();
                         v.setAlpha(1f);
                         initialX = pillParams.x;
                         initialY = pillParams.y;
@@ -489,8 +669,8 @@ public class IrisFloatingCopilot {
 
                     case MotionEvent.ACTION_MOVE:
                         int dx = (int) (event.getRawX() - initialTouchX);
-                        boolean isLeft = (pillParams.gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.START;
-                        pillParams.x = isLeft ? (initialX + dx) : (initialX - dx);
+                        boolean leftSide = (pillParams.gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.START;
+                        pillParams.x = Math.max(0, leftSide ? (initialX + dx) : (initialX - dx));
                         pillParams.y = initialY + (int) (event.getRawY() - initialTouchY);
                         if (isPillAttached) windowManager.updateViewLayout(pillView, pillParams);
                         return true;
@@ -500,12 +680,12 @@ public class IrisFloatingCopilot {
                         float diffX = Math.abs(event.getRawX() - initialTouchX);
                         float diffY = Math.abs(event.getRawY() - initialTouchY);
 
-                        if (duration < 300 && diffX < 20 && diffY < 20) {
+                        if (duration < 300 && diffX < 24 && diffY < 24) {
                             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                             toggleCard();
                         } else {
                             if (!"FREE".equalsIgnoreCase(edgeSide)) {
-                                pillParams.x = dpToPx(12);
+                                pillParams.x = 0;
                                 if (isPillAttached) windowManager.updateViewLayout(pillView, pillParams);
                             }
                             scheduleAutoHide();
@@ -526,10 +706,10 @@ public class IrisFloatingCopilot {
 
         cardBgDrawable = new GradientDrawable();
         cardBgDrawable.setShape(GradientDrawable.RECTANGLE);
-        cardBgDrawable.setCornerRadius(dpToPx(20));
+        cardBgDrawable.setCornerRadius(dpToPx(22));
         int cardOpacity = Math.max(60, Math.min(95, pillOpacity + 28));
-        cardBgDrawable.setColor(Color.argb((int) (cardOpacity / 100.0f * 255), 2, 6, 23));
-        cardBgDrawable.setStroke(dpToPx(1.5f), Color.parseColor("#5500F2FF"));
+        cardBgDrawable.setColor(Color.argb((int) (cardOpacity / 100.0f * 255), 4, 8, 22));
+        cardBgDrawable.setStroke(dpToPx(0.8f), Color.parseColor("#24FFFFFF"));
         layout.setBackground(cardBgDrawable);
 
         // Top Drag Handle Bar
@@ -845,16 +1025,31 @@ public class IrisFloatingCopilot {
         layout.addView(inputBar, inputBarLp);
 
         DisplayMetrics dm = service.getResources().getDisplayMetrics();
-        int width = Math.min(dpToPx(352), dm.widthPixels - dpToPx(20));
+        int innerWidth = Math.min(dpToPx(348), dm.widthPixels - dpToPx(36));
+
+        this.cardInnerLayout = layout;
+        FrameLayout cardArena = new FrameLayout(service);
+        cardArena.setClipChildren(false);
+        cardArena.setClipToPadding(false);
+        cardArena.setBackgroundColor(Color.TRANSPARENT);
+        cardArena.setPadding(dpToPx(18), dpToPx(24), dpToPx(18), dpToPx(24));
+
+        FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(
+                innerWidth,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+        );
+        cardArena.addView(layout, innerLp);
 
         cardParams = new WindowManager.LayoutParams(
-                width,
+                WindowManager.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
                         : WindowManager.LayoutParams.TYPE_PHONE,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
                         | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
         );
@@ -863,7 +1058,9 @@ public class IrisFloatingCopilot {
         cardParams.x = 0;
         cardParams.y = 0;
 
-        layout.setOnTouchListener((v, event) -> {
+        layout.setClickable(true);
+        cardArena.setOnClickListener(v -> hideCard());
+        cardArena.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_OUTSIDE) {
                 hideCard();
                 return true;
@@ -871,7 +1068,7 @@ public class IrisFloatingCopilot {
             return false;
         });
 
-        this.cardView = layout;
+        this.cardView = cardArena;
         rebuildActionPillsForMode("GENERAL");
     }
 
@@ -927,6 +1124,18 @@ public class IrisFloatingCopilot {
         }
     }
 
+    private boolean shouldRouteToCompose(String input) {
+        if (input == null || input.trim().isEmpty()) return false;
+        String q = input.trim();
+        if (COMPOSE_INTENT_PATTERN.matcher(q).find()) return true;
+        if ("CHAT".equals(currentScreenMode) || "EMAIL".equals(currentScreenMode)) {
+            boolean isExplicitAnalysisQuestion = q.matches("(?i)^(?:what|why|how|who|when|where|which|explain|summarize|summary|translate|meaning|define|fact\\s*check|is\\s+this\\s+a?\\s*scam|analyze)\\b.*")
+                    || q.endsWith("?");
+            return !isExplicitAnalysisQuestion;
+        }
+        return false;
+    }
+
     private void submitUnifiedInput() {
         if (customQuestionInput == null) return;
         String q = customQuestionInput.getText().toString().trim();
@@ -935,7 +1144,7 @@ public class IrisFloatingCopilot {
         hideSoftKeyboard();
         restoreNotFocusable();
 
-        if (COMPOSE_INTENT_PATTERN.matcher(q).find()) {
+        if (shouldRouteToCompose(q)) {
             executeAction("COMPOSE:AUTO:" + q);
         } else {
             executeAction("ASK:" + q);
@@ -1125,7 +1334,7 @@ public class IrisFloatingCopilot {
                                 } else {
                                     hideSoftKeyboard();
                                     restoreNotFocusable();
-                                    if (COMPOSE_INTENT_PATTERN.matcher(spoken).find()) {
+                                    if (shouldRouteToCompose(spoken)) {
                                         executeAction("COMPOSE:AUTO:" + spoken);
                                     } else {
                                         executeAction("ASK:" + spoken);
@@ -1171,23 +1380,247 @@ public class IrisFloatingCopilot {
         }
     }
 
+    private Choreographer.FrameCallback pillSpringCallback = null;
+    private Choreographer.FrameCallback cardSpringCallback = null;
+    private boolean isCardClosingSpring = false;
+
+    private void stopPillSpring() {
+        if (pillSpringCallback != null) {
+            try { Choreographer.getInstance().removeFrameCallback(pillSpringCallback); } catch (Exception ignored) {}
+            pillSpringCallback = null;
+        }
+    }
+
+    private void stopCardSpring() {
+        if (cardSpringCallback != null) {
+            try { Choreographer.getInstance().removeFrameCallback(cardSpringCallback); } catch (Exception ignored) {}
+            cardSpringCallback = null;
+        }
+        isCardClosingSpring = false;
+    }
+
+    private void runPillSpring(
+            final float startTx, final float targetTx,
+            final float startSx, final float targetSx,
+            final float startSy, final float targetSy,
+            final float initVTx, final float initVSx, final float initVSy
+    ) {
+        final View target = pillIconText != null ? pillIconText : pillView;
+        if (target == null) return;
+        stopPillSpring();
+
+        final boolean isLeft = "LEFT".equalsIgnoreCase(edgeSide);
+        target.setPivotX(isLeft ? dpToPx(8) : dpToPx(getPillWidthDp() - 8));
+        target.setPivotY(dpToPx(getPillHeightDp()) * 0.5f);
+
+        final float[] state = new float[]{
+                startTx, targetTx, initVTx,
+                startSx, targetSx, initVSx,
+                startSy, targetSy, initVSy
+        };
+        final long[] lastNs = new long[]{0L};
+
+        pillSpringCallback = new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                if (target == null || !isPillAttached) {
+                    pillSpringCallback = null;
+                    return;
+                }
+                float dt = lastNs[0] == 0L ? (1f / 120f) : Math.min(0.032f, Math.max(0.001f, (frameTimeNanos - lastNs[0]) / 1_000_000_000f));
+                lastNs[0] = frameTimeNanos;
+
+                float step = 1f / 240f;
+                float rem = dt;
+                final float k = 285f;
+                final float c = 13.6f;
+
+                while (rem > 0f) {
+                    float h = Math.min(step, rem);
+                    rem -= h;
+
+                    float aTx = -k * (state[0] - state[1]) - c * state[2];
+                    state[2] += aTx * h;
+                    state[0] += state[2] * h;
+
+                    float aSx = -k * (state[3] - state[4]) - c * state[5];
+                    state[5] += aSx * h;
+                    state[3] += state[5] * h;
+
+                    float aSy = -k * (state[6] - state[7]) - c * state[8];
+                    state[8] += aSy * h;
+                    state[6] += state[8] * h;
+                }
+
+                target.setTranslationX(state[0]);
+                target.setScaleX(Math.max(0.15f, Math.min(1.55f, state[3])));
+                target.setScaleY(Math.max(0.15f, Math.min(1.55f, state[6])));
+
+                boolean settled =
+                        Math.abs(state[0] - state[1]) < 0.25f &&
+                        Math.abs(state[3] - state[4]) < 0.004f &&
+                        Math.abs(state[6] - state[7]) < 0.004f &&
+                        Math.abs(state[2]) < 1.2f &&
+                        Math.abs(state[5]) < 0.02f &&
+                        Math.abs(state[8]) < 0.02f;
+
+                if (settled) {
+                    target.setTranslationX(state[1]);
+                    target.setScaleX(state[4]);
+                    target.setScaleY(state[7]);
+                    pillSpringCallback = null;
+                } else {
+                    Choreographer.getInstance().postFrameCallback(this);
+                }
+            }
+        };
+        Choreographer.getInstance().postFrameCallback(pillSpringCallback);
+    }
+
+    private void runCardConnectedSpring(final boolean opening, final Runnable onComplete) {
+        final View target = cardInnerLayout != null ? cardInnerLayout : cardView;
+        if (target == null) return;
+        stopCardSpring();
+        isCardClosingSpring = !opening;
+
+        final boolean isLeft = "LEFT".equalsIgnoreCase(edgeSide);
+        DisplayMetrics dm = service.getResources().getDisplayMetrics();
+        int screenH = dm.heightPixels > 0 ? dm.heightPixels : 2200;
+        int cardW = target.getWidth() > 0 ? target.getWidth() : Math.min(dpToPx(348), dm.widthPixels - dpToPx(36));
+        int estCardH = target.getHeight() > 0 ? target.getHeight() : dpToPx(320);
+
+        // Compute the exact anchor point on the inner card where the '<' pull-tab lives so the card unfolds directly out of '<'
+        int cardTopOnScreen = (screenH - estCardH) / 2;
+        int pillCenterYOnScreen = (pillParams != null ? pillParams.y : dpToPx(180)) + dpToPx(getPillHeightDp()) / 2;
+        float pivotX = isLeft ? 0f : (float) cardW;
+        float pivotY = Math.max(dpToPx(24), Math.min(estCardH - dpToPx(24), pillCenterYOnScreen - cardTopOnScreen));
+
+        target.setPivotX(pivotX);
+        target.setPivotY(pivotY);
+
+        float edgeOffsetTx = isLeft ? -dpToPx(44) : dpToPx(44);
+        float startTx = opening ? edgeOffsetTx : target.getTranslationX();
+        float targetTx = opening ? 0f : edgeOffsetTx;
+        float initVTx = opening ? (isLeft ? 1550f : -1550f) : (isLeft ? -950f : 950f);
+
+        float startSx = opening ? 0.08f : target.getScaleX();
+        float targetSx = opening ? 1.0f : 0.06f;
+        float initVSx = opening ? 7.8f : -4.2f;
+
+        float startSy = opening ? 0.14f : target.getScaleY();
+        float targetSy = opening ? 1.0f : 0.10f;
+        float initVSy = opening ? 6.6f : -3.8f;
+
+        // Simultaneously animate the '<' pull-tab so it feels physically connected to the unfolding window
+        if (isPillAttached && pillView != null) {
+            if (opening) {
+                float pullInTx = isLeft ? dpToPx(18) : -dpToPx(18);
+                runPillSpring(0f, pullInTx, 1.0f, 0.25f, 1.0f, 0.45f, isLeft ? 480f : -480f, -3.5f, -2.5f);
+            } else {
+                float pullStartTx = isLeft ? dpToPx(16) : -dpToPx(16);
+                runPillSpring(pullStartTx, 0f, 0.35f, 1.0f, 0.5f, 1.0f, isLeft ? -520f : 520f, 5.2f, 4.4f);
+            }
+        }
+
+        final float[] state = new float[]{
+                startTx, targetTx, initVTx,
+                startSx, targetSx, initVSx,
+                startSy, targetSy, initVSy
+        };
+        final long[] lastNs = new long[]{0L};
+
+        cardSpringCallback = new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                if (target == null || !isCardAttached) {
+                    cardSpringCallback = null;
+                    isCardClosingSpring = false;
+                    return;
+                }
+                float dt = lastNs[0] == 0L ? (1f / 120f) : Math.min(0.032f, Math.max(0.001f, (frameTimeNanos - lastNs[0]) / 1_000_000_000f));
+                lastNs[0] = frameTimeNanos;
+
+                float step = 1f / 240f;
+                float rem = dt;
+                // Underdamped elastic Hooke's Law spring constants for liquid overshoot & rebound
+                final float k = opening ? 265f : 320f;
+                final float c = opening ? 13.4f : 18.5f;
+
+                while (rem > 0f) {
+                    float h = Math.min(step, rem);
+                    rem -= h;
+
+                    float aTx = -k * (state[0] - state[1]) - c * state[2];
+                    state[2] += aTx * h;
+                    state[0] += state[2] * h;
+
+                    float aSx = -k * (state[3] - state[4]) - c * state[5];
+                    state[5] += aSx * h;
+                    state[3] += state[5] * h;
+
+                    float aSy = -k * (state[6] - state[7]) - c * state[8];
+                    state[8] += aSy * h;
+                    state[6] += state[8] * h;
+                }
+
+                float curSx = Math.max(0.04f, Math.min(1.22f, state[3]));
+                float curSy = Math.max(0.04f, Math.min(1.22f, state[6]));
+                float curAlpha = Math.max(0f, Math.min(1f, (curSx - 0.06f) / 0.55f));
+
+                target.setTranslationX(state[0]);
+                target.setScaleX(curSx);
+                target.setScaleY(curSy);
+                target.setAlpha(opening ? Math.max(0.25f, curAlpha) : curAlpha);
+
+                boolean settled = opening
+                        ? (Math.abs(state[0] - state[1]) < 0.35f &&
+                           Math.abs(state[3] - state[4]) < 0.004f &&
+                           Math.abs(state[6] - state[7]) < 0.004f &&
+                           Math.abs(state[2]) < 1.5f &&
+                           Math.abs(state[5]) < 0.02f &&
+                           Math.abs(state[8]) < 0.02f)
+                        : (state[3] <= 0.14f || (Math.abs(state[3] - state[4]) < 0.03f));
+
+                if (settled) {
+                    if (opening) {
+                        target.setTranslationX(0f);
+                        target.setScaleX(1f);
+                        target.setScaleY(1f);
+                        target.setAlpha(1f);
+                    }
+                    cardSpringCallback = null;
+                    isCardClosingSpring = false;
+                    if (onComplete != null) onComplete.run();
+                } else {
+                    Choreographer.getInstance().postFrameCallback(this);
+                }
+            }
+        };
+        Choreographer.getInstance().postFrameCallback(cardSpringCallback);
+    }
+
     public void showPill() {
-        if (isScreenLocked(service)) {
+        if (isScreenLocked(service) || !isCopilotTargetApp(currentPackage)) {
             hideCard();
             hidePill();
             return;
         }
         cancelAutoHide();
         if (pillView != null) {
-            pillView.animate().cancel();
             pillView.setAlpha(1f);
         }
         if (!isPillAttached && pillView != null) {
             try {
-                pillView.setAlpha(0f);
+                boolean isLeft = "LEFT".equalsIgnoreCase(edgeSide);
+                float startTx = isLeft ? -dpToPx(24) : dpToPx(24);
+                View target = pillIconText != null ? pillIconText : pillView;
+                pillView.setAlpha(1f);
+                target.setTranslationX(startTx);
+                target.setScaleX(0.35f);
+                target.setScaleY(0.55f);
                 windowManager.addView(pillView, pillParams);
                 isPillAttached = true;
-                pillView.animate().alpha(1f).setDuration(180).start();
+                runPillSpring(startTx, 0f, 0.35f, 1.0f, 0.55f, 1.0f, isLeft ? 580f : -580f, 5.4f, 4.2f);
             } catch (Exception e) {
                 Log.e(TAG, "Error adding pill view", e);
             }
@@ -1197,9 +1630,9 @@ public class IrisFloatingCopilot {
 
     public void hidePill() {
         cancelAutoHide();
+        stopPillSpring();
         if (isPillAttached && pillView != null) {
             try {
-                pillView.animate().cancel();
                 windowManager.removeView(pillView);
                 isPillAttached = false;
             } catch (Exception e) {
@@ -1214,7 +1647,7 @@ public class IrisFloatingCopilot {
             hidePill();
             return;
         }
-        if (isCardAttached) {
+        if (isCardAttached && !isCardClosingSpring) {
             hideCard();
         } else {
             showCard();
@@ -1228,15 +1661,26 @@ public class IrisFloatingCopilot {
             return;
         }
         cancelAutoHide();
+        stopCardSpring();
         if (!isCardAttached && cardView != null) {
             try {
                 refreshContext();
                 cardParams.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+                View target = cardInnerLayout != null ? cardInnerLayout : cardView;
+                cardView.setScaleX(1f);
+                cardView.setScaleY(1f);
+                cardView.setAlpha(1f);
+                target.setScaleX(0.08f);
+                target.setScaleY(0.14f);
+                target.setAlpha(0.25f);
                 windowManager.addView(cardView, cardParams);
                 isCardAttached = true;
+                runCardConnectedSpring(true, null);
             } catch (Exception e) {
                 Log.e(TAG, "Error adding card view", e);
             }
+        } else if (isCardAttached && cardView != null) {
+            runCardConnectedSpring(true, null);
         }
     }
 
@@ -1247,12 +1691,17 @@ public class IrisFloatingCopilot {
         if (replyFilterScroll != null) replyFilterScroll.setVisibility(View.GONE);
         if (contextPreviewView != null) contextPreviewView.setVisibility(View.GONE);
         if (isCardAttached && cardView != null) {
-            try {
-                windowManager.removeView(cardView);
-                isCardAttached = false;
-            } catch (Exception e) {
-                Log.e(TAG, "Error removing card view", e);
-            }
+            if (isCardClosingSpring) return;
+            runCardConnectedSpring(false, () -> {
+                if (isCardAttached && cardView != null) {
+                    try {
+                        windowManager.removeView(cardView);
+                        isCardAttached = false;
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error removing card view", e);
+                    }
+                }
+            });
         }
         scheduleAutoHide();
     }
@@ -1292,7 +1741,13 @@ public class IrisFloatingCopilot {
         public String packageName = "";
         public String appName = "";
         public String screenMode = "GENERAL";
+        public String partnerName = "";
+        public String detectedWritingDna = "";
+        public String lastSpeakerRole = "";
+        public String latestActiveTurn = "";
         public List<String> texts = new ArrayList<>();
+        public List<String> olderResolvedTopic = new ArrayList<>();
+        public List<String> activeCurrentTopic = new ArrayList<>();
         public String currentDraft = "";
         public String selectedText = "";
         public AccessibilityNodeInfo inputNode = null;
@@ -1300,6 +1755,102 @@ public class IrisFloatingCopilot {
         public AccessibilityNodeInfo scrollableNode = null;
         public boolean hasInput = false;
         public Map<String, String> entities = new LinkedHashMap<>();
+    }
+
+    private static class ChatTurnNode {
+        final String role; // "ME", "PARTNER", "DIVIDER"
+        final String text;
+        final Rect bounds;
+
+        ChatTurnNode(String role, String text, Rect bounds) {
+            this.role = role;
+            this.text = text;
+            this.bounds = bounds;
+        }
+    }
+
+    private boolean isChatMetadataNoise(String text) {
+        if (text == null) return true;
+        String t = text.trim();
+        if (t.isEmpty()) return true;
+        if (CHAT_TIMESTAMP_NOISE_PATTERN.matcher(t).matches()) return true;
+        if (t.startsWith("◈ IRIS //") || t.equals("IRIS COPILOT")) return true;
+        if (t.length() <= 2 && t.matches("^[0-9:+•✓✔×✕▾▴⋯<>₹$]+$")) return true;
+        String lower = t.toLowerCase();
+        if (lower.contains("voice message") || lower.contains("voice note")
+                || lower.contains("record voice") || lower.contains("record audio")
+                || lower.contains("voice recorder") || lower.contains("hold to record")
+                || lower.contains("slide to cancel") || lower.equals("audio")
+                || lower.equals("sticker") || lower.equals("stickers")
+                || lower.equals("gif") || lower.equals("gifs")
+                || lower.equals("payment") || lower.equals("send payment")
+                || lower.equals("scroll to bottom") || lower.equals("new chat")) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isInputPlaceholderHint(AccessibilityNodeInfo inputNode, String text) {
+        if (text == null || text.trim().isEmpty()) return true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && inputNode != null && inputNode.isShowingHintText()) {
+            return true;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && inputNode != null && inputNode.getHintText() != null) {
+            if (text.trim().equalsIgnoreCase(inputNode.getHintText().toString().trim())) {
+                return true;
+            }
+        }
+        String lower = text.trim().toLowerCase();
+        return lower.equals("message") || lower.equals("message...") || lower.equals("message…")
+                || lower.equals("type a message") || lower.equals("type a message...")
+                || lower.equals("write a message") || lower.equals("write a message...")
+                || lower.equals("reply") || lower.equals("reply...") || lower.equals("add a comment...")
+                || lower.equals("chat message") || lower.equals("text message");
+    }
+
+    private String cleanBubbleText(String rawText) {
+        if (rawText == null) return "";
+        String cleaned = TRAILING_TIME_CLEANER.matcher(rawText.trim()).replaceAll("").trim();
+        return cleaned.isEmpty() ? rawText.trim() : cleaned;
+    }
+
+    private String analyzeUserWritingDna(List<String> myMessages) {
+        if (myMessages == null || myMessages.isEmpty()) return "";
+        int totalWords = 0;
+        int lowercaseStarts = 0;
+        int emojiOrExclam = 0;
+        boolean hasHinglishOrSlang = false;
+
+        for (String msg : myMessages) {
+            String t = msg.trim();
+            if (t.isEmpty()) continue;
+            String[] words = t.split("\\s+");
+            totalWords += words.length;
+            char first = t.charAt(0);
+            if (Character.isLowerCase(first)) lowercaseStarts++;
+            if (t.contains("!") || t.contains("😂") || t.contains("👍") || t.contains("🔥") || t.contains("🙏") || t.contains("❤️")) {
+                emojiOrExclam++;
+            }
+            String lower = t.toLowerCase();
+            if (lower.matches(".*\\b(bhai|yaar|haan|nahi|kar|accha|theek|kya|abhi|kal|aaj|bro|nah|lowkey|rn|tbh|idk|lmk)\\b.*")) {
+                hasHinglishOrSlang = true;
+            }
+        }
+
+        int count = myMessages.size();
+        int avgWords = Math.max(1, totalWords / count);
+        boolean mostlyLower = lowercaseStarts > count / 2;
+
+        StringBuilder dna = new StringBuilder("Detected [ME] Writing DNA from screen: ");
+        dna.append(avgWords <= 6 ? "short punchy messages (~" + avgWords + " words)" : "conversational sentences (~" + avgWords + " words)");
+        dna.append(mostlyLower ? ", relaxed lowercase style" : ", natural sentence casing");
+        if (hasHinglishOrSlang) {
+            dna.append(", uses casual slang/Hinglish matching the chat thread");
+        }
+        if (emojiOrExclam > 0) {
+            dna.append(", expressive tone");
+        }
+        return dna.toString();
     }
 
     private String detectScreenMode(String pkg) {
@@ -1326,7 +1877,35 @@ public class IrisFloatingCopilot {
 
     public ScreenContextData extractScreenContext() {
         ScreenContextData data = new ScreenContextData();
-        AccessibilityNodeInfo root = service.getRootInActiveWindow();
+        AccessibilityNodeInfo root = null;
+        int imeTopOnScreen = Integer.MAX_VALUE;
+
+        // Always locate the actual TYPE_APPLICATION window root so an open keyboard never hijacks getRootInActiveWindow()
+        try {
+            List<AccessibilityWindowInfo> windows = service.getWindows();
+            if (windows != null) {
+                for (AccessibilityWindowInfo w : windows) {
+                    if (w == null) continue;
+                    Rect wb = new Rect();
+                    w.getBoundsInScreen(wb);
+                    if (w.getType() == AccessibilityWindowInfo.TYPE_INPUT_METHOD && wb.height() > dpToPx(80)) {
+                        imeTopOnScreen = Math.min(imeTopOnScreen, wb.top);
+                    }
+                    AccessibilityNodeInfo wRoot = w.getRoot();
+                    if (wRoot == null || wRoot.getPackageName() == null) continue;
+                    String wPkg = wRoot.getPackageName().toString();
+                    if (w.getType() == AccessibilityWindowInfo.TYPE_APPLICATION
+                            && !wPkg.equals(service.getPackageName())
+                            && !isTransientSystemOrKeyboardPackage(wPkg)) {
+                        root = wRoot;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        if (root == null) {
+            root = service.getRootInActiveWindow();
+        }
         if (root == null) return data;
 
         data.packageName = root.getPackageName() != null ? root.getPackageName().toString() : currentPackage;
@@ -1363,15 +1942,32 @@ public class IrisFloatingCopilot {
 
         if (data.inputNode != null) {
             CharSequence cs = data.inputNode.getText();
-            data.currentDraft = cs != null ? cs.toString().trim() : "";
+            String rawDraft = cs != null ? cs.toString().trim() : "";
+            data.currentDraft = isInputPlaceholderHint(data.inputNode, rawDraft) ? "" : rawDraft;
         }
 
         Collections.sort(spatialNodes);
         DisplayMetrics dm = service.getResources().getDisplayMetrics();
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : 1080;
+        int screenH = dm.heightPixels > 0 ? dm.heightPixels : 2200;
         boolean isChat = "CHAT".equals(data.screenMode);
 
+        Rect inputBounds = new Rect();
+        int inputTopCutoff = (int) (screenH * 0.86f);
+        if (imeTopOnScreen < screenH) {
+            inputTopCutoff = Math.min(inputTopCutoff, imeTopOnScreen - dpToPx(58));
+        }
+        if (data.inputNode != null) {
+            data.inputNode.getBoundsInScreen(inputBounds);
+            if (inputBounds.top > dpToPx(140)) {
+                inputTopCutoff = Math.min(inputTopCutoff, inputBounds.top - dpToPx(24));
+            }
+        }
+
         StringBuilder fullRawForEntities = new StringBuilder();
+        List<ChatTurnNode> rawChatTurns = new ArrayList<>();
+        List<String> mySamples = new ArrayList<>();
+
         for (SpatialNode sn : spatialNodes) {
             String rawText = sn.text;
             if (!data.currentDraft.isEmpty() && rawText.equals(data.currentDraft)) {
@@ -1380,17 +1976,130 @@ public class IrisFloatingCopilot {
             fullRawForEntities.append(rawText).append(" ");
 
             if (isChat) {
-                if (sn.bounds.top < dpToPx(96)) {
-                    data.texts.add("[HEADER] " + rawText);
-                } else if (sn.bounds.left > screenW * 0.24f && sn.bounds.right > screenW * 0.76f) {
-                    data.texts.add("[YOU] " + rawText);
-                } else if (sn.bounds.left < screenW * 0.26f && sn.bounds.right < screenW * 0.88f) {
-                    data.texts.add("[THEM] " + rawText);
+                if (isChatMetadataNoise(rawText)) {
+                    continue;
+                }
+                // Ignore any node overlapping or below the chat compose/typing bar & voice-mic row
+                if (sn.bounds.top >= inputTopCutoff || sn.bounds.bottom >= inputTopCutoff + dpToPx(14)) {
+                    continue;
+                }
+                // Top Header Bar: extract Partner / Contact / Group Name
+                if (sn.bounds.top < dpToPx(106)) {
+                    String hdr = rawText.trim();
+                    if (data.partnerName.isEmpty()
+                            && hdr.length() >= 2
+                            && !hdr.matches("^\\d{1,2}:\\d{2}.*")
+                            && !hdr.matches("^\\d+%$")
+                            && !CHAT_DATE_DIVIDER_PATTERN.matcher(hdr).matches()) {
+                        data.partnerName = hdr;
+                    }
+                    continue;
+                }
+
+                String cleanedMsg = cleanBubbleText(rawText);
+                if (cleanedMsg.isEmpty() || isChatMetadataNoise(cleanedMsg)) {
+                    continue;
+                }
+
+                int leftMargin = Math.max(0, sn.bounds.left);
+                int rightMargin = Math.max(0, screenW - sn.bounds.right);
+                int asymmetry = leftMargin - rightMargin;
+                boolean isCenteredPill = Math.abs(asymmetry) <= dpToPx(24) && sn.bounds.width() < screenW * 0.65f;
+
+                if (CHAT_DATE_DIVIDER_PATTERN.matcher(cleanedMsg).matches() || (isCenteredPill && cleanedMsg.length() <= 28)) {
+                    rawChatTurns.add(new ChatTurnNode("DIVIDER", cleanedMsg, sn.bounds));
+                    data.texts.add("[TOPIC_DIVIDER] " + cleanedMsg);
+                } else if (asymmetry > dpToPx(14) || (rightMargin < dpToPx(62) && leftMargin > dpToPx(42))) {
+                    // Right-anchored outgoing bubble -> Sent by Phone Owner [ME]
+                    rawChatTurns.add(new ChatTurnNode("ME", cleanedMsg, sn.bounds));
+                    mySamples.add(cleanedMsg);
+                    data.texts.add("[ME] " + cleanedMsg);
+                } else if (asymmetry < -dpToPx(14) || (leftMargin < dpToPx(84) && rightMargin > dpToPx(42))) {
+                    // Left-anchored incoming bubble -> Sent by Contact [PARTNER]
+                    String pTag = data.partnerName.isEmpty() ? "[PARTNER]" : "[PARTNER (" + data.partnerName + ")]";
+                    rawChatTurns.add(new ChatTurnNode("PARTNER", cleanedMsg, sn.bounds));
+                    data.texts.add(pTag + " " + cleanedMsg);
                 } else {
-                    data.texts.add(rawText);
+                    // Wide full-width bubble fallback: classify by smaller edge margin
+                    if (rightMargin < leftMargin) {
+                        rawChatTurns.add(new ChatTurnNode("ME", cleanedMsg, sn.bounds));
+                        mySamples.add(cleanedMsg);
+                        data.texts.add("[ME] " + cleanedMsg);
+                    } else {
+                        String pTag = data.partnerName.isEmpty() ? "[PARTNER]" : "[PARTNER (" + data.partnerName + ")]";
+                        rawChatTurns.add(new ChatTurnNode("PARTNER", cleanedMsg, sn.bounds));
+                        data.texts.add(pTag + " " + cleanedMsg);
+                    }
                 }
             } else {
                 data.texts.add(rawText);
+            }
+        }
+
+        if (isChat && !rawChatTurns.isEmpty()) {
+            data.detectedWritingDna = analyzeUserWritingDna(mySamples);
+            String pLabel = data.partnerName.isEmpty() ? "PARTNER" : "PARTNER (" + data.partnerName + ")";
+
+            // Segment conversation into [OLDER RESOLVED TOPIC] vs [ACTIVE CURRENT TOPIC]
+            int splitIdx = 0;
+            for (int i = 1; i < rawChatTurns.size(); i++) {
+                ChatTurnNode prev = rawChatTurns.get(i - 1);
+                ChatTurnNode curr = rawChatTurns.get(i);
+
+                if ("DIVIDER".equals(curr.role)) {
+                    splitIdx = Math.min(i + 1, rawChatTurns.size() - 1);
+                    continue;
+                }
+                if ("DIVIDER".equals(prev.role)) {
+                    splitIdx = i;
+                    continue;
+                }
+
+                int verticalGap = curr.bounds.top - prev.bounds.bottom;
+                boolean largeTimeOrVisualGap = verticalGap > dpToPx(46);
+                boolean prevClosedOldTopic = TOPIC_CLOSURE_PATTERN.matcher(prev.text.trim()).matches();
+                boolean currOpensNewTopic = NEW_TOPIC_OPENER_PATTERN.matcher(curr.text.trim()).matches();
+
+                if (prevClosedOldTopic || currOpensNewTopic || largeTimeOrVisualGap) {
+                    splitIdx = i;
+                }
+            }
+
+            // Ensure if splitIdx leaves 0 non-divider turns, back up one turn
+            if (splitIdx >= rawChatTurns.size()) {
+                splitIdx = Math.max(0, rawChatTurns.size() - 1);
+            }
+
+            for (int i = 0; i < rawChatTurns.size(); i++) {
+                ChatTurnNode turn = rawChatTurns.get(i);
+                if ("DIVIDER".equals(turn.role)) continue;
+                String formatted = ("ME".equals(turn.role) ? "[ME]: " : "[" + pLabel + "]: ") + turn.text;
+                if (i < splitIdx) {
+                    data.olderResolvedTopic.add(formatted);
+                } else {
+                    data.activeCurrentTopic.add(formatted);
+                }
+            }
+
+            // Collect the consecutive messages from the very last speaker in the active topic
+            String lastRole = "";
+            List<String> latestTurnParts = new ArrayList<>();
+            for (int i = rawChatTurns.size() - 1; i >= splitIdx; i--) {
+                ChatTurnNode t = rawChatTurns.get(i);
+                if ("DIVIDER".equals(t.role)) continue;
+                if (lastRole.isEmpty()) {
+                    lastRole = t.role;
+                    latestTurnParts.add(0, t.text);
+                } else if (lastRole.equals(t.role)) {
+                    latestTurnParts.add(0, t.text);
+                } else {
+                    break;
+                }
+            }
+            data.lastSpeakerRole = lastRole;
+            if (!latestTurnParts.isEmpty()) {
+                String speakerTag = "ME".equals(lastRole) ? "[ME]" : "[" + pLabel + "]";
+                data.latestActiveTurn = speakerTag + ": " + android.text.TextUtils.join(" / ", latestTurnParts);
             }
         }
 
@@ -1468,38 +2177,55 @@ public class IrisFloatingCopilot {
             } else if (editableHolder.isEmpty()) {
                 editableHolder.add(node);
             }
+            CharSequence edText = node.getText();
+            if (edText != null && edText.length() > 0 && selectedHolder.isEmpty()) {
+                String s = edText.toString();
+                int selStart = node.getTextSelectionStart();
+                int selEnd = node.getTextSelectionEnd();
+                if (selStart >= 0 && selEnd > selStart && selEnd <= s.length()) {
+                    selectedHolder.add(s.substring(selStart, selEnd).trim());
+                }
+            }
+            // Never add the editable typing box itself (or its "Message" hint) into spatialNodes!
+            return;
         }
 
         if (node.isScrollable() && scrollHolder.isEmpty() && bounds.height() > dpToPx(180)) {
             scrollHolder.add(node);
         }
 
+        CharSequence cd = node.getContentDescription();
+        String viewId = node.getViewIdResourceName();
+        String cdStr = cd != null ? cd.toString().trim().toLowerCase() : "";
+        String idStr = viewId != null ? viewId.toLowerCase() : "";
+        String clsStr = node.getClassName() != null ? node.getClassName().toString().toLowerCase() : "";
+
         if (node.isClickable() && sendHolder.isEmpty()) {
-            CharSequence cd = node.getContentDescription();
-            String viewId = node.getViewIdResourceName();
-            String cdStr = cd != null ? cd.toString().trim().toLowerCase() : "";
-            String idStr = viewId != null ? viewId.toLowerCase() : "";
             if (cdStr.equals("send") || cdStr.equals("send message") || idStr.endsWith("/send") || idStr.endsWith("send_button") || idStr.endsWith("btn_send")) {
                 sendHolder.add(node);
             }
         }
 
-        CharSequence text = node.getText();
-        if (text != null && text.length() > 0) {
-            String s = text.toString().trim();
-            int selStart = node.getTextSelectionStart();
-            int selEnd = node.getTextSelectionEnd();
-            if (selStart >= 0 && selEnd > selStart && selEnd <= s.length() && selectedHolder.isEmpty()) {
-                selectedHolder.add(s.substring(selStart, selEnd).trim());
-            }
-            if (!s.isEmpty() && s.length() > 1 && !containsSpatialText(spatialNodes, s)) {
-                spatialNodes.add(new SpatialNode(s, bounds));
-            }
-        } else {
-            CharSequence desc = node.getContentDescription();
-            if (desc != null && desc.length() > 0) {
-                String s = desc.toString().trim();
-                if (!s.isEmpty() && s.length() > 2 && !s.equalsIgnoreCase("send") && !containsSpatialText(spatialNodes, s)) {
+        // Skip compose bar, voice note mic button, camera, emoji, attachment & toolbar controls by viewId or className
+        boolean isComposeOrControlId = idStr.endsWith("/entry") || idStr.contains("chat_input")
+                || idStr.contains("input_layout") || idStr.contains("compose")
+                || idStr.contains("voice_note") || idStr.contains("record")
+                || idStr.contains("mic") || idStr.endsWith("/send")
+                || idStr.contains("send_button") || idStr.contains("attach")
+                || idStr.contains("camera") || idStr.contains("emoji")
+                || idStr.contains("sticker") || idStr.contains("gif");
+        boolean isIconControlWidget = clsStr.contains("imagebutton") || clsStr.contains("imageview");
+
+        if (!isComposeOrControlId && !isIconControlWidget) {
+            CharSequence text = node.getText();
+            if (text != null && text.length() > 0) {
+                String s = text.toString().trim();
+                int selStart = node.getTextSelectionStart();
+                int selEnd = node.getTextSelectionEnd();
+                if (selStart >= 0 && selEnd > selStart && selEnd <= s.length() && selectedHolder.isEmpty()) {
+                    selectedHolder.add(s.substring(selStart, selEnd).trim());
+                }
+                if (!s.isEmpty() && s.length() > 1 && !containsSpatialText(spatialNodes, s)) {
                     spatialNodes.add(new SpatialNode(s, bounds));
                 }
             }
@@ -1588,23 +2314,62 @@ public class IrisFloatingCopilot {
 
         StringBuilder sb = new StringBuilder();
         sb.append("Application: ").append(data.appName).append(" (").append(data.packageName).append(") [Mode: ").append(data.screenMode).append("]\n");
+        if (!data.partnerName.isEmpty()) {
+            sb.append("Chat Partner / Contact Name: \"").append(data.partnerName).append("\"\n");
+        }
+        if ("CHAT".equals(data.screenMode)) {
+            sb.append("Speaker Roles: [ME] = The human phone owner (you are ghostwriting FOR [ME] in 1st-person \"I\"); ")
+              .append(data.partnerName.isEmpty() ? "[PARTNER]" : "[PARTNER (" + data.partnerName + ")]")
+              .append(" = The other person talking to [ME].\n");
+        }
+        if (!data.detectedWritingDna.isEmpty()) {
+            sb.append(data.detectedWritingDna).append("\n");
+        }
         if (!data.selectedText.isEmpty()) {
             sb.append("User Highlighted/Selected Text: \"").append(data.selectedText).append("\"\n");
         }
         if (hasActiveDraft) {
-            sb.append("Current Draft in Input Box: \"").append(data.currentDraft).append("\"\n");
+            sb.append("Current Draft in Input Box (typed by [ME]): \"").append(data.currentDraft).append("\"\n");
         }
-        sb.append("Screen Content (ordered top-to-bottom):\n");
-        int start = Math.max(0, combinedTexts.size() - 45);
+
         StringBuilder previewSb = new StringBuilder();
+        if (!data.partnerName.isEmpty()) {
+            previewSb.append("PARTNER: ").append(data.partnerName).append("\n");
+        }
         if (hasActiveDraft) {
             previewSb.append("DRAFT: ").append(data.currentDraft).append("\n---\n");
         }
-        for (int i = start; i < combinedTexts.size(); i++) {
-            String line = combinedTexts.get(i);
-            sb.append("- ").append(line).append("\n");
-            if (i >= Math.max(0, combinedTexts.size() - 8)) {
-                previewSb.append(line).append("\n");
+
+        if ("CHAT".equals(data.screenMode) && !data.activeCurrentTopic.isEmpty() && deepScanBuffer.isEmpty()) {
+            if (!data.olderResolvedTopic.isEmpty()) {
+                sb.append("\n[OLDER RESOLVED TOPIC — ENDED EARLIER (BACKGROUND MEMORY ONLY, DO NOT REPLY TO THIS OLD TOPIC)]:\n");
+                int oldStart = Math.max(0, data.olderResolvedTopic.size() - 12);
+                for (int i = oldStart; i < data.olderResolvedTopic.size(); i++) {
+                    sb.append("  ").append(data.olderResolvedTopic.get(i)).append("\n");
+                }
+            }
+            sb.append("\n[ACTIVE CURRENT TOPIC — NEW/LIVE TOPIC (REPLY STRICTLY TO THIS)]:\n");
+            for (String activeLine : data.activeCurrentTopic) {
+                sb.append("  ").append(activeLine).append("\n");
+                previewSb.append(activeLine).append("\n");
+            }
+            if (!data.latestActiveTurn.isEmpty()) {
+                sb.append("\n>>> LATEST ACTIVE TURN TO RESPOND TO <<<\n  ").append(data.latestActiveTurn).append("\n");
+                if ("ME".equals(data.lastSpeakerRole)) {
+                    sb.append("Note: [ME] sent the last message above. Generate natural follow-up messages from [ME] to [PARTNER] (do NOT reply as [PARTNER] answering [ME]!).\n");
+                } else {
+                    sb.append("Note: [PARTNER] sent the last message above. Generate [ME]'s direct 1st-person replies to [PARTNER]'s latest active message.\n");
+                }
+            }
+        } else {
+            sb.append("Screen Content (ordered top-to-bottom):\n");
+            int start = Math.max(0, combinedTexts.size() - 45);
+            for (int i = start; i < combinedTexts.size(); i++) {
+                String line = combinedTexts.get(i);
+                sb.append("- ").append(line).append("\n");
+                if (i >= Math.max(0, combinedTexts.size() - 8)) {
+                    previewSb.append(line).append("\n");
+                }
             }
         }
         this.lastExtractedContext = sb.toString();
@@ -1826,7 +2591,7 @@ public class IrisFloatingCopilot {
                 String styleDir = getPersonalStyleDirective();
                 String lenDir = getFilterDirective();
                 String bioDir = getUserBioDirective();
-                String systemPrompt = "You are Iris Copilot, a sharp cybernetic AI assistant analyzing an Android app screen. Respond directly, concisely, and naturally without filler words." + styleDir + lenDir;
+                String systemPrompt = "Analyze the active Android app screen context. Respond directly, concisely, and naturally without self-introductions or filler words." + styleDir + lenDir;
                 String userPrompt = "";
 
                 if (action.startsWith("INTERVIEW_LISTEN:")) {
@@ -1878,9 +2643,9 @@ public class IrisFloatingCopilot {
                     String toneInstr;
                     if ("AUTO".equals(replyFilter)) {
                         toneInstr = "Generate 3 distinct replies covering 3 styles in this exact order: "
-                                + "1) Short & Casual (quick 1-liner), "
-                                + "2) Polite & Balanced (warm and courteous), "
-                                + "3) Detailed & Complete (thorough, thoughtful response).";
+                                + "1) Short & Casual (quick natural 1-liner matching [ME]'s texting style), "
+                                + "2) Polite & Balanced (warm, clear, and natural), "
+                                + "3) Detailed & Complete (thoughtful response addressing every point in the active topic).";
                     } else {
                         String tDesc = "POLITE".equals(replyFilter) ? "warm, polite, and courteous"
                                 : "CASUAL".equals(replyFilter) ? "casual, friendly, and relaxed"
@@ -1888,51 +2653,56 @@ public class IrisFloatingCopilot {
                                 : "DETAILED".equals(replyFilter) ? "detailed, thorough, and well-explained (2-3 sentences)"
                                 : "YES".equals(replyFilter) ? "agreeing / saying YES positively"
                                 : "NO".equals(replyFilter) ? "politely declining / saying NO"
-                                : "LATER".equals(replyFilter) ? "saying you are busy right now and will follow up later"
+                                : "LATER".equals(replyFilter) ? "saying I am busy right now and will follow up later"
                                 : "natural and context-appropriate";
-                        toneInstr = "Generate 3 smart replies all matching this style/stance: " + tDesc + ".";
+                        toneInstr = "Generate 3 distinct replies all matching this style/stance: " + tDesc + ".";
                     }
-                    systemPrompt = "You are Iris Copilot. Based on the screen conversation ([THEM] = incoming messages, [YOU] = user's messages), "
+                    systemPrompt = "You are a 1st-Person Human Ghostwriter writing the next text message strictly AS [ME] (the phone owner) to [PARTNER].\n"
+                            + "CRITICAL RULES:\n"
+                            + "1. IDENTITY: Write strictly in the first person (\"I\", \"me\", \"my\") as the human user [ME]. NEVER identify as an AI, NEVER mention \"Iris\" or \"Iris Copilot\", and NEVER sound like a customer-service bot.\n"
+                            + "2. SPEAKER DIRECTION: [ME] is the phone owner sending this message. [PARTNER] is the other person. Answer [PARTNER]'s questions/comments from [ME]'s point of view. If [ME] sent the very last message on screen, write a natural follow-up from [ME] (do NOT answer [ME]'s own message as if you were [PARTNER]).\n"
+                            + "3. TOPIC BOUNDARY ISOLATION: Focus 100% on the [ACTIVE CURRENT TOPIC] and the >>> LATEST ACTIVE TURN TO RESPOND TO <<<. Completely ignore any finished discussions inside [OLDER RESOLVED TOPIC — ENDED EARLIER]. Never mix old resolved topics with the new active topic.\n"
+                            + "4. LANGUAGE & TONE MATCH: Match the exact language (English, Hinglish, Spanish, etc.), slang, formality, and rhythm used by [ME] in the chat.\n"
                             + toneInstr + styleDir
-                            + " Return ONLY a JSON array of 3 strings: [\"reply1\", \"reply2\", \"reply3\"]. No markdown wrapper, no filler.";
-                    userPrompt = lastExtractedContext + "\nGenerate 3 smart replies for the user to send next:";
+                            + "\nReturn ONLY a valid JSON array of 3 strings: [\"reply1\", \"reply2\", \"reply3\"]. No markdown wrapper, no explanation.";
+                    userPrompt = lastExtractedContext + "\nGhostwrite 3 ready-to-send replies from [ME] for the active current topic now:";
                 } else if ("SUMMARIZE".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Summarize the key information into 3 crisp, high-signal bullet points (- )." + lenDir;
+                    systemPrompt = "Summarize the key information on screen into 3 crisp, high-signal bullet points (- ), clearly separating any resolved earlier topic from the active current topic." + lenDir;
                     userPrompt = lastExtractedContext + "\nSummarize this screen:";
                 } else if ("EXTRACT".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Extract all key actionable items, dates/times, tasks, prices, specs, or important facts visible on this screen into a clean, structured bulleted list (- ).";
+                    systemPrompt = "Extract all key actionable items, dates/times, tasks, prices, specs, or important facts visible on this screen into a clean, structured bulleted list (- ).";
                     userPrompt = lastExtractedContext + "\nExtract key actionable items and facts from this screen:";
                 } else if ("FACT_CHECK".equals(action)) {
                     String wikiContext = fetchWikipediaFacts(lastExtractedContext);
-                    systemPrompt = "You are Iris Copilot Fact-Checker. Verify the main claims, topics, or entities visible on this screen using the provided Live Web Encyclopedia Reference and your knowledge. Point out what is accurate, any context needed, and key facts.";
+                    systemPrompt = "Verify the main claims, topics, or entities visible on this screen using the provided Live Web Encyclopedia Reference and your knowledge. Point out what is accurate, any context needed, and key facts.";
                     userPrompt = lastExtractedContext + wikiContext + "\nFact-check and explain the key claims/topics on this screen:";
                 } else if (action.startsWith("CLIPBOARD_AI:")) {
                     String clipText = action.substring("CLIPBOARD_AI:".length());
-                    systemPrompt = "You are Iris Copilot. The user copied this text to their clipboard. Provide: 1) A quick summary/explanation or translation if foreign, and 2) 2 smart replies or improved rewrites for it. Return a JSON array of 3 strings: [\"Insight / Translation: ...\", \"Reply/Rewrite 1\", \"Reply/Rewrite 2\"].";
+                    systemPrompt = "The user [ME] copied this text to their clipboard. Provide: 1) A quick summary/explanation or translation if foreign, and 2) 2 smart 1st-person replies or improved rewrites written AS [ME] (never as an AI). Return a JSON array of 3 strings: [\"Insight / Translation: ...\", \"Reply/Rewrite 1\", \"Reply/Rewrite 2\"].";
                     userPrompt = "Copied Clipboard Text: \"" + clipText + "\"\nScreen Context:\n" + lastExtractedContext;
                 } else if ("TRANSLATE".equals(action)) {
-                    systemPrompt = "You are Iris Copilot, a real-time translator. 1) Translate the visible foreign messages/text on screen into clear English. 2) If it's a chat, also provide 2 natural replies in the other person's language (with English translation in parentheses).";
-                    userPrompt = lastExtractedContext + "\nTranslate the screen content and suggest translated replies if applicable:";
+                    systemPrompt = "1) Translate the visible foreign messages/text in the [ACTIVE CURRENT TOPIC] into clear English. 2) If it's a chat, also provide 2 natural 1st-person replies written AS [ME] in [PARTNER]'s language (with English translation in parentheses).";
+                    userPrompt = lastExtractedContext + "\nTranslate the screen content and suggest translated replies from [ME]:";
                 } else if ("REWRITE".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Take the user's current draft (or the last message if no draft) and generate 3 improved alternatives: 1. Short & Casual, 2. Polite & Professional, 3. Detailed & Articulate. Return ONLY a JSON array of 3 strings: [\"version1\", \"version2\", \"version3\"].";
-                    userPrompt = lastExtractedContext + "\nRewrite this draft:";
+                    systemPrompt = "You are ghostwriting strictly AS the human user [ME]. Take [ME]'s Current Draft in Input Box (or [ME]'s latest message if no draft) and generate 3 improved 1st-person alternatives that fit the [ACTIVE CURRENT TOPIC]: 1. Short & Casual, 2. Polite & Professional, 3. Detailed & Articulate. NEVER mention Iris Copilot or sound like an AI. Return ONLY a JSON array of 3 strings: [\"version1\", \"version2\", \"version3\"].";
+                    userPrompt = lastExtractedContext + "\nRewrite [ME]'s draft:";
                 } else if (action.startsWith("REFINE_SHORT:")) {
                     String orig = action.substring("REFINE_SHORT:".length());
-                    systemPrompt = "You are Iris Copilot. Rewrite the given message in 2 shorter, punchier variations. Return ONLY a JSON array of 2 strings: [\"short1\", \"short2\"].";
+                    systemPrompt = "Rewrite the user's 1st-person message in 2 shorter, punchier human variations without losing its meaning. Return ONLY a JSON array of 2 strings: [\"short1\", \"short2\"].";
                     userPrompt = "Original message: \"" + orig + "\"\nMake it shorter and punchier:";
                 } else if (action.startsWith("REFINE_DETAIL:")) {
                     String orig = action.substring("REFINE_DETAIL:".length());
-                    systemPrompt = "You are Iris Copilot. Expand the given message into 2 more detailed, polite, and complete variations. Return ONLY a JSON array of 2 strings: [\"detailed1\", \"detailed2\"].";
+                    systemPrompt = "Expand the user's 1st-person message into 2 more detailed, polite, and complete human variations. Return ONLY a JSON array of 2 strings: [\"detailed1\", \"detailed2\"].";
                     userPrompt = "Original message: \"" + orig + "\"\nMake it more detailed and complete:";
                 } else if ("EXPLAIN".equals(action)) {
-                    systemPrompt = "You are Iris Copilot. Explain the core concept, error, message, or content visible on this screen in clear terms." + lenDir;
+                    systemPrompt = "Explain the core concept, error, message, or content visible on this screen in clear terms." + lenDir;
                     userPrompt = lastExtractedContext + "\nExplain what is on this screen:";
                 } else if (action.startsWith("COMPOSE:")) {
                     String rest = action.substring("COMPOSE:".length());
                     int colonIdx = rest.indexOf(':');
                     String instruction = colonIdx > 0 ? rest.substring(colonIdx + 1) : rest;
-                    systemPrompt = "You are Iris Copilot, a sharp message composer. Based on the user's instruction and active app/screen context, generate 3 ready-to-send message drafts: 1) Short & Casual, 2) Polite & Balanced, 3) Detailed & Complete." + styleDir + lenDir + " Return ONLY a JSON array of 3 strings: [\"draft1\", \"draft2\", \"draft3\"]. No markdown wrapper, no filler.";
-                    userPrompt = lastExtractedContext + "\nCompose a message for this instruction: " + instruction;
+                    systemPrompt = "You are a 1st-Person Human Ghostwriter composing a message strictly AS [ME] (the phone owner) to [PARTNER]. Based on [ME]'s instruction and the [ACTIVE CURRENT TOPIC], generate 3 ready-to-send 1st-person message drafts: 1) Short & Casual, 2) Polite & Balanced, 3) Detailed & Complete. NEVER speak as an AI or mention Iris Copilot." + styleDir + lenDir + " Return ONLY a JSON array of 3 strings: [\"draft1\", \"draft2\", \"draft3\"]. No markdown wrapper, no filler.";
+                    userPrompt = lastExtractedContext + "\nGhostwrite 3 messages from [ME] for this instruction: " + instruction;
                 } else if (action.startsWith("ASK:")) {
                     String question = action.substring("ASK:".length());
                     String prevContext = !lastAiResponse.isEmpty() ? "\nPrevious Copilot Response:\n" + lastAiResponse + "\n" : "";

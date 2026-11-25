@@ -48,14 +48,17 @@ public class IrisAccessibilityService extends AccessibilityService {
             } catch (Exception e) {
                 Log.e(TAG, "Error tracking window change", e);
             }
-        } else if (eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED || eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+        } else if (eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED
+                || eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED
+                || eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+                || eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             try {
                 IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
                 if (copilot != null) {
+                    CharSequence evtPkg = event.getPackageName();
                     AccessibilityNodeInfo src = event.getSource();
-                    if (src != null && src.isEditable()) {
-                        copilot.onUserInputActive();
-                    }
+                    boolean isEditableFocus = src != null && src.isEditable() && src.isFocused();
+                    copilot.syncKeyboardState(evtPkg != null ? evtPkg.toString() : null, isEditableFocus);
                 }
             } catch (Exception ignored) {}
         }
@@ -78,7 +81,9 @@ public class IrisAccessibilityService extends AccessibilityService {
         }
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                | AccessibilityEvent.TYPE_WINDOWS_CHANGED
                 | AccessibilityEvent.TYPE_VIEW_FOCUSED
+                | AccessibilityEvent.TYPE_VIEW_CLICKED
                 | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
         info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
