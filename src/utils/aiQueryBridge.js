@@ -3,7 +3,12 @@ import { useAssistantStore } from '../stores/assistantStore'
 import { SecureStorage } from './secureStorage'
 import { GenAI } from '../components/GenAIPlugin'
 import { getBackendPriorityChain, getSanitizedOllamaEndpoint } from './AIProviderManager'
-import { resolveWorkingGeminiModel, resolveWorkingGroqModel } from './modelResolver'
+import {
+  resolveWorkingGroqModel,
+  sanitizeGeminiModelId,
+  buildGeminiPayload,
+  getGeminiFallbackChain,
+} from './modelResolver'
 import { getAIConfig } from '../components/LauncherPlugin'
 import { executeDeviceAgentIntent } from './aiAgentTools'
 
@@ -194,7 +199,8 @@ ${searchContext ? `\n${searchContext}` : ''}`
   for (const backend of chain) {
     try {
       if (backend === 'GEMINI' && geminiKey) {
-        let model = (useAIStore.getState().geminiModel || localStorage.getItem('gemini_model') || 'gemini-2.5-flash').trim().replace(/\s+/g, '-')
+        const cleanKey = geminiKey.trim()
+        let model = sanitizeGeminiModelId(useAIStore.getState().geminiModel || localStorage.getItem('gemini_model') || 'gemini-2.5-flash')
         const contents = []
         if (Array.isArray(history) && history.length > 0) {
           for (const turn of history.slice(-6)) {
@@ -210,24 +216,31 @@ ${searchContext ? `\n${searchContext}` : ''}`
         const doGeminiFetch = (mId) =>
           fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mId}:streamGenerateContent?alt=sse`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-            body: JSON.stringify({
-              contents,
-              systemInstruction: { parts: [{ text: voiceSystemPrompt }] }
-            })
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cleanKey },
+            body: JSON.stringify(buildGeminiPayload(mId, contents, voiceSystemPrompt))
           })
 
         let res = await doGeminiFetch(model)
-        if (!res.ok && (res.status === 404 || res.status === 400)) {
-          const fallback = await resolveWorkingGeminiModel(geminiKey, model)
-          if (fallback && fallback !== model) {
-            model = fallback
-            res = await doGeminiFetch(model)
+        let primaryErrMsg = ''
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          primaryErrMsg = errData?.error?.message || `Gemini failed (HTTP ${res.status})`
+          if ([400, 403, 404, 429, 503].includes(res.status)) {
+            const candidates = await getGeminiFallbackChain(cleanKey, model)
+            for (const candidate of candidates) {
+              if (candidate === model) continue
+              const retryRes = await doGeminiFetch(candidate)
+              if (retryRes.ok) {
+                model = candidate
+                res = retryRes
+                try { useAIStore.getState().setGeminiModel(candidate) } catch {}
+                break
+              }
+            }
           }
         }
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}))
-          lastError = new Error(errData?.error?.message || `Gemini failed (HTTP ${res.status})`)
+          lastError = new Error(primaryErrMsg || `Gemini failed (HTTP ${res.status})`)
           console.warn('[IRIS] Gemini failed:', lastError.message)
           continue
         }

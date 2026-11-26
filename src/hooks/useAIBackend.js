@@ -6,7 +6,12 @@ import { SecureStorage } from '../utils/secureStorage'
 import { GenAI } from '../components/GenAIPlugin'
 import { getBackendPriorityChain, getSanitizedOllamaEndpoint } from '../utils/AIProviderManager'
 import { executeDeviceAgentIntent, updateLastAgentReply } from '../utils/aiAgentTools'
-import { resolveWorkingGeminiModel, resolveWorkingGroqModel } from '../utils/modelResolver'
+import {
+  resolveWorkingGroqModel,
+  sanitizeGeminiModelId,
+  buildGeminiPayload,
+  getGeminiFallbackChain,
+} from '../utils/modelResolver'
 
 const SEARCH_KEYWORDS = [
   'search', 'what is', 'who is', 'how to', 'latest', 'news', 'weather',
@@ -217,7 +222,8 @@ export default function useAIBackend(speakTextFn) {
   }, [setChatLog])
 
   const callGemini = async (prompt, systemInstruction, signal, chatLogRef, apiKey, imageAttachment) => {
-    let chosenModel = (localStorage.getItem('gemini_model') || 'gemini-2.5-flash').trim().replace(/\s+/g, '-')
+    const cleanKey = (apiKey || '').trim()
+    let chosenModel = sanitizeGeminiModelId(useAIStore.getState().geminiModel || localStorage.getItem('gemini_model') || 'gemini-2.5-flash')
     const history = chatLogRef
       .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
       .slice(-16)
@@ -233,29 +239,39 @@ export default function useAIBackend(speakTextFn) {
       })
     }
 
+    const baseContents = [...history, { role: 'user', parts: userParts }]
+
     const doFetch = (modelId) =>
       fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify({
-          contents: [...history, { role: 'user', parts: userParts }],
-          systemInstruction: { parts: [{ text: systemInstruction }] }
-        }),
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cleanKey },
+        body: JSON.stringify(buildGeminiPayload(modelId, baseContents, systemInstruction)),
         signal
       })
 
     let res = await doFetch(chosenModel)
-    if (!res.ok && (res.status === 404 || res.status === 400)) {
-      const fallbackModel = await resolveWorkingGeminiModel(apiKey, chosenModel)
-      if (fallbackModel && fallbackModel !== chosenModel) {
-        chosenModel = fallbackModel
-        res = await doFetch(chosenModel)
+    let primaryErrMsg = ''
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      primaryErrMsg = errData?.error?.message || `HTTP ${res.status}`
+      // On 400, 403, 404 (discontinued/not found), 429 (Free-Tier 0-quota on Pro models), or 503: try Free-Tier safe fallback chain
+      if ([400, 403, 404, 429, 503].includes(res.status)) {
+        const candidates = await getGeminiFallbackChain(cleanKey, chosenModel)
+        for (const candidate of candidates) {
+          if (candidate === chosenModel) continue
+          const retryRes = await doFetch(candidate)
+          if (retryRes.ok) {
+            chosenModel = candidate
+            res = retryRes
+            try { useAIStore.getState().setGeminiModel(candidate) } catch {}
+            break
+          }
+        }
       }
     }
 
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      throw new Error(`[${chosenModel}] ${errData?.error?.message || `HTTP ${res.status}`}`)
+      throw new Error(`[${chosenModel}] ${primaryErrMsg || `HTTP ${res.status}`}`)
     }
     return res
   }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import SettingsSection from './SettingsSection'
 import { SecureStorage } from '../../utils/secureStorage'
 import { useAIStore } from '../../stores/aiStore'
+import { fetchLiveGeminiModels, isDiscontinuedGeminiModel } from '../../utils/modelResolver'
 
 export default function ApiKeysSection({ expandedSections, toggleSection, geminiKey, setGeminiKey, groqKey, setGroqKey, embedded = false }) {
   const [nvidiaKey, setNvidiaKey] = useState('')
@@ -76,10 +77,8 @@ export default function ApiKeysSection({ expandedSections, toggleSection, gemini
           const err = await res.json().catch(() => ({}))
           throw new Error(`${res.status} - ${err?.error?.message || 'Unauthorized'}`)
         }
-        const data = await res.json()
-        return (data.models || [])
-          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-          .map(m => m.name.replace('models/', ''))
+        const live = await fetchLiveGeminiModels(val)
+        return live.filter(m => !isDiscontinuedGeminiModel(m))
       }
     },
     {

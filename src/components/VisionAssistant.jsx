@@ -14,7 +14,7 @@ export default function VisionAssistant({ glassBg: _glassBg, onClose, speakTextF
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
-  const geminiModel = useAIStore(s => s.geminiModel) || 'gemini-1.5-flash'
+  const geminiModel = useAIStore(s => s.geminiModel) || 'gemini-2.5-flash'
 
   // Initialize camera stream
   const startCamera = useCallback(async () => {

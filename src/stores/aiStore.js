@@ -2,17 +2,15 @@ import { create } from 'zustand'
 import { SecureStorage } from '../utils/secureStorage'
 import { getLS } from '../utils/storage'
 import { syncAIConfig, getAIConfig } from '../components/LauncherPlugin'
-import { fetchLiveGeminiModels, fetchLiveGroqModels } from '../utils/modelResolver'
-
-const DEPRECATED_GEMINI_MODELS = new Set(['gemini-1.0-pro', 'gemini-pro', 'gemini-1.5-flash', 'gemini-1.5-pro'])
+import { fetchLiveGeminiModels, fetchLiveGroqModels, isDiscontinuedGeminiModel, sanitizeGeminiModelId } from '../utils/modelResolver'
 
 function getInitialGeminiModel() {
   const saved = getLS('gemini_model', 'gemini-2.5-flash')
-  if (!saved || DEPRECATED_GEMINI_MODELS.has(saved)) {
+  if (!saved || isDiscontinuedGeminiModel(saved)) {
     try { localStorage.setItem('gemini_model', 'gemini-2.5-flash') } catch {}
     return 'gemini-2.5-flash'
   }
-  return saved
+  return sanitizeGeminiModelId(saved)
 }
 
 function syncToNative(backend, geminiKey, groqKey, model, groqModel) {
@@ -134,9 +132,10 @@ export const useAIStore = create((set, get) => ({
   },
   setVoiceEngineProvider: (v) => { localStorage.setItem('iris_voice_engine_provider', v); set({ voiceEngineProvider: v }) },
   setGeminiModel: (v) => {
-    localStorage.setItem('gemini_model', v)
-    set({ geminiModel: v })
-    syncToNative(get().llmBackend, get().geminiKey, get().groqKey, v, get().groqModel)
+    const cleanModel = sanitizeGeminiModelId(v)
+    localStorage.setItem('gemini_model', cleanModel)
+    set({ geminiModel: cleanModel })
+    syncToNative(get().llmBackend, get().geminiKey, get().groqKey, cleanModel, get().groqModel)
   },
   setGroqModel: (v) => {
     localStorage.setItem('groq_model', v)

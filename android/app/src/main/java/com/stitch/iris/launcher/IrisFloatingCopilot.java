@@ -2519,15 +2519,41 @@ public class IrisFloatingCopilot {
         }, 140);
     }
 
+    private static boolean isDiscontinuedNativeGeminiModel(String modelId) {
+        if (modelId == null || modelId.trim().isEmpty()) return true;
+        String id = modelId.trim().toLowerCase().replace("models/", "");
+        return id.equals("gemini-pro") || id.equals("gemini-pro-vision") || id.equals("gemini-ultra")
+                || id.startsWith("gemini-1.0") || id.startsWith("gemini-1.5") || id.startsWith("gemini-2.0")
+                || id.contains("1.0") || id.contains("1.5-") || id.contains("2.0-")
+                || id.contains("embedding") || id.contains("imagen") || id.contains("veo")
+                || id.contains("tts") || id.contains("audio") || id.contains("vision")
+                || id.contains("aqa") || id.contains("learnlm") || id.contains("bisect")
+                || id.contains("thinking-exp") || id.contains("computer-use") || id.contains("robotics")
+                || id.endsWith("-001") || id.endsWith("-002");
+    }
+
+    private static String sanitizeNativeGeminiModel(String modelId) {
+        if (modelId == null) return "gemini-2.5-flash";
+        String cleaned = modelId.trim().replace("models/", "").replaceAll("\\s+", "-");
+        if (cleaned.isEmpty() || isDiscontinuedNativeGeminiModel(cleaned)) {
+            return "gemini-2.5-flash";
+        }
+        return cleaned;
+    }
+
     private String queryGeminiVision(String visionPrompt, String base64Jpeg) throws Exception {
         SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String geminiKey = prefs.getString(KEY_GEMINI_KEY, "");
-        if (geminiKey.isEmpty()) geminiKey = prefs.getString(KEY_API_KEY, "");
+        String rawGemini = prefs.getString(KEY_GEMINI_KEY, "");
+        String rawApi = prefs.getString(KEY_API_KEY, "");
+        String geminiKey = IrisKeystorePlugin.decryptNative(rawGemini);
+        if (geminiKey.isEmpty()) geminiKey = IrisKeystorePlugin.decryptNative(rawApi);
         if (geminiKey.isEmpty()) {
             throw new Exception("Vision Scan requires a Gemini API key in IRIS Settings");
         }
-        String modelId = prefs.getString(KEY_MODEL, "gemini-2.5-flash");
-        if (modelId.isEmpty()) modelId = "gemini-2.5-flash";
+        String modelId = sanitizeNativeGeminiModel(prefs.getString(KEY_MODEL, "gemini-2.5-flash"));
+        if (modelId.toLowerCase().contains("gemma")) {
+            modelId = "gemini-2.5-flash";
+        }
 
         URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models/" + modelId + ":generateContent");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -3122,14 +3148,26 @@ public class IrisFloatingCopilot {
                 throw firstErr;
             }
         } else {
-            String cleanModel = model != null && !model.isEmpty() ? model : "gemini-2.5-flash";
+            String cleanModel = sanitizeNativeGeminiModel(model);
+            if (!cleanModel.equals(model)) {
+                prefs.edit().putString(KEY_MODEL, cleanModel).apply();
+            }
             try {
                 return callGeminiDirect(effectiveKey.trim(), cleanModel, systemPrompt, userPrompt);
             } catch (Exception firstErr) {
-                String fallback = discoverActiveGeminiModel(effectiveKey.trim(), cleanModel);
-                if (fallback != null && !fallback.equals(cleanModel)) {
-                    prefs.edit().putString(KEY_MODEL, fallback).apply();
-                    return callGeminiDirect(effectiveKey.trim(), fallback, systemPrompt, userPrompt);
+                List<String> fallbackCandidates = new ArrayList<>();
+                if (!"gemini-2.5-flash".equals(cleanModel)) fallbackCandidates.add("gemini-2.5-flash");
+                if (!"gemini-2.5-flash-lite".equals(cleanModel)) fallbackCandidates.add("gemini-2.5-flash-lite");
+                String discovered = discoverActiveGeminiModel(effectiveKey.trim(), cleanModel);
+                if (discovered != null && !discovered.equals(cleanModel) && !fallbackCandidates.contains(discovered)) {
+                    fallbackCandidates.add(discovered);
+                }
+                for (String fbModel : fallbackCandidates) {
+                    try {
+                        String res = callGeminiDirect(effectiveKey.trim(), fbModel, systemPrompt, userPrompt);
+                        prefs.edit().putString(KEY_MODEL, fbModel).apply();
+                        return res;
+                    } catch (Exception ignored) {}
                 }
                 throw firstErr;
             }
@@ -3180,9 +3218,16 @@ public class IrisFloatingCopilot {
 
         JSONObject body = new JSONObject();
         JSONArray contents = new JSONArray();
-        contents.put(new JSONObject().put("role", "user").put("parts", new JSONArray().put(new JSONObject().put("text", userPrompt))));
-        body.put("contents", contents);
-        body.put("systemInstruction", new JSONObject().put("parts", new JSONArray().put(new JSONObject().put("text", systemPrompt))));
+        boolean isGemma = modelId != null && modelId.toLowerCase().contains("gemma");
+        if (isGemma) {
+            String combinedPrompt = "[System Instructions]:\n" + systemPrompt + "\n\n[User Request]:\n" + userPrompt;
+            contents.put(new JSONObject().put("role", "user").put("parts", new JSONArray().put(new JSONObject().put("text", combinedPrompt))));
+            body.put("contents", contents);
+        } else {
+            contents.put(new JSONObject().put("role", "user").put("parts", new JSONArray().put(new JSONObject().put("text", userPrompt))));
+            body.put("contents", contents);
+            body.put("systemInstruction", new JSONObject().put("parts", new JSONArray().put(new JSONObject().put("text", systemPrompt))));
+        }
 
         try (OutputStream os = conn.getOutputStream()) {
             os.write(body.toString().getBytes("UTF-8"));
@@ -3235,12 +3280,14 @@ public class IrisFloatingCopilot {
                                 }
                             }
                         }
-                        if (!supportsGen || rawName.equals(failedModel) || rawName.contains("embedding")
-                                || rawName.contains("imagen") || rawName.contains("tts") || rawName.contains("1.0")) {
+                        if (!supportsGen || rawName.equals(failedModel) || isDiscontinuedNativeGeminiModel(rawName)) {
                             continue;
                         }
                         if (rawName.equals("gemini-2.5-flash")) return rawName;
-                        if (rawName.contains("flash") && bestFlash == null) bestFlash = rawName;
+                        if (rawName.equals("gemini-2.5-flash-lite")) bestFlash = rawName;
+                        if (rawName.contains("flash") && !rawName.contains("preview") && !rawName.contains("exp") && bestFlash == null) {
+                            bestFlash = rawName;
+                        }
                         if (bestAny == null) bestAny = rawName;
                     }
                     return bestFlash != null ? bestFlash : bestAny;
