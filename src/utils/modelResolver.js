@@ -2,10 +2,13 @@ import { useAIStore } from '../stores/aiStore'
 
 const GEMINI_CACHE_KEY = 'iris_cached_gemini_models'
 const GROQ_CACHE_KEY = 'iris_cached_groq_models'
+const DEAD_GEMINI_KEY = 'iris_dead_gemini_models_v1'
 
 export const DEFAULT_GEMINI_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
+  'gemini-flash-latest',
+  'gemini-flash-lite-latest',
   'gemini-2.5-pro',
 ]
 
@@ -16,10 +19,79 @@ export const DEFAULT_GROQ_MODELS = [
   'qwen-qwq-32b',
 ]
 
+function getDeadGeminiModelsSet() {
+  try {
+    const raw = localStorage.getItem(DEAD_GEMINI_KEY)
+    if (raw) {
+      const arr = JSON.parse(raw)
+      if (Array.isArray(arr)) return new Set(arr.map((x) => String(x).toLowerCase()))
+    }
+  } catch {}
+  return new Set()
+}
+
+export function isModelDiscontinuedError(status, errMsg = '') {
+  if (status === 404) return true
+  const msg = String(errMsg || '').toLowerCase()
+  return (
+    msg.includes('discontinued') ||
+    msg.includes('deprecated') ||
+    msg.includes('no longer available') ||
+    msg.includes('decommissioned') ||
+    msg.includes('retired') ||
+    msg.includes('not found for api version') ||
+    msg.includes('is not found') ||
+    msg.includes('shut down')
+  )
+}
+
+export function markGeminiModelDiscontinued(modelId) {
+  if (!modelId || typeof modelId !== 'string') return
+  const id = modelId.trim().toLowerCase().replace(/^models\//, '')
+  if (!id || id === 'gemini-flash-latest' || id === 'gemini-flash-lite-latest') return
+  try {
+    const dead = getDeadGeminiModelsSet()
+    dead.add(id)
+    localStorage.setItem(DEAD_GEMINI_KEY, JSON.stringify([...dead]))
+    const rawCache = localStorage.getItem(GEMINI_CACHE_KEY)
+    if (rawCache) {
+      const parsed = JSON.parse(rawCache)
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((m) => String(m).toLowerCase() !== id)
+        localStorage.setItem(GEMINI_CACHE_KEY, JSON.stringify(cleaned))
+      }
+    }
+  } catch {}
+}
+
+export function scoreGeminiModel(id) {
+  const lower = (id || '').toLowerCase().replace(/^models\//, '')
+  if (!lower) return 0
+  if (lower === 'gemini-flash-latest') return 145
+  if (lower === 'gemini-flash-lite-latest') return 143
+
+  const verMatch = lower.match(/^gemini-(\d+(?:\.\d+)?)-(flash-lite|flash|pro)(.*)$/)
+  if (verMatch) {
+    const ver = parseFloat(verMatch[1]) || 2.5
+    const tier = verMatch[2]
+    const suffix = verMatch[3] || ''
+    const isPreviewOrExp = suffix.includes('preview') || suffix.includes('exp')
+    const base = 100 + ver * 20
+    const tierBonus = tier === 'flash' ? 6 : tier === 'flash-lite' ? 4 : -14
+    const stabilityOffset = isPreviewOrExp ? -18 : 0
+    return base + tierBonus + stabilityOffset
+  }
+  if (lower.startsWith('gemma-3-27b')) return 95
+  if (lower.startsWith('gemma-3-')) return 90
+  if (lower.includes('flash')) return 85
+  return 50
+}
+
 export function isDiscontinuedGeminiModel(modelId) {
   if (!modelId || typeof modelId !== 'string') return true
   const id = modelId.trim().toLowerCase().replace(/^models\//, '')
   if (!id) return true
+  if (getDeadGeminiModelsSet().has(id)) return true
   // Gemini 1.0, 1.5, and 2.0 families (including 2.0-flash, 2.0-flash-lite, 2.0-flash-exp) are discontinued/retired
   if (
     id === 'gemini-pro' ||
@@ -54,7 +126,8 @@ export function isDiscontinuedGeminiModel(modelId) {
 export function sanitizeGeminiModelId(modelId) {
   const cleaned = (modelId || '').trim().replace(/^models\//, '').replace(/\s+/g, '-')
   if (!cleaned || isDiscontinuedGeminiModel(cleaned)) {
-    return 'gemini-2.5-flash'
+    const cached = getCachedGeminiModels()
+    return cached[0] || 'gemini-flash-latest'
   }
   return cleaned
 }
@@ -140,25 +213,8 @@ export async function fetchLiveGeminiModels(apiKey) {
       })
       .map((m) => m.name.replace(/^models\//, ''))
 
-    // Sort: prioritize Free-Tier guaranteed stable Flash & Flash-Lite models at the top
-    models.sort((a, b) => {
-      const score = (id) => {
-        if (id === 'gemini-2.5-flash') return 100
-        if (id === 'gemini-2.5-flash-lite') return 98
-        if (id === 'gemini-3-flash' || id === 'gemini-3.0-flash') return 96
-        if (id === 'gemini-3.1-flash-lite' || id === 'gemini-3-flash-lite') return 95
-        if (id.startsWith('gemini-2.5-flash') && !id.includes('preview') && !id.includes('exp')) return 93
-        if (id.startsWith('gemini-3') && id.includes('flash') && !id.includes('preview')) return 91
-        if (id === 'gemini-2.5-pro') return 86
-        if (id.includes('flash-lite')) return 84
-        if (id.includes('flash') && !id.includes('preview') && !id.includes('exp')) return 82
-        if (id.startsWith('gemma-3-27b')) return 78
-        if (id.startsWith('gemma-3-')) return 74
-        if (id.includes('flash')) return 70
-        return 50
-      }
-      return score(b) - score(a)
-    })
+    // Sort dynamically by generation version number (2.5 -> 3.0 -> 3.5 -> 4.0 -> 5.0+) and Free-Tier Flash stability
+    models.sort((a, b) => scoreGeminiModel(b) - scoreGeminiModel(a))
 
     const uniqueModels = [...new Set(models)]
     if (uniqueModels.length > 0) {
@@ -223,23 +279,29 @@ export async function fetchLiveGroqModels(apiKey) {
 export async function getGeminiFallbackChain(apiKey, primaryModel = '') {
   const cleanPrimary = sanitizeGeminiModelId(primaryModel)
   const live = await fetchLiveGeminiModels(apiKey)
-  // Always ensure free-tier guaranteed models (gemini-2.5-flash, gemini-2.5-flash-lite) are tried first in fallback
+  // Combine live highest-version Flash models + Google's evergreen rolling aliases (gemini-flash-latest / gemini-flash-lite-latest)
   const chain = [
     cleanPrimary,
+    ...live.filter((m) => !isDiscontinuedGeminiModel(m)),
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
-    ...live.filter((m) => !isDiscontinuedGeminiModel(m)),
-  ]
-  return [...new Set(chain.filter(Boolean))]
+  ].filter((m) => m && !isDiscontinuedGeminiModel(m))
+  return [...new Set(chain)]
 }
 
 export async function resolveWorkingGeminiModel(apiKey, failedModel = '') {
   const models = await fetchLiveGeminiModels(apiKey)
   const failedSet = new Set(Array.isArray(failedModel) ? failedModel : [failedModel])
-  const freeTierSafe = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', ...models].filter(
-    (m) => m && !failedSet.has(m) && !isDiscontinuedGeminiModel(m)
-  )
-  return freeTierSafe[0] || 'gemini-2.5-flash'
+  const freeTierSafe = [
+    ...models,
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+  ].filter((m) => m && !failedSet.has(m) && !isDiscontinuedGeminiModel(m))
+  return freeTierSafe[0] || 'gemini-flash-latest'
 }
 
 export async function resolveWorkingGroqModel(apiKey, failedModel = '') {

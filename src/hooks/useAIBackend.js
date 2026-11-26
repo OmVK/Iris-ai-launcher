@@ -11,6 +11,8 @@ import {
   sanitizeGeminiModelId,
   buildGeminiPayload,
   getGeminiFallbackChain,
+  isModelDiscontinuedError,
+  markGeminiModelDiscontinued,
 } from '../utils/modelResolver'
 
 const SEARCH_KEYWORDS = [
@@ -254,6 +256,9 @@ export default function useAIBackend(speakTextFn) {
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}))
       primaryErrMsg = errData?.error?.message || `HTTP ${res.status}`
+      if (isModelDiscontinuedError(res.status, primaryErrMsg)) {
+        markGeminiModelDiscontinued(chosenModel)
+      }
       // On 400, 403, 404 (discontinued/not found), 429 (Free-Tier 0-quota on Pro models), or 503: try Free-Tier safe fallback chain
       if ([400, 403, 404, 429, 503].includes(res.status)) {
         const candidates = await getGeminiFallbackChain(cleanKey, chosenModel)
@@ -265,6 +270,11 @@ export default function useAIBackend(speakTextFn) {
             res = retryRes
             try { useAIStore.getState().setGeminiModel(candidate) } catch {}
             break
+          } else {
+            const retryErr = await retryRes.json().catch(() => ({}))
+            if (isModelDiscontinuedError(retryRes.status, retryErr?.error?.message)) {
+              markGeminiModelDiscontinued(candidate)
+            }
           }
         }
       }

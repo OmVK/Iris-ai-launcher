@@ -2519,9 +2519,18 @@ public class IrisFloatingCopilot {
         }, 140);
     }
 
-    private static boolean isDiscontinuedNativeGeminiModel(String modelId) {
+    private boolean isDiscontinuedNativeGeminiModel(String modelId) {
         if (modelId == null || modelId.trim().isEmpty()) return true;
         String id = modelId.trim().toLowerCase().replace("models/", "");
+        try {
+            SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            String deadCsv = prefs.getString("copilot_dead_gemini_models_v1", "");
+            if (!deadCsv.isEmpty()) {
+                for (String dead : deadCsv.split(",")) {
+                    if (id.equals(dead.trim())) return true;
+                }
+            }
+        } catch (Exception ignored) {}
         return id.equals("gemini-pro") || id.equals("gemini-pro-vision") || id.equals("gemini-ultra")
                 || id.startsWith("gemini-1.0") || id.startsWith("gemini-1.5") || id.startsWith("gemini-2.0")
                 || id.contains("1.0") || id.contains("1.5-") || id.contains("2.0-")
@@ -2532,11 +2541,35 @@ public class IrisFloatingCopilot {
                 || id.endsWith("-001") || id.endsWith("-002");
     }
 
-    private static String sanitizeNativeGeminiModel(String modelId) {
+    private void markNativeModelDiscontinued(String modelId, String errMsg) {
+        if (modelId == null || errMsg == null) return;
+        String id = modelId.trim().toLowerCase().replace("models/", "");
+        if (id.isEmpty() || id.equals("gemini-flash-latest") || id.equals("gemini-flash-lite-latest")) return;
+        String lowerErr = errMsg.toLowerCase();
+        boolean isDead = lowerErr.contains("http 404") || lowerErr.contains("discontinued")
+                || lowerErr.contains("deprecated") || lowerErr.contains("no longer available")
+                || lowerErr.contains("not found") || lowerErr.contains("decommissioned")
+                || lowerErr.contains("retired") || lowerErr.contains("shut down");
+        if (!isDead) return;
+        try {
+            SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            String deadCsv = prefs.getString("copilot_dead_gemini_models_v1", "");
+            Set<String> set = new LinkedHashSet<>();
+            if (!deadCsv.isEmpty()) {
+                for (String s : deadCsv.split(",")) {
+                    if (!s.trim().isEmpty()) set.add(s.trim());
+                }
+            }
+            set.add(id);
+            prefs.edit().putString("copilot_dead_gemini_models_v1", android.text.TextUtils.join(",", set)).apply();
+        } catch (Exception ignored) {}
+    }
+
+    private String sanitizeNativeGeminiModel(String modelId) {
         if (modelId == null) return "gemini-2.5-flash";
         String cleaned = modelId.trim().replace("models/", "").replaceAll("\\s+", "-");
         if (cleaned.isEmpty() || isDiscontinuedNativeGeminiModel(cleaned)) {
-            return "gemini-2.5-flash";
+            return isDiscontinuedNativeGeminiModel("gemini-2.5-flash") ? "gemini-flash-latest" : "gemini-2.5-flash";
         }
         return cleaned;
     }
@@ -3155,19 +3188,25 @@ public class IrisFloatingCopilot {
             try {
                 return callGeminiDirect(effectiveKey.trim(), cleanModel, systemPrompt, userPrompt);
             } catch (Exception firstErr) {
+                markNativeModelDiscontinued(cleanModel, firstErr.getMessage());
                 List<String> fallbackCandidates = new ArrayList<>();
-                if (!"gemini-2.5-flash".equals(cleanModel)) fallbackCandidates.add("gemini-2.5-flash");
-                if (!"gemini-2.5-flash-lite".equals(cleanModel)) fallbackCandidates.add("gemini-2.5-flash-lite");
                 String discovered = discoverActiveGeminiModel(effectiveKey.trim(), cleanModel);
-                if (discovered != null && !discovered.equals(cleanModel) && !fallbackCandidates.contains(discovered)) {
+                if (discovered != null && !discovered.equals(cleanModel)) {
                     fallbackCandidates.add(discovered);
+                }
+                for (String evergreen : new String[]{"gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"}) {
+                    if (!evergreen.equals(cleanModel) && !isDiscontinuedNativeGeminiModel(evergreen) && !fallbackCandidates.contains(evergreen)) {
+                        fallbackCandidates.add(evergreen);
+                    }
                 }
                 for (String fbModel : fallbackCandidates) {
                     try {
                         String res = callGeminiDirect(effectiveKey.trim(), fbModel, systemPrompt, userPrompt);
                         prefs.edit().putString(KEY_MODEL, fbModel).apply();
                         return res;
-                    } catch (Exception ignored) {}
+                    } catch (Exception fbErr) {
+                        markNativeModelDiscontinued(fbModel, fbErr.getMessage());
+                    }
                 }
                 throw firstErr;
             }
@@ -3253,6 +3292,29 @@ public class IrisFloatingCopilot {
         }
     }
 
+    private double scoreNativeGeminiModel(String id) {
+        if (id == null) return 0.0;
+        String lower = id.trim().toLowerCase().replace("models/", "");
+        if (lower.equals("gemini-flash-latest")) return 145.0;
+        if (lower.equals("gemini-flash-lite-latest")) return 143.0;
+        Matcher m = Pattern.compile("^gemini-(\\d+(?:\\.\\d+)?)-(flash-lite|flash|pro)(.*)$").matcher(lower);
+        if (m.find()) {
+            double ver = 2.5;
+            try { ver = Double.parseDouble(m.group(1)); } catch (Exception ignored) {}
+            String tier = m.group(2);
+            String suffix = m.group(3) != null ? m.group(3) : "";
+            boolean isPreviewOrExp = suffix.contains("preview") || suffix.contains("exp");
+            double base = 100.0 + ver * 20.0;
+            double tierBonus = "flash".equals(tier) ? 6.0 : "flash-lite".equals(tier) ? 4.0 : -14.0;
+            double stabilityOffset = isPreviewOrExp ? -18.0 : 0.0;
+            return base + tierBonus + stabilityOffset;
+        }
+        if (lower.startsWith("gemma-3-27b")) return 95.0;
+        if (lower.startsWith("gemma-3-")) return 90.0;
+        if (lower.contains("flash")) return 85.0;
+        return 50.0;
+    }
+
     private String discoverActiveGeminiModel(String apiKey, String failedModel) {
         try {
             URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models");
@@ -3265,8 +3327,8 @@ public class IrisFloatingCopilot {
                 JSONObject json = new JSONObject(readStream(conn.getInputStream()));
                 JSONArray models = json.optJSONArray("models");
                 if (models != null) {
-                    String bestFlash = null;
-                    String bestAny = null;
+                    String bestModel = null;
+                    double bestScore = -1.0;
                     for (int i = 0; i < models.length(); i++) {
                         JSONObject m = models.getJSONObject(i);
                         String rawName = m.optString("name", "").replace("models/", "");
@@ -3283,14 +3345,13 @@ public class IrisFloatingCopilot {
                         if (!supportsGen || rawName.equals(failedModel) || isDiscontinuedNativeGeminiModel(rawName)) {
                             continue;
                         }
-                        if (rawName.equals("gemini-2.5-flash")) return rawName;
-                        if (rawName.equals("gemini-2.5-flash-lite")) bestFlash = rawName;
-                        if (rawName.contains("flash") && !rawName.contains("preview") && !rawName.contains("exp") && bestFlash == null) {
-                            bestFlash = rawName;
+                        double score = scoreNativeGeminiModel(rawName);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestModel = rawName;
                         }
-                        if (bestAny == null) bestAny = rawName;
                     }
-                    return bestFlash != null ? bestFlash : bestAny;
+                    return bestModel;
                 }
             }
         } catch (Exception ignored) {}

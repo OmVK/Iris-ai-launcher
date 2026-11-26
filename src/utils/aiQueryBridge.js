@@ -8,6 +8,8 @@ import {
   sanitizeGeminiModelId,
   buildGeminiPayload,
   getGeminiFallbackChain,
+  isModelDiscontinuedError,
+  markGeminiModelDiscontinued,
 } from './modelResolver'
 import { getAIConfig } from '../components/LauncherPlugin'
 import { executeDeviceAgentIntent } from './aiAgentTools'
@@ -225,6 +227,9 @@ ${searchContext ? `\n${searchContext}` : ''}`
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}))
           primaryErrMsg = errData?.error?.message || `Gemini failed (HTTP ${res.status})`
+          if (isModelDiscontinuedError(res.status, primaryErrMsg)) {
+            markGeminiModelDiscontinued(model)
+          }
           if ([400, 403, 404, 429, 503].includes(res.status)) {
             const candidates = await getGeminiFallbackChain(cleanKey, model)
             for (const candidate of candidates) {
@@ -235,6 +240,11 @@ ${searchContext ? `\n${searchContext}` : ''}`
                 res = retryRes
                 try { useAIStore.getState().setGeminiModel(candidate) } catch {}
                 break
+              } else {
+                const retryErr = await retryRes.json().catch(() => ({}))
+                if (isModelDiscontinuedError(retryRes.status, retryErr?.error?.message)) {
+                  markGeminiModelDiscontinued(candidate)
+                }
               }
             }
           }
