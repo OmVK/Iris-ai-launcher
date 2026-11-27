@@ -5094,6 +5094,18 @@ public class LauncherPlugin extends Plugin {
         });
     }
 
+    @PluginMethod
+    public void syncMemoryVault(PluginCall call) {
+        try {
+            String memoriesJson = call.getString("memoriesJson", null);
+            String historyJson = call.getString("historyJson", null);
+            IrisFloatingCopilot.syncMemoryState(getContext(), memoriesJson, historyJson);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Failed to sync memory vault: " + e.getMessage());
+        }
+    }
+
     // Helper: URL encode string
     private String encodeUrl(String s) {
         try {

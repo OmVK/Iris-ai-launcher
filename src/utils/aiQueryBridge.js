@@ -13,6 +13,12 @@ import {
 } from './modelResolver'
 import { getAIConfig } from '../components/LauncherPlugin'
 import { executeDeviceAgentIntent } from './aiAgentTools'
+import {
+  buildMemoryPromptBlock,
+  getRollingConversationHistory,
+  appendConversationTurn,
+  stripMemoryTags,
+} from './memoryVault'
 
 const SEARCH_TRIGGER_PATTERNS = [
   /\b(?:who|what|where|when|why|how|latest|news|today|price|score|current|update|tell me about|explain|search|look up|president|minister|flavor|taste|science|weather|population|capital)\b/i
@@ -91,9 +97,10 @@ function runEmbeddedOsCmds(rawText) {
 function sanitizeVoiceOutput(text, executeCmds = false) {
   if (!text) return ''
   if (executeCmds) runEmbeddedOsCmds(text)
-  return text
+  return stripMemoryTags(text)
     .replace(/\[\[\s*CMD\s*:[^\]]*\]\]/gi, '')
     .replace(/\[\[\s*CMD[^\]]*$/gi, '')
+    .replace(/\[\[\s*MEMORY[^\]]*$/gi, '')
     .replace(/[*_~`#>[\]{}()]/g, '')
     .replace(/\b(?:assistant|system|iris):\s*/gi, '')
     .replace(/\s+/g, ' ')
@@ -104,32 +111,38 @@ function syncVoiceTurnToAssistantStore(userPrompt, aiReply, backendUsed, rawText
   if (rawText) runEmbeddedOsCmds(rawText)
   try {
     const store = useAssistantStore.getState()
-    if (store.isPrivateSession || !userPrompt || !aiReply) return
+    if (!userPrompt || !aiReply) return
     const CleanPrompt = userPrompt.split('\n[REAL-TIME DEVICE OS ACTIONS')[0].trim()
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    store.setChatLog(prev => [
-      ...prev,
-      { id: `home_u_${Date.now()}`, time: nowTime, sender: 'USER', text: CleanPrompt, type: 'user' },
-      { id: `home_a_${Date.now() + 1}`, time: nowTime, sender: 'IRIS', text: aiReply, type: 'ai', provider: backendUsed }
-    ])
-    store.autoTitleSession(CleanPrompt)
-    store.persistSessions()
+    if (!store.isPrivateSession) {
+      appendConversationTurn(CleanPrompt, rawText || aiReply)
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      store.setChatLog(prev => [
+        ...prev,
+        { id: `home_u_${Date.now()}`, time: nowTime, sender: 'USER', text: CleanPrompt, type: 'user' },
+        { id: `home_a_${Date.now() + 1}`, time: nowTime, sender: 'IRIS', text: aiReply, type: 'assistant', provider: backendUsed }
+      ])
+      store.autoTitleSession(CleanPrompt)
+      store.persistSessions()
+    }
   } catch {}
 }
 
 export function syncActionTurnToAssistantStore(userPrompt, actionReply) {
   try {
     const store = useAssistantStore.getState()
-    if (store.isPrivateSession || !userPrompt || !actionReply) return
+    if (!userPrompt || !actionReply) return
     const CleanPrompt = userPrompt.split('\n[REAL-TIME DEVICE OS ACTIONS')[0].trim()
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    store.setChatLog(prev => [
-      ...prev,
-      { id: `act_u_${Date.now()}`, time: nowTime, sender: 'USER', text: CleanPrompt, type: 'user' },
-      { id: `act_a_${Date.now() + 1}`, time: nowTime, sender: 'IRIS', text: actionReply, type: 'ai', provider: 'SYSTEM' }
-    ])
-    store.autoTitleSession(CleanPrompt)
-    store.persistSessions()
+    if (!store.isPrivateSession) {
+      appendConversationTurn(CleanPrompt, actionReply)
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      store.setChatLog(prev => [
+        ...prev,
+        { id: `act_u_${Date.now()}`, time: nowTime, sender: 'USER', text: CleanPrompt, type: 'user' },
+        { id: `act_a_${Date.now() + 1}`, time: nowTime, sender: 'IRIS', text: actionReply, type: 'assistant', provider: 'SYSTEM' }
+      ])
+      store.autoTitleSession(CleanPrompt)
+      store.persistSessions()
+    }
   } catch {}
 }
 
@@ -168,11 +181,19 @@ export async function queryIrisAI(prompt, onChunk, history = []) {
   }
 
   const personaDirective = PERSONA_VOICE_DIRECTIVES[assistantPersona] || PERSONA_VOICE_DIRECTIVES.CHAT
+  const memoryBlock = isPrivateSession ? '' : buildMemoryPromptBlock()
+  const persistedRolling = getRollingConversationHistory()
+  const effectiveHistory = (Array.isArray(history) && history.length >= persistedRolling.length)
+    ? history
+    : [...persistedRolling, ...(Array.isArray(history) ? history : [])].slice(-16)
+
   const voiceSystemPrompt = `You are Iris, the native Android OS AI assistant integrated directly into the user's phone with real hardware, Telecom, app-launching, and Accessibility control.
 PERSONA (${assistantPersona}): ${personaDirective}
-${isPrivateSession ? 'PRIVACY: Incognito Zero-Trace mode is active.' : ''}
-VOICE OUTPUT RULES:
+${isPrivateSession ? 'PRIVACY: Incognito Zero-Trace mode is active.' : memoryBlock}
+VOICE & CONTINUITY RULES:
 - Deliver your answer in 1 to 2 crisp, natural, Siri-style spoken sentences.
+- Maintain seamless multi-turn conversation continuity with the previous dialogue turns. Resolve pronouns ("it", "he", "she", "that", "there", "the second one") using recent conversation history and your Long-Term Memory Vault.
+- LONG-TERM MEMORY EXTRACTION: Whenever the user tells you a personal fact, name, relationship, preference, schedule, or asks you to remember something, silently append [[MEMORY: <concise fact about the user>]] at the very end of your response so your Memory Vault stores it permanently.
 - Never use markdown formatting (no asterisks, hashtags, or bullet symbols) since your answer is spoken aloud via TTS.
 - Whenever [REAL-TIME DEVICE OS ACTIONS EXECUTED BY IRIS] is included in the prompt, those actions have ALREADY been physically executed on the device. Confirm them naturally and never claim to be a text-only AI or in a simulated environment.
 - SELF-HEALING OS EXECUTION: If the user asks for a device/hardware action using indirect or slang phrasing (e.g. "it's dark in here", "kill the torch", "crank the sound up") and no [REAL-TIME DEVICE OS ACTIONS EXECUTED BY IRIS] tag is present, append [[CMD: <canonical command>]] at the very end of your sentence (e.g. [[CMD: turn on flashlight]], [[CMD: turn off flashlight]], [[CMD: set volume to 100%]], [[CMD: open youtube]]) and confirm it naturally.
@@ -204,8 +225,8 @@ ${searchContext ? `\n${searchContext}` : ''}`
         const cleanKey = geminiKey.trim()
         let model = sanitizeGeminiModelId(useAIStore.getState().geminiModel || localStorage.getItem('gemini_model') || 'gemini-2.5-flash')
         const contents = []
-        if (Array.isArray(history) && history.length > 0) {
-          for (const turn of history.slice(-6)) {
+        if (Array.isArray(effectiveHistory) && effectiveHistory.length > 0) {
+          for (const turn of effectiveHistory.slice(-14)) {
             if (turn.role === 'user') {
               contents.push({ role: 'user', parts: [{ text: turn.text || turn.content || '' }] })
             } else if (turn.role === 'assistant') {
@@ -279,15 +300,15 @@ ${searchContext ? `\n${searchContext}` : ''}`
         }
         const finalOut = sanitizeVoiceOutput(fullText, true)
         if (finalOut) {
-          syncVoiceTurnToAssistantStore(prompt, finalOut, 'GEMINI')
+          syncVoiceTurnToAssistantStore(prompt, finalOut, 'GEMINI', fullText)
           return finalOut
         }
       }
 
       if (backend === 'GROQ' && groqKey) {
         const messages = [{ role: 'system', content: voiceSystemPrompt }]
-        if (Array.isArray(history) && history.length > 0) {
-          for (const turn of history.slice(-6)) {
+        if (Array.isArray(effectiveHistory) && effectiveHistory.length > 0) {
+          for (const turn of effectiveHistory.slice(-14)) {
             if (turn.role === 'user' || turn.role === 'assistant') {
               messages.push({ role: turn.role, content: turn.text || turn.content || '' })
             }
@@ -321,19 +342,25 @@ ${searchContext ? `\n${searchContext}` : ''}`
           continue
         }
         const data = await res.json()
-        const text = sanitizeVoiceOutput(data?.choices?.[0]?.message?.content || '', true)
+        const rawGroq = data?.choices?.[0]?.message?.content || ''
+        const text = sanitizeVoiceOutput(rawGroq, true)
         if (text) {
           if (onChunk) onChunk(text)
-          syncVoiceTurnToAssistantStore(prompt, text, 'GROQ')
+          syncVoiceTurnToAssistantStore(prompt, text, 'GROQ', rawGroq)
           return text
         }
       }
 
       if (backend === 'NVIDIA' && nvidiaKey) {
-        const messages = [
-          { role: 'system', content: voiceSystemPrompt },
-          { role: 'user', content: prompt }
-        ]
+        const messages = [{ role: 'system', content: voiceSystemPrompt }]
+        if (Array.isArray(effectiveHistory) && effectiveHistory.length > 0) {
+          for (const turn of effectiveHistory.slice(-14)) {
+            if (turn.role === 'user' || turn.role === 'assistant') {
+              messages.push({ role: turn.role, content: turn.text || turn.content || '' })
+            }
+          }
+        }
+        messages.push({ role: 'user', content: prompt })
         const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -353,10 +380,11 @@ ${searchContext ? `\n${searchContext}` : ''}`
           continue
         }
         const data = await res.json()
-        const text = sanitizeVoiceOutput(data?.choices?.[0]?.message?.content || '', true)
+        const rawNvidia = data?.choices?.[0]?.message?.content || ''
+        const text = sanitizeVoiceOutput(rawNvidia, true)
         if (text) {
           if (onChunk) onChunk(text)
-          syncVoiceTurnToAssistantStore(prompt, text, 'NVIDIA')
+          syncVoiceTurnToAssistantStore(prompt, text, 'NVIDIA', rawNvidia)
           return text
         }
       }

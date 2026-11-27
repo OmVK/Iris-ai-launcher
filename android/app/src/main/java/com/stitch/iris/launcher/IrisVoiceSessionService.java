@@ -28,16 +28,19 @@ public class IrisVoiceSessionService extends VoiceInteractionSessionService {
                 hide();
                 return;
             }
-            Log.d(TAG, "System Assist gesture triggered! Launching IRIS Voice AI");
+            Log.d(TAG, "System Assist gesture triggered! Checking In-App Aurora Assistant");
             try {
-                LauncherPlugin.onVoiceAssistTriggered();
-                Intent intent = new Intent(getContext(), MainActivity.class);
-                intent.setAction(Intent.ACTION_ASSIST);
-                intent.putExtra("iris_trigger_voice_assist", true);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                getContext().startActivity(intent);
+                boolean handledInApp = IrisFloatingCopilot.triggerInAppAuroraAssistant(getContext());
+                if (!handledInApp) {
+                    LauncherPlugin.onVoiceAssistTriggered();
+                    Intent intent = new Intent(getContext(), MainActivity.class);
+                    intent.setAction(Intent.ACTION_ASSIST);
+                    intent.putExtra("iris_trigger_voice_assist", true);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    getContext().startActivity(intent);
+                }
             } catch (Exception e) {
-                Log.e(TAG, "Failed to launch MainActivity from VoiceInteractionSession", e);
+                Log.e(TAG, "Failed to launch IRIS Assistant from VoiceInteractionSession", e);
             } finally {
                 hide();
             }

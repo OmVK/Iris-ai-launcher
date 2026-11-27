@@ -19,12 +19,38 @@ public class IrisAccessibilityService extends AccessibilityService {
     private final android.os.Handler serviceHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable continuousScrollRunnable = null;
     private int continuousScrollTicks = 0;
+    private long lastContentSyncMs = 0L;
+
+    private boolean hasEditableInNodeOrImmediateChildren(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        try {
+            if (node.isEditable()) return true;
+            CharSequence cls = node.getClassName();
+            if (cls != null && cls.toString().toLowerCase().contains("edittext")) return true;
+            int count = Math.min(node.getChildCount(), 6);
+            for (int i = 0; i < count; i++) {
+                AccessibilityNodeInfo child = node.getChild(i);
+                if (child != null) {
+                    if (child.isEditable()) return true;
+                    CharSequence cCls = child.getClassName();
+                    if (cCls != null && cCls.toString().toLowerCase().contains("edittext")) return true;
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.isPassword()) return;
+        IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+        if (copilot == null) {
+            try {
+                IrisFloatingCopilot.initialize(this);
+                copilot = IrisFloatingCopilot.getInstance();
+            } catch (Exception ignored) {}
+        }
         if (IrisFloatingCopilot.isScreenLocked(this)) {
-            IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
             if (copilot != null) {
                 copilot.hideCard();
                 copilot.hidePill();
@@ -32,15 +58,15 @@ public class IrisAccessibilityService extends AccessibilityService {
             return;
         }
         int eventType = event.getEventType();
+        CharSequence rawPkg = event.getPackageName();
+        String pkgStr = rawPkg != null ? rawPkg.toString() : null;
+
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             try {
-                CharSequence pkg = event.getPackageName();
-                if (pkg != null) {
-                    String pkgStr = pkg.toString();
+                if (pkgStr != null && !pkgStr.isEmpty()) {
                     if (!pkgStr.equals(getPackageName())) {
                         broadcastWindowChanged(pkgStr);
                     }
-                    IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
                     if (copilot != null) {
                         copilot.onPackageChanged(pkgStr);
                     }
@@ -53,14 +79,26 @@ public class IrisAccessibilityService extends AccessibilityService {
                 || eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
                 || eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             try {
-                IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
                 if (copilot != null) {
-                    CharSequence evtPkg = event.getPackageName();
-                    AccessibilityNodeInfo src = event.getSource();
-                    boolean isEditableFocus = src != null && src.isEditable() && src.isFocused();
-                    copilot.syncKeyboardState(evtPkg != null ? evtPkg.toString() : null, isEditableFocus);
+                    boolean isEditableSignal = eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
+                    if (!isEditableSignal && (eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED
+                            || eventType == AccessibilityEvent.TYPE_VIEW_CLICKED)) {
+                        AccessibilityNodeInfo src = event.getSource();
+                        isEditableSignal = hasEditableInNodeOrImmediateChildren(src);
+                    }
+                    copilot.onAccessibilitySignal(eventType, pkgStr, isEditableSignal);
                 }
             } catch (Exception ignored) {}
+        } else if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            long now = System.currentTimeMillis();
+            if (now - lastContentSyncMs >= 180L) {
+                lastContentSyncMs = now;
+                try {
+                    if (copilot != null) {
+                        copilot.onAccessibilitySignal(eventType, pkgStr, false);
+                    }
+                } catch (Exception ignored) {}
+            }
         }
     }
 

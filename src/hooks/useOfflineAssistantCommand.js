@@ -4,6 +4,7 @@ import { processCommand } from '../utils/OfflineCommandEngine'
 import { handleSideEffect } from '../utils/offlineSideEffects'
 import { queryIrisAI, syncActionTurnToAssistantStore } from '../utils/aiQueryBridge'
 import { executeDeviceAgentIntent, updateLastAgentReply } from '../utils/aiAgentTools'
+import { extractAndStoreMemoriesFromTurn } from '../utils/memoryVault'
 import { launchApp as nativeLaunch } from '../components/LauncherPlugin'
 import { useAssistantStore } from '../stores/assistantStore'
 
@@ -58,7 +59,7 @@ export default function useOfflineAssistantCommand({
       let result;
 
       // Cancel and exit commands close the overlay loop immediately
-      if (/^(?:cancel|never\s*mind|nevermind|forget\s+it|scratch\s+that|exit|close|stop|bye|goodbye)$/i.test(text.trim())) {
+      if (/^(?:cancel|never\s*mind|nevermind|forget\s+it|scratch\s+that|exit|close|stop|bye|goodbye|that'?s\s+all|thank\s+you\s+bye|done|nothing\s+else)$/i.test(text.trim())) {
         setPendingContext(null)
         pendingSuggestionsRef.current = []
         pendingUninstallAppRef.current = ''
@@ -134,7 +135,14 @@ export default function useOfflineAssistantCommand({
         pendingSuggestionsRef.current = []
       } else {
         const cleanedInput = text.trim().replace(/^(?:hey\s+iris|hi\s+iris|ok\s+iris|okay\s+iris|hello\s+iris|yo\s+iris|iris|ask\s+iris|hey\s+ai|hi\s+ai|ask\s+ai)[,.\s]+/i, '').trim() || text.trim()
-        result = await processCommand(cleanedInput)
+        extractAndStoreMemoriesFromTurn(cleanedInput)
+
+        const isConversationalFollowupOrMemory =
+          /^(?:why|how\s+come|what\s+about|how\s+about|and\s+(?:what|how|why|then|also)|tell\s+me\s+more|explain\s+(?:that|more)|elaborate|make\s+it|shorter|longer|in\s+hindi|in\s+english|translate\s+that|repeat\s+that|what\s+did\s+(?:i|you)\s+just|do\s+you\s+remember|remember\s+that|don'?t\s+forget|what\s+is\s+my\s+name|who\s+am\s+i|no\s+i\s+meant|not\s+that)/i.test(cleanedInput)
+
+        result = isConversationalFollowupOrMemory
+          ? { success: false, commands: [], sideEffects: [], response: '' }
+          : await processCommand(cleanedInput)
 
         if (!result.commands?.length && !result.sideEffects?.length && !result.requireMoreContext && !result.response) {
           const deviceActionSummary = await executeDeviceAgentIntent(cleanedInput, (liveBadges) => {
@@ -150,9 +158,9 @@ export default function useOfflineAssistantCommand({
                 .map((l) => l.replace(/^\s*-\s*/, '').trim())
             : []
 
-          const hasKnowledgeQuestion = /\b(?:who|what|why|how|when|where|explain|tell\s+me|summarize|analyze|write|draft|translate|joke|story|weather|news|meaning|define|difference)\b/i.test(cleanedInput)
+          const hasKnowledgeQuestion = /\b(?:who|what|why|how|when|where|explain|tell\s+me|summarize|analyze|write|draft|translate|joke|story|weather|news|meaning|define|difference|remember)\b/i.test(cleanedInput)
 
-          if (actionLines.length > 0 && !hasKnowledgeQuestion) {
+          if (actionLines.length > 0 && !hasKnowledgeQuestion && !isConversationalFollowupOrMemory) {
             const conciseSummary = actionLines.join(' ')
             result = { success: true, response: conciseSummary }
             shouldKeepListening = false
@@ -163,7 +171,8 @@ export default function useOfflineAssistantCommand({
               const aiResponse = await queryIrisAI(promptForAi, (chunk) => setStatusText(chunk), conversationHistoryRef.current)
               if (aiResponse) {
                 result = { success: true, response: aiResponse }
-                shouldKeepListening = false
+                // Keep listening after AI answers so user can carry on a multi-turn conversation
+                shouldKeepListening = true
                 aiQueryRan = true
               } else if (actionLines.length > 0) {
                 result = { success: true, response: actionLines.join(' ') }

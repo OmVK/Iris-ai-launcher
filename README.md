@@ -28,7 +28,7 @@ A futuristic, highly customizable, and cybernetic Android launcher built with Re
 
 ## 📱 App Info
 
-- **Version**: 6.4.0
+- **Version**: 6.5.0
 - **App ID**: `com.stitch.iris.launcher`
 - **Platform**: Android (Capacitor 8)
 - **Target SDK**: 36 (Android 14+)

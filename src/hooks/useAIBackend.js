@@ -14,6 +14,11 @@ import {
   isModelDiscontinuedError,
   markGeminiModelDiscontinued,
 } from '../utils/modelResolver'
+import {
+  buildMemoryPromptBlock,
+  appendConversationTurn,
+  stripMemoryTags,
+} from '../utils/memoryVault'
 
 const SEARCH_KEYWORDS = [
   'search', 'what is', 'who is', 'how to', 'latest', 'news', 'weather',
@@ -47,13 +52,16 @@ const SYSTEM_PROMPT_TEMPLATE = (ragContext, searchContext, persona = 'CHAT', isI
   const custom = localStorage.getItem('iris_system_prompt')
   if (custom) return custom
   const personaDirective = PERSONA_DIRECTIVES[persona] || PERSONA_DIRECTIVES.CHAT
+  const memoryBlock = isIncognito ? '' : buildMemoryPromptBlock()
   return `You are Iris, the native Android OS AI Assistant integrated directly into the user's phone with real hardware, Telecom, app-launching, and Accessibility Service control.
 
 ${personaDirective}
-${isIncognito ? 'PRIVACY DIRECTIVE: This is an Incognito Zero-Trace session. Answer objectively and privately without assuming any saved personal profile.' : ''}
+${isIncognito ? 'PRIVACY DIRECTIVE: This is an Incognito Zero-Trace session. Answer objectively and privately without assuming any saved personal profile.' : memoryBlock}
 
-RESPONSE RULES:
+RESPONSE & CONTINUITY RULES:
 - Answer directly and naturally without unnecessary filler, like the new Siri.
+- Maintain seamless multi-turn conversation continuity with the previous dialogue turns. Resolve references ("it", "that", "he", "she", "the second one") using recent conversation history and your Long-Term Memory Vault.
+- LONG-TERM MEMORY EXTRACTION: Whenever the user tells you a personal fact, name, relationship, preference, schedule, or asks you to remember something, silently append [[MEMORY: <concise fact about the user>]] at the very end of your response so your Memory Vault stores it permanently.
 - Whenever [REAL-TIME DEVICE OS ACTIONS EXECUTED BY IRIS] is included below, those actions have ALREADY been physically executed on the user's Android device. Confirm them concisely in 1 sentence. NEVER claim to be a text-only AI, without a physical screen, or in a simulated environment.
 - For code: always use fenced code blocks with language tag.
 - Keep answers clear, well-structured, and easy to read.
@@ -64,7 +72,7 @@ ${ragContext ? `<untrusted_context type="local_rag">\n${ragContext}\n</untrusted
 }
 
 const cleanResponse = (responseText, systemInstruction, prompt) => {
-  let cleaned = responseText
+  let cleaned = stripMemoryTags(responseText)
   if (cleaned.includes(systemInstruction)) {
     cleaned = cleaned.replace(systemInstruction, '').trim()
   }
@@ -227,9 +235,9 @@ export default function useAIBackend(speakTextFn) {
     const cleanKey = (apiKey || '').trim()
     let chosenModel = sanitizeGeminiModelId(useAIStore.getState().geminiModel || localStorage.getItem('gemini_model') || 'gemini-2.5-flash')
     const history = chatLogRef
-      .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
+      .filter(msg => (msg.type === 'user' || msg.type === 'assistant' || msg.type === 'ai') && !msg.loading && msg.text)
       .slice(-16)
-      .map(msg => ({ role: msg.sender === 'USER' ? 'user' : 'model', parts: [{ text: msg.text }] }))
+      .map(msg => ({ role: msg.sender === 'USER' || msg.type === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }))
 
     const userParts = [{ text: prompt }]
     if (imageAttachment?.base64) {
@@ -289,9 +297,9 @@ export default function useAIBackend(speakTextFn) {
   const callGroq = async (prompt, systemInstruction, signal, chatLogRef, apiKey, imageAttachment) => {
     let activeModel = (localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile').trim().replace(/\s+/g, '-')
     const history = chatLogRef
-      .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
+      .filter(msg => (msg.type === 'user' || msg.type === 'assistant' || msg.type === 'ai') && !msg.loading && msg.text)
       .slice(-14)
-      .map(msg => ({ role: msg.sender === 'USER' ? 'user' : 'assistant', content: msg.text }))
+      .map(msg => ({ role: msg.sender === 'USER' || msg.type === 'user' ? 'user' : 'assistant', content: msg.text }))
 
     if (imageAttachment?.base64) {
       const dataUrl = imageAttachment.dataUrl || `data:${imageAttachment.mimeType || 'image/jpeg'};base64,${imageAttachment.base64}`
@@ -351,9 +359,9 @@ export default function useAIBackend(speakTextFn) {
   const callNvidia = async (prompt, systemInstruction, signal, chatLogRef, apiKey) => {
     const activeModel = localStorage.getItem('nvidia_model') || 'meta/llama-3.1-70b-instruct'
     const history = chatLogRef
-      .filter(msg => (msg.type === 'user' || msg.type === 'assistant') && !msg.loading && msg.text)
+      .filter(msg => (msg.type === 'user' || msg.type === 'assistant' || msg.type === 'ai') && !msg.loading && msg.text)
       .slice(-16)
-      .map(msg => ({ role: msg.type === 'user' ? 'user' : 'assistant', content: msg.text }))
+      .map(msg => ({ role: msg.type === 'user' || msg.sender === 'USER' ? 'user' : 'assistant', content: msg.text }))
     const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -607,6 +615,9 @@ export default function useAIBackend(speakTextFn) {
     const cleanedResponse = cleanResponse(responseText, systemInstruction, effectivePrompt)
     if (cleanedResponse) {
       updateLastAgentReply(cleanedResponse)
+      if (!isIncognito) {
+        appendConversationTurn(displayPrompt, responseText)
+      }
     }
 
     if (abortControllerRef.current?.signal.aborted) {

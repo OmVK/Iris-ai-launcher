@@ -32,13 +32,23 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
+        </activity>
+
+        <activity
+            android:name=".IrisAssistActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleInstance"
+            android:exported="true"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:stateNotNeeded="true">
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
                 <action android:name="android.intent.action.VOICE_COMMAND" />
                 <action android:name="android.intent.action.SEARCH_LONG_PRESS" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-
         </activity>
 
         <provider

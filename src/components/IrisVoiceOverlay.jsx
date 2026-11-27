@@ -7,6 +7,7 @@ import useOfflineAssistantCommand from '../hooks/useOfflineAssistantCommand'
 import IrisVoiceCard from './IrisVoiceCard'
 import { useAssistantStore } from '../stores/assistantStore'
 import { checkAndRequestPermission } from './LauncherPlugin'
+import { getRollingConversationHistory, syncMemoryToNative } from '../utils/memoryVault'
 
 const LauncherPlugin = registerPlugin('LauncherPlugin')
 
@@ -51,6 +52,8 @@ export default function IrisVoiceOverlay({ isVisible, onClose, appsList, isAppAc
 
   useEffect(() => {
     initEngine()
+    conversationHistoryRef.current = getRollingConversationHistory()
+    syncMemoryToNative()
   }, [])
 
   useEffect(() => {
@@ -244,6 +247,7 @@ export default function IrisVoiceOverlay({ isVisible, onClose, appsList, isAppAc
     window.__iris_offline_assistant_active = true
     speechInterruptRef.current = false
     setActionBadges([])
+    conversationHistoryRef.current = getRollingConversationHistory()
     const pendingCmd = window.__iris_pending_wake_command
     if (pendingCmd) {
       window.__iris_pending_wake_command = null

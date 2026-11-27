@@ -21,11 +21,14 @@ public class LauncherTileService extends TileService {
         Runnable launchAction = () -> {
             try {
                 if (IrisFloatingCopilot.isScreenLocked(LauncherTileService.this)) return;
-                Intent intent = new Intent(LauncherTileService.this, MainActivity.class);
-                intent.setAction(Intent.ACTION_ASSIST);
-                intent.putExtra("iris_trigger_voice_assist", true);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                startActivityAndCollapse(intent);
+                boolean handledInApp = IrisFloatingCopilot.triggerInAppAuroraAssistant(LauncherTileService.this);
+                if (!handledInApp) {
+                    Intent intent = new Intent(LauncherTileService.this, MainActivity.class);
+                    intent.setAction(Intent.ACTION_ASSIST);
+                    intent.putExtra("iris_trigger_voice_assist", true);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    startActivityAndCollapse(intent);
+                }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to launch IRIS Voice AI via tile", e);
             }
