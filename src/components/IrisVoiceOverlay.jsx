@@ -287,7 +287,6 @@ export default function IrisVoiceOverlay({ isVisible, onClose, appsList, isAppAc
       className="fixed inset-0 z-40 pointer-events-auto animate-in fade-in duration-200"
       onClick={() => { if (typeof onClose === 'function') onClose() }}
     >
-      <div className="pointer-events-none fixed inset-0 z-30 transition-all duration-300 shadow-[inset_0_0_24px_rgba(var(--primary-rgb),0.28)]" />
       <IrisVoiceCard />
     </div>
   )

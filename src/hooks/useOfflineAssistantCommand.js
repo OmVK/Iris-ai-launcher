@@ -137,12 +137,46 @@ export default function useOfflineAssistantCommand({
         const cleanedInput = text.trim().replace(/^(?:hey\s+iris|hi\s+iris|ok\s+iris|okay\s+iris|hello\s+iris|yo\s+iris|iris|ask\s+iris|hey\s+ai|hi\s+ai|ask\s+ai)[,.\s]+/i, '').trim() || text.trim()
         extractAndStoreMemoriesFromTurn(cleanedInput)
 
+        // Superpower 1: Multi-Step Autonomous UI Agent ("Message <Name> on WhatsApp saying <Message>")
+        if (/^(?:send\s+(?:a\s+)?(?:whatsapp|message)\s+to|message|whatsapp|text)\s+[A-Za-z0-9_\s]{2,28}?\s+(?:on\s+whatsapp\s+)?(?:saying|that|with|:)\s+.+$/i.test(cleanedInput)) {
+          try {
+            const autoRes = await LauncherPlugin.executeAutonomousTask({ command: cleanedInput })
+            if (autoRes?.handled) {
+              result = { success: true, response: 'Executing your multi-step WhatsApp message now.' }
+              didClose = true
+              shouldKeepListening = false
+            }
+          } catch {}
+        }
+
+        // Superpower 3: Cross-App Notification Brain ("What did I miss?" / "Catch me up")
+        if (!result && /\b(?:what\s+did\s+i\s+miss|catch\s+me\s+up|summarize\s+(?:my\s+)?notifications)\b/i.test(cleanedInput)) {
+          try {
+            setStatusText('Scanning unread notifications...')
+            const notifSummary = await handleNotifications()
+            if (notifSummary && notifSummary !== 'No new notifications.') {
+              const aiDigest = await queryIrisAI(
+                `Group and summarize these unread notifications by priority in 2 crisp spoken sentences: ${notifSummary}`,
+                (chunk) => setStatusText(chunk),
+                conversationHistoryRef.current
+              )
+              result = { success: true, response: aiDigest || notifSummary }
+              shouldKeepListening = true
+              aiQueryRan = true
+            } else {
+              result = { success: true, response: "You're all caught up with zero unread notifications." }
+            }
+          } catch {}
+        }
+
         const isConversationalFollowupOrMemory =
           /^(?:why|how\s+come|what\s+about|how\s+about|and\s+(?:what|how|why|then|also)|tell\s+me\s+more|explain\s+(?:that|more)|elaborate|make\s+it|shorter|longer|in\s+hindi|in\s+english|translate\s+that|repeat\s+that|what\s+did\s+(?:i|you)\s+just|do\s+you\s+remember|remember\s+that|don'?t\s+forget|what\s+is\s+my\s+name|who\s+am\s+i|no\s+i\s+meant|not\s+that)/i.test(cleanedInput)
 
-        result = isConversationalFollowupOrMemory
-          ? { success: false, commands: [], sideEffects: [], response: '' }
-          : await processCommand(cleanedInput)
+        if (!result) {
+          result = isConversationalFollowupOrMemory
+            ? { success: false, commands: [], sideEffects: [], response: '' }
+            : await processCommand(cleanedInput)
+        }
 
         if (!result.commands?.length && !result.sideEffects?.length && !result.requireMoreContext && !result.response) {
           const deviceActionSummary = await executeDeviceAgentIntent(cleanedInput, (liveBadges) => {

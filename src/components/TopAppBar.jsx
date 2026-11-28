@@ -688,14 +688,14 @@ export default function TopAppBar({ title: _title = "IRIS-SYSTEM-OS", activePage
         onTouchEnd={handleTouchEnd}
         className={`pointer-events-auto relative flex items-center justify-center overflow-hidden island-morph ${
           !expanded && !isPoppingNotif && !isAiActive ? 'is-collapsed' : ''
-        }`}
+        } ${isAiActive ? 'animate-aurora-breathe' : ''}`}
         style={{
-          background: isAiActive ? 'rgba(6, 10, 20, 0.58)' : 'rgba(6, 9, 18, 0.96)',
+          background: isAiActive ? 'rgba(6, 10, 20, 0.72)' : 'rgba(6, 9, 18, 0.96)',
           backdropFilter: isAiActive ? 'blur(14px)' : 'none',
           WebkitBackdropFilter: isAiActive ? 'blur(14px)' : 'none',
-          border: isAiActive ? '1px solid rgba(var(--primary-rgb), 0.7)' : `1px solid ${borderColor}`,
+          border: isAiActive ? '1.5px solid rgba(0, 242, 255, 0.95)' : `1px solid ${borderColor}`,
           boxShadow: isAiActive
-            ? '0 0 16px rgba(var(--primary-rgb), 0.35), 0 8px 24px rgba(0, 0, 0, 0.45)'
+            ? '0 0 32px rgba(0, 242, 255, 0.95), 0 0 64px rgba(168, 85, 247, 0.8), 0 0 92px rgba(236, 72, 153, 0.55), inset 0 0 18px rgba(0, 242, 255, 0.85)'
             : isPoppingNotif && activeGlow
               ? `0 10px 28px ${activeGlow.glow}`
               : expanded

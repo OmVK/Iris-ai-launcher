@@ -6,7 +6,7 @@ import HapticFeedback from '../utils/HapticFeedback'
 
 export default function BottomNavBar({ activePage, setActivePage, showAppLabels = true }) {
   const { dockColumns, dockBackground, dockHoldAssistant } = useThemeStore()
-  const { isListening, isSpeaking, isGenerating } = useAssistantStore()
+  const { isListening, isSpeaking, isGenerating, showVoiceOverlay } = useAssistantStore()
   const { activeGlow } = useNotificationStore()
   const [collapsed, setCollapsed] = useState(false)
   const collapseTimer = useRef(null)
@@ -15,7 +15,7 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
   const expandedLayerRef = useRef(null)
   const holdTimerRef = useRef(null)
 
-  const isAiActive = isListening || isSpeaking || isGenerating
+  const isAiActive = isListening || isSpeaking || isGenerating || showVoiceOverlay
 
   const tabs = useMemo(() => [
     { id: 'home', label: 'Home', icon: 'home_app_logo', filled: true },
@@ -400,17 +400,17 @@ export default function BottomNavBar({ activePage, setActivePage, showAppLabels 
           onTouchEnd={e => e.stopPropagation()}
           className={`pointer-events-auto relative flex items-center justify-center overflow-hidden island-morph ${
             collapsed ? 'is-collapsed' : ''
-          }`}
+          } ${isAiActive ? 'animate-aurora-dock-breathe' : ''}`}
           style={{
           ...getDockBgStyle(),
           transformOrigin: 'bottom center',
           border: isAiActive
-            ? '1px solid rgba(var(--primary-rgb), 0.7)'
+            ? '1.5px solid rgba(0, 242, 255, 0.95)'
             : (activeGlow
               ? `1px solid ${activeGlow.color}`
               : (dockBackground === 'none' ? 'none' : '1px solid rgba(255, 255, 255, 0.1)')),
           boxShadow: isAiActive
-            ? '0 0 16px rgba(var(--primary-rgb), 0.35), 0 -6px 24px rgba(0, 0, 0, 0.45)'
+            ? '0 -10px 38px rgba(0, 242, 255, 0.95), 0 -20px 72px rgba(168, 85, 247, 0.82), 0 -32px 104px rgba(236, 72, 153, 0.55), inset 0 1px 18px rgba(0, 242, 255, 0.85)'
             : (activeGlow
               ? `0 -4px 30px ${activeGlow.glow}, 0 0 16px ${activeGlow.color}`
               : (dockBackground === 'none' ? 'none' : (collapsed

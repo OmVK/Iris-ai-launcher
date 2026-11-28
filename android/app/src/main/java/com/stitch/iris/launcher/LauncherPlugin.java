@@ -5106,6 +5106,23 @@ public class LauncherPlugin extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void executeAutonomousTask(PluginCall call) {
+        try {
+            String command = call.getString("command", "");
+            IrisFloatingCopilot copilot = IrisFloatingCopilot.getInstance();
+            boolean handled = false;
+            if (copilot != null && command != null && !command.trim().isEmpty()) {
+                handled = copilot.tryExecuteAutonomousAgentCommand(command.trim());
+            }
+            JSObject ret = new JSObject();
+            ret.put("handled", handled);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed autonomous task: " + e.getMessage());
+        }
+    }
+
     // Helper: URL encode string
     private String encodeUrl(String s) {
         try {

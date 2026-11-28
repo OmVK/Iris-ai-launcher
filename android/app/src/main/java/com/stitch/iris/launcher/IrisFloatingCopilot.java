@@ -100,6 +100,9 @@ public class IrisFloatingCopilot {
     private static final String KEY_GROQ_MODEL = "copilot_groq_model";
     public static final String KEY_MEMORY_VAULT = "copilot_long_term_memory_v1";
     public static final String KEY_CONVERSATION_HISTORY = "copilot_conversation_history_v1";
+    public static final String KEY_CONTACT_DOSSIERS = "copilot_contact_dossiers_v1";
+    public static final String KEY_SAVED_TASKS = "copilot_extracted_tasks_v1";
+    public static final String KEY_SAVED_NOTES = "copilot_saved_notes_v1";
 
     private static final Pattern OTP_PATTERN = Pattern.compile("(?i)(?:otp|code|pin|verification|passcode|auth)[^0-9]{0,20}\\b(\\d{4,8})\\b|\\b(\\d{4,8})\\b[^0-9]{0,20}(?:is your|verification|otp|code)");
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s\"<>()]+");
@@ -185,9 +188,12 @@ public class IrisFloatingCopilot {
     private boolean isVoiceListening = false;
     private android.content.BroadcastReceiver lockStateReceiver;
 
-    // 120Hz In-App Aurora Edge-Glow Screen-Reading Assistant state
+    // 120Hz In-App IRIS Top Bar (Dynamic Island Notch) Screen-Reading Assistant state
     private FrameLayout auroraOverlayRoot;
-    private View auroraBorderGlowView;
+    private LinearLayout topIslandCard;
+    private GradientDrawable topIslandBg;
+    private LinearLayout topIslandBodyBay;
+    private TextView topIslandClockText;
     private WindowManager.LayoutParams auroraParams;
     private boolean isAuroraAttached = false;
     private int auroraModeState = 0; // 0 = LISTENING, 1 = THINKING, 2 = SPEAKING, 3 = IDLE
@@ -204,6 +210,17 @@ public class IrisFloatingCopilot {
     private TextToSpeech auroraTts;
     private boolean isAuroraTtsReady = false;
     private int auroraFollowupCount = 0;
+    private Choreographer.FrameCallback topIslandSpringCallback = null;
+    private float islandCurW = 204f;
+    private float islandCurH = 36f;
+    private float islandCurR = 20f;
+    private float islandCurSx = 1f;
+    private float islandCurSy = 1f;
+    private float islandVelW = 0f;
+    private float islandVelH = 0f;
+    private float islandVelR = 0f;
+    private float islandVelSx = 0f;
+    private float islandVelSy = 0f;
 
     public static boolean isScreenLocked(Context ctx) {
         if (ctx == null) return true;
@@ -360,15 +377,15 @@ public class IrisFloatingCopilot {
             if (cm != null) {
                 cm.addPrimaryClipChangedListener(() -> {
                     if (!isEnabled || !clipboardTrigger || isScreenLocked(service)) return;
-                    if (!isCopilotTargetApp(currentPackage)) return;
+                    if (isForegroundIrisHome()) return;
                     try {
                         ClipData clip = cm.getPrimaryClip();
                         if (clip != null && clip.getItemCount() > 0) {
                             CharSequence cs = clip.getItemAt(0).getText();
                             String copied = cs != null ? cs.toString().trim() : "";
-                            if (copied.length() > 2 && !copied.equals(lastInternalClipboard)) {
+                            if (copied.length() > 3 && !copied.equals(lastInternalClipboard)) {
                                 latestExternalClipboard = copied;
-                                mainHandler.post(this::showPill);
+                                mainHandler.post(() -> showClipboardSuperPortal(copied));
                             }
                         }
                     } catch (Exception ignored) {}
@@ -769,6 +786,8 @@ public class IrisFloatingCopilot {
             this.currentPackage = newPackage;
             if (!newPackage.equals(service.getPackageName())) {
                 this.lastForegroundAppPackage = newPackage;
+            } else {
+                mainHandler.post(this::hideAuroraScreenOverlay);
             }
         } else if (isKeyboardIdentifier(newPackage)) {
             lastImeEventSignalMs = System.currentTimeMillis();
@@ -1981,6 +2000,36 @@ public class IrisFloatingCopilot {
         } catch (Exception ignored) {}
     }
 
+    public boolean isForegroundIrisHome() {
+        String irisPkg = service.getPackageName();
+        try {
+            List<AccessibilityWindowInfo> windows = service.getWindows();
+            if (windows != null) {
+                for (AccessibilityWindowInfo w : windows) {
+                    if (w == null || w.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+                    AccessibilityNodeInfo root = w.getRoot();
+                    if (root != null && root.getPackageName() != null) {
+                        String pkg = root.getPackageName().toString();
+                        if (isTransientSystemOrKeyboardPackage(pkg)) continue;
+                        if (w.isActive() || w.isFocused()) {
+                            return irisPkg.equals(pkg);
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        try {
+            AccessibilityNodeInfo activeRoot = service.getRootInActiveWindow();
+            if (activeRoot != null && activeRoot.getPackageName() != null) {
+                String activePkg = activeRoot.getPackageName().toString();
+                if (!isTransientSystemOrKeyboardPackage(activePkg)) {
+                    return irisPkg.equals(activePkg);
+                }
+            }
+        } catch (Exception ignored) {}
+        return currentPackage == null || currentPackage.isEmpty() || irisPkg.equals(currentPackage);
+    }
+
     public static boolean triggerInAppAuroraAssistant(Context ctx) {
         if (ctx != null && isScreenLocked(ctx)) return false;
         IrisFloatingCopilot copilot = getInstance();
@@ -1992,6 +2041,12 @@ public class IrisFloatingCopilot {
             }
         }
         if (copilot == null) return false;
+        // When user is inside IRIS Home, return false so IRIS Home's own Top Bar + Dock Bar with Aurora lights trigger!
+        if (copilot.isForegroundIrisHome()) {
+            final IrisFloatingCopilot homeCopilot = copilot;
+            homeCopilot.mainHandler.post(homeCopilot::hideAuroraScreenOverlay);
+            return false;
+        }
         final IrisFloatingCopilot activeCopilot = copilot;
         activeCopilot.mainHandler.post(activeCopilot::showAuroraScreenOverlay);
         return true;
@@ -2010,8 +2065,9 @@ public class IrisFloatingCopilot {
                             public void onStart(String utteranceId) {
                                 mainHandler.post(() -> {
                                     auroraModeState = 2; // SPEAKING
+                                    updateTopIslandBorderStyle();
                                     if (auroraStatusBadge != null) {
-                                        auroraStatusBadge.setText("✦ IRIS AURORA • Speaking...");
+                                        auroraStatusBadge.setText("SPEAKING");
                                     }
                                 });
                             }
@@ -2028,8 +2084,9 @@ public class IrisFloatingCopilot {
                                     if (auroraFollowupCount < 5) {
                                         auroraFollowupCount++;
                                         auroraModeState = 0;
+                                        updateTopIslandBorderStyle();
                                         if (auroraStatusBadge != null) {
-                                            auroraStatusBadge.setText("✦ IRIS AURORA • Listening for follow-up...");
+                                            auroraStatusBadge.setText("LISTENING");
                                         }
                                         mainHandler.postDelayed(() -> {
                                             if (isAuroraAttached && auroraModeState != 1) {
@@ -2038,8 +2095,9 @@ public class IrisFloatingCopilot {
                                         }, 250L);
                                     } else {
                                         auroraModeState = 3;
+                                        updateTopIslandBorderStyle();
                                         if (auroraStatusBadge != null) {
-                                            auroraStatusBadge.setText("✦ IRIS AURORA • Tap 🎙️ to continue");
+                                            auroraStatusBadge.setText("READY");
                                         }
                                     }
                                 });
@@ -2048,7 +2106,10 @@ public class IrisFloatingCopilot {
                             @Override
                             public void onError(String utteranceId) {
                                 mainHandler.post(() -> {
-                                    if (isAuroraAttached) auroraModeState = 3;
+                                    if (isAuroraAttached) {
+                                        auroraModeState = 3;
+                                        updateTopIslandBorderStyle();
+                                    }
                                 });
                             }
                         });
@@ -2068,6 +2129,7 @@ public class IrisFloatingCopilot {
         if (auroraTts != null && isAuroraTtsReady) {
             try {
                 auroraModeState = 2;
+                updateTopIslandBorderStyle();
                 Bundle params = new Bundle();
                 auroraTts.speak(cleanSpoken, TextToSpeech.QUEUE_FLUSH, params, utteranceId != null ? utteranceId : ("AURORA_TURN_" + System.currentTimeMillis()));
             } catch (Exception ignored) {}
@@ -2080,326 +2142,450 @@ public class IrisFloatingCopilot {
         }
     }
 
+    private void updateTopIslandBorderStyle() {
+        if (topIslandBg == null) return;
+        int strokeColor;
+        int statusTextColor;
+        if (auroraModeState == 0) {
+            // LISTENING -> Cyber Cyan (matches TopAppBar.jsx isListening)
+            strokeColor = Color.parseColor("#F200F2FF");
+            statusTextColor = Color.parseColor("#00F2FF");
+        } else if (auroraModeState == 1) {
+            // THINKING / GENERATING -> Emerald Green (matches TopAppBar.jsx isGenerating)
+            strokeColor = Color.parseColor("#E610B981");
+            statusTextColor = Color.parseColor("#34D399");
+        } else if (auroraModeState == 2) {
+            // SPEAKING -> Electric Purple (matches TopAppBar.jsx isSpeaking)
+            strokeColor = Color.parseColor("#E6A855F7");
+            statusTextColor = Color.parseColor("#C084FC");
+        } else {
+            strokeColor = Color.parseColor("#6600F2FF");
+            statusTextColor = Color.parseColor("#80DEEA");
+        }
+        topIslandBg.setStroke(dpToPx(1.2f), strokeColor);
+        if (auroraStatusBadge != null) {
+            auroraStatusBadge.setTextColor(statusTextColor);
+        }
+        if (topIslandClockText != null) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+            topIslandClockText.setText("⦿ " + sdf.format(new java.util.Date()));
+        }
+    }
+
+    private void stopTopIslandSpring() {
+        if (topIslandSpringCallback != null) {
+            try { Choreographer.getInstance().removeFrameCallback(topIslandSpringCallback); } catch (Exception ignored) {}
+            topIslandSpringCallback = null;
+        }
+    }
+
+    private void morphTopIslandToState(final boolean hasBodyContent, final boolean isOpeningImpulse) {
+        if (topIslandCard == null) return;
+        DisplayMetrics dm = service.getResources().getDisplayMetrics();
+        int screenW = dm.widthPixels > 0 ? dm.widthPixels : 1080;
+
+        final float targetW;
+        final float targetH;
+        final float targetR;
+
+        if (!hasBodyContent) {
+            // Wake / Listening Pill state (matches TopAppBar.jsx aiWakeWidth = 316dp, aiWakeHeight = 44dp)
+            targetW = Math.min(dpToPx(316), screenW - dpToPx(24));
+            targetH = dpToPx(42);
+            targetR = dpToPx(22);
+            if (topIslandBodyBay != null) topIslandBodyBay.setVisibility(View.GONE);
+        } else {
+            // Expanded Result Top Bar state (matches TopAppBar.jsx aiExpandedWidth = 352dp)
+            targetW = Math.min(dpToPx(356), screenW - dpToPx(18));
+            if (topIslandBodyBay != null) {
+                topIslandBodyBay.setVisibility(View.VISIBLE);
+                int widthSpec = View.MeasureSpec.makeMeasureSpec((int) targetW - dpToPx(26), View.MeasureSpec.AT_MOST);
+                int heightSpec = View.MeasureSpec.makeMeasureSpec(dpToPx(220), View.MeasureSpec.AT_MOST);
+                topIslandBodyBay.measure(widthSpec, heightSpec);
+            }
+            int bodyMeasuredH = (topIslandBodyBay != null && topIslandBodyBay.getMeasuredHeight() > 0)
+                    ? topIslandBodyBay.getMeasuredHeight()
+                    : dpToPx(76);
+            targetH = Math.min(dpToPx(215), Math.max(dpToPx(94), dpToPx(38) + bodyMeasuredH));
+            targetR = dpToPx(26);
+        }
+
+        if (isOpeningImpulse) {
+            islandCurW = dpToPx(204);
+            islandCurH = dpToPx(34);
+            islandCurR = dpToPx(19);
+            islandCurSx = 0.88f;
+            islandCurSy = 0.85f;
+            islandVelW = dpToPx(640);
+            islandVelH = dpToPx(280);
+            islandVelSx = 1.6f;
+            islandVelSy = 1.9f;
+        } else {
+            islandVelW += dpToPx(260);
+            islandVelH += dpToPx(320);
+            islandVelSx += 0.75f;
+            islandVelSy += 1.15f;
+        }
+
+        stopTopIslandSpring();
+        final long[] lastNs = new long[]{0L};
+
+        topIslandSpringCallback = new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                if (!isAuroraAttached || topIslandCard == null) {
+                    topIslandSpringCallback = null;
+                    return;
+                }
+                float dt = lastNs[0] == 0L ? (1f / 120f) : Math.min(0.032f, Math.max(0.001f, (frameTimeNanos - lastNs[0]) / 1_000_000_000f));
+                lastNs[0] = frameTimeNanos;
+
+                float step = 1f / 240f;
+                float rem = dt;
+                // Exact Hooke's Law spring parameters from TopAppBar.jsx (kDim = 215, cDim = 13.2, kScale = 240, cScale = 13.8)
+                final float kDim = 215f;
+                final float cDim = 13.2f;
+                final float kScale = 240f;
+                final float cScale = 13.8f;
+
+                while (rem > 0f) {
+                    float h = Math.min(step, rem);
+                    rem -= h;
+
+                    float aw = -kDim * (islandCurW - targetW) - cDim * islandVelW;
+                    islandVelW += aw * h;
+                    islandCurW += islandVelW * h;
+
+                    float ah = -kDim * (islandCurH - targetH) - cDim * islandVelH;
+                    islandVelH += ah * h;
+                    islandCurH += islandVelH * h;
+
+                    float ar = -kDim * (islandCurR - targetR) - cDim * islandVelR;
+                    islandVelR += ar * h;
+                    islandCurR += islandVelR * h;
+
+                    float asx = -kScale * (islandCurSx - 1f) - cScale * islandVelSx;
+                    islandVelSx += asx * h;
+                    islandCurSx += islandVelSx * h;
+
+                    float asy = -kScale * (islandCurSy - 1f) - cScale * islandVelSy;
+                    islandVelSy += asy * h;
+                    islandCurSy += islandVelSy * h;
+                }
+
+                int wPx = Math.max(dpToPx(150), Math.round(islandCurW));
+                int hPx = Math.max(dpToPx(30), Math.round(islandCurH));
+                float rPx = Math.max(dpToPx(14), islandCurR);
+
+                ViewGroup.LayoutParams lp = topIslandCard.getLayoutParams();
+                if (lp != null) {
+                    lp.width = wPx;
+                    lp.height = hPx;
+                    topIslandCard.setLayoutParams(lp);
+                }
+                if (topIslandBg != null) {
+                    topIslandBg.setCornerRadius(rPx);
+                }
+                topIslandCard.setPivotX(wPx * 0.5f);
+                topIslandCard.setPivotY(0f);
+                topIslandCard.setScaleX(Math.max(0.84f, Math.min(1.18f, islandCurSx)));
+                topIslandCard.setScaleY(Math.max(0.84f, Math.min(1.22f, islandCurSy)));
+
+                boolean settled =
+                        Math.abs(islandCurW - targetW) < 0.6f &&
+                        Math.abs(islandCurH - targetH) < 0.6f &&
+                        Math.abs(islandCurSx - 1f) < 0.003f &&
+                        Math.abs(islandCurSy - 1f) < 0.003f &&
+                        Math.abs(islandVelW) < 2f &&
+                        Math.abs(islandVelH) < 2f;
+
+                if (settled) {
+                    islandCurW = targetW;
+                    islandCurH = targetH;
+                    islandCurR = targetR;
+                    islandCurSx = 1f;
+                    islandCurSy = 1f;
+                    islandVelW = 0f;
+                    islandVelH = 0f;
+                    islandVelR = 0f;
+                    islandVelSx = 0f;
+                    islandVelSy = 0f;
+                    if (lp != null) {
+                        lp.width = Math.round(targetW);
+                        lp.height = Math.round(targetH);
+                        topIslandCard.setLayoutParams(lp);
+                    }
+                    if (topIslandBg != null) topIslandBg.setCornerRadius(targetR);
+                    topIslandCard.setScaleX(1f);
+                    topIslandCard.setScaleY(1f);
+                    topIslandSpringCallback = null;
+                } else {
+                    Choreographer.getInstance().postFrameCallback(this);
+                }
+            }
+        };
+        Choreographer.getInstance().postFrameCallback(topIslandSpringCallback);
+    }
+
     private void createAuroraOverlayView() {
+        // Transparent top-centered arena that renders directly over the Status Bar / Camera Cutout (no aurora edge glow!)
         auroraOverlayRoot = new FrameLayout(service);
         auroraOverlayRoot.setClipChildren(false);
         auroraOverlayRoot.setClipToPadding(false);
         auroraOverlayRoot.setBackgroundColor(Color.TRANSPARENT);
+        auroraOverlayRoot.setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(18));
 
-        // 1. 120Hz Full-Screen Aurora Borealis Perimeter Glow Canvas
-        auroraBorderGlowView = new View(service) {
-            private final Paint outerBloomPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final Paint midAuroraPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final Paint innerCorePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final Paint rimHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final RectF outerRect = new RectF();
-            private final RectF midRect = new RectF();
-            private final RectF coreRect = new RectF();
-            private final Matrix shaderMatrix = new Matrix();
-            private SweepGradient auroraGradient = null;
-            private int lastW = 0;
-            private int lastH = 0;
-            private float phaseDeg = 0f;
-            private float pulsePhase = 0f;
-            private long lastFrameNs = 0L;
-            private boolean animRunning = false;
+        // The Morphing IRIS Top Bar Island (1:1 Native Twin of TopAppBar.jsx)
+        topIslandCard = new LinearLayout(service);
+        topIslandCard.setOrientation(LinearLayout.VERTICAL);
+        topIslandCard.setPadding(dpToPx(13), dpToPx(6), dpToPx(13), dpToPx(10));
+        topIslandCard.setClipChildren(true);
+        topIslandCard.setClipToPadding(true);
 
-            private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
-                @Override
-                public void doFrame(long frameTimeNanos) {
-                    if (!isAuroraAttached || !isAttachedToWindow()) {
-                        animRunning = false;
-                        return;
-                    }
-                    float dt = lastFrameNs == 0L ? (1f / 120f) : Math.min(0.05f, Math.max(0.001f, (frameTimeNanos - lastFrameNs) / 1_000_000_000f));
-                    lastFrameNs = frameTimeNanos;
-
-                    float speedMultiplier = auroraModeState == 1 ? 2.85f : (auroraModeState == 2 ? 1.65f : 1.0f);
-                    phaseDeg = (phaseDeg + dt * 115f * speedMultiplier) % 360f;
-                    pulsePhase += dt * (auroraModeState == 1 ? 8.5f : (auroraModeState == 2 ? 6.2f : 3.4f));
-                    invalidate();
-                    Choreographer.getInstance().postFrameCallback(this);
-                }
-            };
-
-            {
-                setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-                outerBloomPaint.setStyle(Paint.Style.STROKE);
-                outerBloomPaint.setStrokeWidth(dpToPx(28));
-                outerBloomPaint.setMaskFilter(new BlurMaskFilter(dpToPx(22), BlurMaskFilter.Blur.NORMAL));
-
-                midAuroraPaint.setStyle(Paint.Style.STROKE);
-                midAuroraPaint.setStrokeWidth(dpToPx(13));
-                midAuroraPaint.setMaskFilter(new BlurMaskFilter(dpToPx(10), BlurMaskFilter.Blur.NORMAL));
-
-                innerCorePaint.setStyle(Paint.Style.STROKE);
-                innerCorePaint.setStrokeWidth(dpToPx(5.5f));
-                innerCorePaint.setMaskFilter(new BlurMaskFilter(dpToPx(3.5f), BlurMaskFilter.Blur.NORMAL));
-
-                rimHighlightPaint.setStyle(Paint.Style.STROKE);
-                rimHighlightPaint.setStrokeWidth(dpToPx(2.2f));
-            }
-
-            @Override
-            protected void onAttachedToWindow() {
-                super.onAttachedToWindow();
-                if (!animRunning) {
-                    animRunning = true;
-                    lastFrameNs = 0L;
-                    Choreographer.getInstance().postFrameCallback(frameCallback);
-                }
-            }
-
-            @Override
-            protected void onDetachedFromWindow() {
-                animRunning = false;
-                try { Choreographer.getInstance().removeFrameCallback(frameCallback); } catch (Exception ignored) {}
-                super.onDetachedFromWindow();
-            }
-
-            @Override
-            protected void onDraw(Canvas canvas) {
-                super.onDraw(canvas);
-                int w = getWidth();
-                int h = getHeight();
-                if (w <= 0 || h <= 0) return;
-
-                if (auroraGradient == null || w != lastW || h != lastH) {
-                    lastW = w;
-                    lastH = h;
-                    int[] colors = new int[]{
-                            Color.parseColor("#00F2FF"), // Cyber Cyan
-                            Color.parseColor("#2979FF"), // Electric Blue
-                            Color.parseColor("#8E24AA"), // Deep Violet
-                            Color.parseColor("#FF2A85"), // Neon Magenta
-                            Color.parseColor("#00FFB2"), // Emerald Aurora
-                            Color.parseColor("#7C4DFF"), // Neural Indigo
-                            Color.parseColor("#00F2FF")  // Loop back to Cyber Cyan
-                    };
-                    auroraGradient = new SweepGradient(w * 0.5f, h * 0.5f, colors, null);
-                    outerBloomPaint.setShader(auroraGradient);
-                    midAuroraPaint.setShader(auroraGradient);
-                    innerCorePaint.setShader(auroraGradient);
-                    rimHighlightPaint.setShader(auroraGradient);
-                }
-
-                float pulse = 0.5f + 0.5f * (float) Math.sin(pulsePhase);
-                float voiceBoost = Math.min(1f, auroraVoiceLevel * 1.4f);
-                float cornerR = dpToPx(38);
-
-                shaderMatrix.reset();
-                shaderMatrix.setRotate(phaseDeg, w * 0.5f, h * 0.5f);
-                auroraGradient.setLocalMatrix(shaderMatrix);
-
-                float dynamicStrokeBoost = 1.0f + 0.28f * pulse + 0.35f * voiceBoost;
-                outerBloomPaint.setStrokeWidth(dpToPx(26) * dynamicStrokeBoost);
-                outerBloomPaint.setAlpha((int) (145 + 75 * pulse));
-
-                midAuroraPaint.setStrokeWidth(dpToPx(12) * dynamicStrokeBoost);
-                midAuroraPaint.setAlpha((int) (195 + 55 * pulse));
-
-                innerCorePaint.setStrokeWidth(dpToPx(5f) * (1.0f + 0.18f * voiceBoost));
-                innerCorePaint.setAlpha(245);
-
-                rimHighlightPaint.setAlpha(255);
-
-                float insetOuter = dpToPx(6);
-                outerRect.set(insetOuter, insetOuter, w - insetOuter, h - insetOuter);
-                canvas.drawRoundRect(outerRect, cornerR, cornerR, outerBloomPaint);
-
-                float insetMid = dpToPx(4);
-                midRect.set(insetMid, insetMid, w - insetMid, h - insetMid);
-                canvas.drawRoundRect(midRect, cornerR, cornerR, midAuroraPaint);
-
-                float insetCore = dpToPx(2);
-                coreRect.set(insetCore, insetCore, w - insetCore, h - insetCore);
-                canvas.drawRoundRect(coreRect, cornerR, cornerR, innerCorePaint);
-                canvas.drawRoundRect(coreRect, cornerR, cornerR, rimHighlightPaint);
-            }
-        };
-        auroraBorderGlowView.setClickable(false);
-        auroraBorderGlowView.setFocusable(false);
-        auroraOverlayRoot.addView(auroraBorderGlowView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-
-        // 2. Compact Floating Aurora Glass HUD Capsule at Bottom of Screen
-        LinearLayout hudCapsule = new LinearLayout(service);
-        hudCapsule.setOrientation(LinearLayout.VERTICAL);
-        hudCapsule.setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(14));
-
-        GradientDrawable hudBg = new GradientDrawable();
-        hudBg.setShape(GradientDrawable.RECTANGLE);
-        hudBg.setCornerRadius(dpToPx(24));
-        hudBg.setColor(Color.parseColor("#EB060B18"));
-        hudBg.setStroke(dpToPx(1.2f), Color.parseColor("#6600F2FF"));
-        hudCapsule.setBackground(hudBg);
+        topIslandBg = new GradientDrawable();
+        topIslandBg.setShape(GradientDrawable.RECTANGLE);
+        topIslandBg.setCornerRadius(dpToPx(22));
+        topIslandBg.setColor(Color.parseColor("#F2060912"));
+        topIslandBg.setStroke(dpToPx(1.2f), Color.parseColor("#F200F2FF"));
+        topIslandCard.setBackground(topIslandBg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            hudCapsule.setElevation(dpToPx(18));
+            topIslandCard.setElevation(dpToPx(20));
         }
 
-        // Top Bar: Status Badge + Insert Reply + Mic + Close
-        LinearLayout headerRow = new LinearLayout(service);
-        headerRow.setOrientation(LinearLayout.HORIZONTAL);
-        headerRow.setGravity(Gravity.CENTER_VERTICAL);
+        // Tapping the Top Bar triggers a follow-up voice listen (matches iris-notch-followup in TopAppBar.jsx)
+        topIslandCard.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            stopAuroraTts();
+            auroraFollowupCount = 0;
+            startAuroraVoiceListening(false);
+        });
+
+        // TOP ROW (26dp tall): Split left & right around the physical center 48dp camera punch-hole!
+        LinearLayout topSensorRow = new LinearLayout(service);
+        topSensorRow.setOrientation(LinearLayout.HORIZONTAL);
+        topSensorRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams topRowLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dpToPx(26)
+        );
+
+        // Left Wing of Punch-Hole: Fingerprint pulse + Time
+        topIslandClockText = new TextView(service);
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+        topIslandClockText.setText("⦿ " + sdf.format(new java.util.Date()));
+        topIslandClockText.setTextColor(Color.parseColor("#00F2FF"));
+        topIslandClockText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+        topIslandClockText.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        topIslandClockText.setSingleLine(true);
+        LinearLayout.LayoutParams leftWingLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        topSensorRow.addView(topIslandClockText, leftWingLp);
+
+        // Center 48dp Camera Punch-Hole Clearance Gap (keeps text clear of physical front camera lens)
+        View cameraHoleGap = new View(service);
+        LinearLayout.LayoutParams holeLp = new LinearLayout.LayoutParams(dpToPx(48), ViewGroup.LayoutParams.MATCH_PARENT);
+        topSensorRow.addView(cameraHoleGap, holeLp);
+
+        // Right Wing of Punch-Hole: Live State + Insert Button + Mic + Close
+        LinearLayout rightWing = new LinearLayout(service);
+        rightWing.setOrientation(LinearLayout.HORIZONTAL);
+        rightWing.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams rightWingLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.25f);
 
         auroraStatusBadge = new TextView(service);
-        auroraStatusBadge.setText("✦ IRIS AURORA • Reading Screen...");
+        auroraStatusBadge.setText("LISTENING");
         auroraStatusBadge.setTextColor(Color.parseColor("#00F2FF"));
-        auroraStatusBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+        auroraStatusBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
         auroraStatusBadge.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        headerRow.addView(auroraStatusBadge, badgeLp);
+        auroraStatusBadge.setSingleLine(true);
+        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        badgeLp.setMarginEnd(dpToPx(6));
+        rightWing.addView(auroraStatusBadge, badgeLp);
 
         auroraInjectButton = new TextView(service);
-        auroraInjectButton.setText("⚡ Insert");
+        auroraInjectButton.setText("⚡ INSERT");
         auroraInjectButton.setTextColor(Color.parseColor("#041019"));
-        auroraInjectButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
-        auroraInjectButton.setTypeface(null, android.graphics.Typeface.BOLD);
-        auroraInjectButton.setPadding(dpToPx(10), dpToPx(5), dpToPx(10), dpToPx(5));
+        auroraInjectButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+        auroraInjectButton.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        auroraInjectButton.setPadding(dpToPx(7), dpToPx(2), dpToPx(7), dpToPx(2));
         GradientDrawable injectBg = new GradientDrawable();
-        injectBg.setCornerRadius(dpToPx(12));
+        injectBg.setCornerRadius(dpToPx(10));
         injectBg.setColor(Color.parseColor("#00FFB2"));
         auroraInjectButton.setBackground(injectBg);
         auroraInjectButton.setVisibility(View.GONE);
         LinearLayout.LayoutParams injectLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        injectLp.setMarginEnd(dpToPx(8));
+        injectLp.setMarginEnd(dpToPx(5));
         auroraInjectButton.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             if (!lastAuroraDraftReply.isEmpty()) {
                 boolean ok = injectText(lastAuroraDraftReply);
                 copyToClipboard(lastAuroraDraftReply);
-                Toast.makeText(service, ok ? "⚡ Reply inserted into app!" : "📋 Reply copied to clipboard!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(service, ok ? "⚡ Reply inserted!" : "📋 Copied to clipboard!", Toast.LENGTH_SHORT).show();
             }
         });
-        headerRow.addView(auroraInjectButton, injectLp);
+        rightWing.addView(auroraInjectButton, injectLp);
 
         auroraMicButton = new TextView(service);
         auroraMicButton.setText("🎙️");
-        auroraMicButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+        auroraMicButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
         auroraMicButton.setGravity(Gravity.CENTER);
-        auroraMicButton.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-        GradientDrawable micBg = new GradientDrawable();
-        micBg.setCornerRadius(dpToPx(14));
-        micBg.setColor(Color.parseColor("#2400F2FF"));
-        micBg.setStroke(dpToPx(1), Color.parseColor("#8800F2FF"));
-        auroraMicButton.setBackground(micBg);
-        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        micLp.setMarginEnd(dpToPx(8));
+        auroraMicButton.setPadding(dpToPx(4), dpToPx(2), dpToPx(4), dpToPx(2));
         auroraMicButton.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             stopAuroraTts();
             auroraFollowupCount = 0;
             startAuroraVoiceListening(false);
         });
-        headerRow.addView(auroraMicButton, micLp);
+        rightWing.addView(auroraMicButton);
 
         TextView closeAuroraBtn = new TextView(service);
         closeAuroraBtn.setText("✕");
-        closeAuroraBtn.setTextColor(Color.parseColor("#B0BEC5"));
-        closeAuroraBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+        closeAuroraBtn.setTextColor(Color.parseColor("#99FFFFFF"));
+        closeAuroraBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
         closeAuroraBtn.setGravity(Gravity.CENTER);
-        closeAuroraBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        closeAuroraBtn.setPadding(dpToPx(6), dpToPx(2), dpToPx(2), dpToPx(2));
         closeAuroraBtn.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             hideAuroraScreenOverlay();
         });
-        headerRow.addView(closeAuroraBtn);
-        hudCapsule.addView(headerRow);
+        rightWing.addView(closeAuroraBtn);
 
-        // User Spoken Transcript line
+        topSensorRow.addView(rightWing, rightWingLp);
+        topIslandCard.addView(topSensorRow, topRowLp);
+
+        // LOWER BAY INSIDE THE SAME SINGLE TOP ISLAND (Below the physical camera punch-hole, matches aiBodyRef in TopAppBar.jsx)
+        topIslandBodyBay = new LinearLayout(service);
+        topIslandBodyBay.setOrientation(LinearLayout.VERTICAL);
+        topIslandBodyBay.setPadding(0, dpToPx(5), 0, 0);
+
+        View divider = new View(service);
+        divider.setBackgroundColor(Color.parseColor("#16FFFFFF"));
+        topIslandBodyBay.addView(divider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(1)));
+
+        // Live User Spoken Transcript
         auroraUserTranscriptView = new TextView(service);
-        auroraUserTranscriptView.setText("Speak now — I can read your screen, reply to chats, or remember anything...");
-        auroraUserTranscriptView.setTextColor(Color.parseColor("#B2EBF2"));
-        auroraUserTranscriptView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-        auroraUserTranscriptView.setPadding(0, dpToPx(6), 0, dpToPx(2));
-        hudCapsule.addView(auroraUserTranscriptView);
+        auroraUserTranscriptView.setTextColor(Color.WHITE);
+        auroraUserTranscriptView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        auroraUserTranscriptView.setTypeface(null, android.graphics.Typeface.BOLD);
+        auroraUserTranscriptView.setMaxLines(2);
+        auroraUserTranscriptView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        auroraUserTranscriptView.setPadding(0, dpToPx(5), 0, dpToPx(2));
+        topIslandBodyBay.addView(auroraUserTranscriptView);
 
-        // AI Spoken Answer line
+        // AI Result Scrollable Bay inside the Top Bar (matches max-h-[82px] in TopAppBar.jsx)
+        ScrollView aiScroll = new ScrollView(service);
+        aiScroll.setVerticalScrollBarEnabled(false);
         auroraAiResponseView = new TextView(service);
-        auroraAiResponseView.setTextColor(Color.WHITE);
-        auroraAiResponseView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-        auroraAiResponseView.setPadding(0, dpToPx(4), 0, dpToPx(6));
+        auroraAiResponseView.setTextColor(Color.parseColor("#F5FFFFFF"));
+        auroraAiResponseView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        auroraAiResponseView.setLineSpacing(dpToPx(1.5f), 1.0f);
+        auroraAiResponseView.setPadding(0, dpToPx(2), 0, dpToPx(4));
         auroraAiResponseView.setVisibility(View.GONE);
-        hudCapsule.addView(auroraAiResponseView);
+        aiScroll.addView(auroraAiResponseView);
+        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        topIslandBodyBay.addView(aiScroll, scrollLp);
 
-        // Quick 1-Tap Screen Action Chips
+        // Compact Quick Screen-Reading Pills inside the Top Bar
         HorizontalScrollView chipsScroll = new HorizontalScrollView(service);
         chipsScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout chipsRow = new LinearLayout(service);
         chipsRow.setOrientation(LinearLayout.HORIZONTAL);
-        chipsRow.setPadding(0, dpToPx(4), 0, 0);
+        chipsRow.setPadding(0, dpToPx(4), 0, dpToPx(2));
 
         String[][] auroraQuickChips = new String[][]{
-                {"📖 Summarize Screen", "Read everything currently on my screen and summarize what is happening concisely."},
+                {"📖 Read Screen", "Read everything currently on my screen and summarize what is happening concisely."},
                 {"💬 Reply to Screen", "Read the active conversation on my screen and draft the best 1st-person reply for me to send right now."},
-                {"🧠 What should I say?", "Based on what the other person is asking on my screen, tell me what I should reply."},
-                {"✨ Remember Screen", "Remember the key details currently shown on my screen in my Long-Term Memory Vault."}
+                {"📸 Vision Scan", "__VISION_SCAN__"},
+                {"🔔 Catch Me Up", "__NOTIF_DIGEST__"},
+                {"📝 Save Note", "Extract the key facts, tasks, or notes from my screen and save them to my notes and memory vault."},
+                {"🧠 What to say?", "Based on what the other person is asking on my screen, tell me what I should reply."}
         };
         for (final String[] chipData : auroraQuickChips) {
             TextView chip = new TextView(service);
             chip.setText(chipData[0]);
-            chip.setTextColor(Color.parseColor("#E0F7FA"));
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
-            chip.setPadding(dpToPx(11), dpToPx(5), dpToPx(11), dpToPx(5));
+            chip.setTextColor(Color.parseColor("#00F2FF"));
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+            chip.setTypeface(null, android.graphics.Typeface.BOLD);
+            chip.setPadding(dpToPx(9), dpToPx(3.5f), dpToPx(9), dpToPx(3.5f));
             GradientDrawable cBg = new GradientDrawable();
-            cBg.setCornerRadius(dpToPx(14));
-            cBg.setColor(Color.parseColor("#1800F2FF"));
-            cBg.setStroke(dpToPx(0.8f), Color.parseColor("#4400F2FF"));
+            cBg.setCornerRadius(dpToPx(12));
+            cBg.setColor(Color.parseColor("#1F00F2FF"));
+            cBg.setStroke(dpToPx(0.8f), Color.parseColor("#5500F2FF"));
             chip.setBackground(cBg);
             LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            cLp.setMarginEnd(dpToPx(7));
+            cLp.setMarginEnd(dpToPx(6));
             chip.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                 stopAuroraVoiceListening();
                 stopAuroraTts();
-                executeAuroraScreenQuery(chipData[1]);
+                if ("__VISION_SCAN__".equals(chipData[1])) {
+                    executeTopIslandVisionScan("Analyze this screen image carefully. Solve any questions, explain images/charts/memes, and summarize key visual details concisely.");
+                } else if ("__NOTIF_DIGEST__".equals(chipData[1])) {
+                    executeTopIslandNotificationDigest();
+                } else {
+                    executeAuroraScreenQuery(chipData[1]);
+                }
             });
             chipsRow.addView(chip, cLp);
         }
         chipsScroll.addView(chipsRow);
-        hudCapsule.addView(chipsScroll);
+        topIslandBodyBay.addView(chipsScroll);
 
-        FrameLayout.LayoutParams hudParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+        topIslandCard.addView(topIslandBodyBay);
+
+        FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
+                dpToPx(312),
+                dpToPx(42)
         );
-        hudParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        hudParams.setMargins(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(34));
-        auroraOverlayRoot.addView(hudCapsule, hudParams);
+        cardLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        auroraOverlayRoot.addView(topIslandCard, cardLp);
 
         auroraParams = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
                         : WindowManager.LayoutParams.TYPE_PHONE,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT
         );
-        auroraParams.gravity = Gravity.TOP | Gravity.START;
+        auroraParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        auroraParams.x = 0;
+        auroraParams.y = 0;
+        // Critical for rendering directly inside the top status bar / camera punch-hole cutout area!
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            auroraParams.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            auroraParams.setFitInsetsTypes(0);
+        }
     }
 
     public void showAuroraScreenOverlay() {
         if (isScreenLocked(service)) return;
-        // Snapshot the current screen immediately before showing overlay
+        // Snapshot the current screen immediately before showing the Top Bar Island
         lastAuroraScreenContext = extractScreenContext();
         lastAuroraDraftReply = "";
         auroraFollowupCount = 0;
         auroraModeState = 0;
+        updateTopIslandBorderStyle();
 
         String appDisplay = (lastAuroraScreenContext != null && lastAuroraScreenContext.appName != null && !lastAuroraScreenContext.appName.isEmpty())
                 ? lastAuroraScreenContext.appName
-                : "Current Screen";
+                : "Screen";
         if (auroraStatusBadge != null) {
-            auroraStatusBadge.setText("✦ IRIS AURORA • Listening (" + appDisplay + ")");
+            auroraStatusBadge.setText("LISTENING");
         }
         if (auroraUserTranscriptView != null) {
-            auroraUserTranscriptView.setText("Listening... Ask anything about " + appDisplay + " or tell me what to reply.");
+            auroraUserTranscriptView.setText("Listening on " + appDisplay + "...");
+            auroraUserTranscriptView.setTextColor(Color.WHITE);
+            auroraUserTranscriptView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
         }
         if (auroraAiResponseView != null) {
             auroraAiResponseView.setText("");
@@ -2414,20 +2600,22 @@ public class IrisFloatingCopilot {
         }
         if (!isAuroraAttached && auroraOverlayRoot != null) {
             try {
-                auroraOverlayRoot.setAlpha(0f);
+                auroraOverlayRoot.setAlpha(1f);
                 windowManager.addView(auroraOverlayRoot, auroraParams);
                 isAuroraAttached = true;
-                auroraOverlayRoot.animate().alpha(1f).setDuration(180).start();
             } catch (Exception e) {
-                Log.e(TAG, "Failed to attach Aurora screen overlay", e);
+                Log.e(TAG, "Failed to attach Top Bar Island overlay", e);
             }
         }
+        // Spring open the Top Bar Island right over the status bar / punch-hole camera!
+        morphTopIslandToState(true, true);
         startAuroraVoiceListening(false);
     }
 
     public void hideAuroraScreenOverlay() {
         stopAuroraVoiceListening();
         stopAuroraTts();
+        stopTopIslandSpring();
         if (isAuroraAttached && auroraOverlayRoot != null) {
             try {
                 windowManager.removeView(auroraOverlayRoot);
@@ -2457,6 +2645,8 @@ public class IrisFloatingCopilot {
                     @Override
                     public void onReadyForSpeech(Bundle params) {
                         auroraModeState = 0;
+                        updateTopIslandBorderStyle();
+                        if (auroraStatusBadge != null) auroraStatusBadge.setText("LISTENING");
                         if (auroraMicButton != null) auroraMicButton.setText("🔴");
                     }
 
@@ -2484,7 +2674,7 @@ public class IrisFloatingCopilot {
                         isAuroraListening = false;
                         if (auroraMicButton != null) auroraMicButton.setText("🎙️");
                         if (auroraStatusBadge != null) {
-                            auroraStatusBadge.setText("✦ IRIS AURORA • Tap 🎙️ or a chip below");
+                            auroraStatusBadge.setText("TAP 🎙️");
                         }
                     }
 
@@ -2508,7 +2698,8 @@ public class IrisFloatingCopilot {
                         if (partials != null && !partials.isEmpty() && partials.get(0) != null) {
                             String p = partials.get(0).trim();
                             if (!p.isEmpty() && auroraUserTranscriptView != null) {
-                                auroraUserTranscriptView.setText("“" + p + "”");
+                                auroraUserTranscriptView.setText(p);
+                                morphTopIslandToState(true, false);
                             }
                         }
                     }
@@ -2524,6 +2715,7 @@ public class IrisFloatingCopilot {
             intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
             isAuroraListening = true;
             auroraModeState = 0;
+            updateTopIslandBorderStyle();
             if (auroraMicButton != null) auroraMicButton.setText("🔴");
             auroraSpeechRecognizer.startListening(intent);
         } catch (Exception e) {
@@ -2532,19 +2724,481 @@ public class IrisFloatingCopilot {
         }
     }
 
+    private final Runnable clipboardPortalAutoCloseRunnable = () -> {
+        if (isAuroraAttached && !isAuroraListening && auroraModeState == 3) {
+            hideAuroraScreenOverlay();
+        }
+    };
+
+    // SUPERPOWER 6: Context-Chained Clipboard Super-Portal in the Top Bar Island
+    public void showClipboardSuperPortal(String copiedText) {
+        if (isScreenLocked(service) || isForegroundIrisHome() || copiedText == null || copiedText.trim().isEmpty()) return;
+        mainHandler.removeCallbacks(clipboardPortalAutoCloseRunnable);
+        lastAuroraScreenContext = extractScreenContext();
+        auroraFollowupCount = 0;
+        auroraModeState = 3;
+        updateTopIslandBorderStyle();
+
+        String preview = copiedText.replaceAll("\\s+", " ").trim();
+        if (preview.length() > 54) preview = preview.substring(0, 54) + "…";
+
+        boolean looksLikeCode = copiedText.contains("{") || copiedText.contains("function ") || copiedText.contains("Exception") || copiedText.contains("error:");
+        boolean looksLikeSchedule = copiedText.matches("(?i).*\\b(tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|meeting|deadline|\\d{1,2}:\\d{2}|\\d{1,2}\\s*(am|pm))\\b.*");
+        String suggestedActionHint = looksLikeCode ? "Tap 🎙️ or a chip to debug/explain copied code"
+                : looksLikeSchedule ? "Tap 🎙️ or '📝 Save Note' to save schedule/task"
+                : "Tap 🎙️ or a chip below to summarize, translate, or reply";
+
+        if (auroraStatusBadge != null) {
+            auroraStatusBadge.setText("📋 COPIED");
+        }
+        if (auroraUserTranscriptView != null) {
+            auroraUserTranscriptView.setText("📋 “" + preview + "”");
+            auroraUserTranscriptView.setTextColor(Color.WHITE);
+            auroraUserTranscriptView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+        }
+        if (auroraAiResponseView != null) {
+            auroraAiResponseView.setVisibility(View.VISIBLE);
+            auroraAiResponseView.setText(suggestedActionHint);
+        }
+        if (auroraInjectButton != null) {
+            auroraInjectButton.setVisibility(View.GONE);
+        }
+
+        if (auroraOverlayRoot != null && isAuroraAttached && !auroraOverlayRoot.isAttachedToWindow()) {
+            isAuroraAttached = false;
+        }
+        if (!isAuroraAttached && auroraOverlayRoot != null) {
+            try {
+                auroraOverlayRoot.setAlpha(1f);
+                windowManager.addView(auroraOverlayRoot, auroraParams);
+                isAuroraAttached = true;
+            } catch (Exception ignored) {}
+        }
+        morphTopIslandToState(true, true);
+        mainHandler.postDelayed(clipboardPortalAutoCloseRunnable, 4800L);
+    }
+
+    // SUPERPOWER 4: Per-Contact Relationship Memory & Writing Style Dossier
+    private void updateContactDossier(String partnerName, String writingDna, List<String> activeTopicTurns) {
+        if (partnerName == null || partnerName.trim().isEmpty()) return;
+        String cleanPartner = partnerName.trim();
+        if (cleanPartner.length() < 2 || cleanPartner.equalsIgnoreCase("Unknown")) return;
+        try {
+            SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            JSONObject allDossiers = new JSONObject(prefs.getString(KEY_CONTACT_DOSSIERS, "{}"));
+            JSONObject dossier = allDossiers.optJSONObject(cleanPartner);
+            if (dossier == null) dossier = new JSONObject();
+
+            if (writingDna != null && !writingDna.isEmpty()) {
+                dossier.put("writingDna", writingDna);
+            }
+            if (activeTopicTurns != null && !activeTopicTurns.isEmpty()) {
+                String lastTurn = activeTopicTurns.get(activeTopicTurns.size() - 1);
+                if (lastTurn != null && lastTurn.length() > 3) {
+                    dossier.put("lastTopic", lastTurn.length() > 140 ? lastTurn.substring(0, 140) : lastTurn);
+                }
+            }
+            dossier.put("updatedAt", System.currentTimeMillis());
+            allDossiers.put(cleanPartner, dossier);
+            prefs.edit().putString(KEY_CONTACT_DOSSIERS, allDossiers.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
+    private String loadContactDossierBlock(String partnerName) {
+        if (partnerName == null || partnerName.trim().isEmpty()) return "";
+        try {
+            SharedPreferences prefs = service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            JSONObject allDossiers = new JSONObject(prefs.getString(KEY_CONTACT_DOSSIERS, "{}"));
+            JSONObject dossier = allDossiers.optJSONObject(partnerName.trim());
+            if (dossier == null) return "";
+            StringBuilder sb = new StringBuilder("\n[PER-CONTACT RELATIONSHIP DOSSIER FOR ").append(partnerName.trim()).append("]:\n");
+            String dna = dossier.optString("writingDna", "");
+            String lastTopic = dossier.optString("lastTopic", "");
+            if (!dna.isEmpty()) sb.append("- Your Learned Texting Style with ").append(partnerName.trim()).append(": ").append(dna).append("\n");
+            if (!lastTopic.isEmpty()) sb.append("- Previous Remembered Chat Context: ").append(lastTopic).append("\n");
+            return sb.toString();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    // SUPERPOWER 2: Live Visual Screen Capture ("Snapshot to Ask" with Gemini Multimodal Vision in Top Bar Island)
+    public void executeTopIslandVisionScan(final String visionQuestion) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            if (auroraAiResponseView != null) {
+                auroraAiResponseView.setVisibility(View.VISIBLE);
+                auroraAiResponseView.setText("Live Vision requires Android 11+.");
+            }
+            return;
+        }
+        mainHandler.removeCallbacks(clipboardPortalAutoCloseRunnable);
+        auroraModeState = 1;
+        updateTopIslandBorderStyle();
+        if (auroraStatusBadge != null) auroraStatusBadge.setText("📸 VISION");
+        if (auroraUserTranscriptView != null) {
+            auroraUserTranscriptView.setText("📸 Visual Screen Snapshot");
+            auroraUserTranscriptView.setTextColor(Color.parseColor("#88FFFFFF"));
+            auroraUserTranscriptView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        }
+        if (auroraAiResponseView != null) {
+            auroraAiResponseView.setVisibility(View.VISIBLE);
+            auroraAiResponseView.setText("Capturing live pixels & analyzing with Gemini Vision...");
+        }
+        morphTopIslandToState(true, false);
+
+        // Briefly hide Top Island for 90ms so screenshot captures only the clean app underneath
+        if (auroraOverlayRoot != null) auroraOverlayRoot.setVisibility(View.INVISIBLE);
+
+        mainHandler.postDelayed(() -> {
+            try {
+                service.takeScreenshot(Display.DEFAULT_DISPLAY, executor, new AccessibilityService.TakeScreenshotCallback() {
+                    @Override
+                    public void onSuccess(AccessibilityService.ScreenshotResult screenshot) {
+                        mainHandler.post(() -> {
+                            if (auroraOverlayRoot != null) auroraOverlayRoot.setVisibility(View.VISIBLE);
+                        });
+                        try {
+                            HardwareBuffer hb = screenshot.getHardwareBuffer();
+                            Bitmap hwBitmap = Bitmap.wrapHardwareBuffer(hb, screenshot.getColorSpace());
+                            if (hwBitmap != null) {
+                                Bitmap swBitmap = hwBitmap.copy(Bitmap.Config.ARGB_8888, false);
+                                hwBitmap.recycle();
+                                hb.close();
+
+                                int maxW = 960;
+                                if (swBitmap.getWidth() > maxW) {
+                                    int newH = (int) ((float) swBitmap.getHeight() * maxW / swBitmap.getWidth());
+                                    Bitmap scaled = Bitmap.createScaledBitmap(swBitmap, maxW, newH, true);
+                                    swBitmap.recycle();
+                                    swBitmap = scaled;
+                                }
+                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                swBitmap.compress(Bitmap.CompressFormat.JPEG, 76, baos);
+                                swBitmap.recycle();
+                                String base64Jpeg = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+
+                                String prompt = (visionQuestion != null && !visionQuestion.isEmpty())
+                                        ? visionQuestion + " Answer concisely in 1 to 3 spoken sentences."
+                                        : "Analyze this screen image carefully. Solve any questions or problems shown, explain images/diagrams, and answer in 2 crisp sentences.";
+                                String resp = queryGeminiVision(prompt, base64Jpeg);
+                                final String cleanVisionOut = (resp != null ? resp : "")
+                                        .replaceAll("[*_#`]", "")
+                                        .trim();
+                                recordNativeMemoryAndTurn("[Vision Scan] " + (visionQuestion != null ? visionQuestion : "Analyze screen"), cleanVisionOut);
+                                mainHandler.post(() -> {
+                                    if (!isAuroraAttached) return;
+                                    if (auroraAiResponseView != null) {
+                                        auroraAiResponseView.setVisibility(View.VISIBLE);
+                                        auroraAiResponseView.setText(cleanVisionOut.isEmpty() ? "No visual details detected." : cleanVisionOut);
+                                    }
+                                    morphTopIslandToState(true, false);
+                                    speakAuroraText(cleanVisionOut, "AURORA_VISION_" + System.currentTimeMillis());
+                                });
+                            }
+                        } catch (Exception e) {
+                            mainHandler.post(() -> {
+                                if (auroraAiResponseView != null) {
+                                    auroraAiResponseView.setVisibility(View.VISIBLE);
+                                    auroraAiResponseView.setText("Vision error: " + e.getMessage());
+                                }
+                                morphTopIslandToState(true, false);
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(int errorCode) {
+                        mainHandler.post(() -> {
+                            if (auroraOverlayRoot != null) auroraOverlayRoot.setVisibility(View.VISIBLE);
+                            if (auroraAiResponseView != null) {
+                                auroraAiResponseView.setVisibility(View.VISIBLE);
+                                auroraAiResponseView.setText("Screenshot throttled by OS — try again in 1 second.");
+                            }
+                            morphTopIslandToState(true, false);
+                        });
+                    }
+                });
+            } catch (Exception e) {
+                if (auroraOverlayRoot != null) auroraOverlayRoot.setVisibility(View.VISIBLE);
+            }
+        }, 95L);
+    }
+
+    // SUPERPOWER 3: Cross-App Notification Brain ("Catch Me Up" Priority Digest)
+    public void executeTopIslandNotificationDigest() {
+        mainHandler.removeCallbacks(clipboardPortalAutoCloseRunnable);
+        auroraModeState = 1;
+        updateTopIslandBorderStyle();
+        if (auroraStatusBadge != null) auroraStatusBadge.setText("🔔 DIGEST");
+        if (auroraUserTranscriptView != null) {
+            auroraUserTranscriptView.setText("🔔 Catch Me Up — Unread Notifications");
+            auroraUserTranscriptView.setTextColor(Color.parseColor("#88FFFFFF"));
+            auroraUserTranscriptView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        }
+        if (auroraAiResponseView != null) {
+            auroraAiResponseView.setVisibility(View.VISIBLE);
+            auroraAiResponseView.setText("Scanning notifications across apps...");
+        }
+        morphTopIslandToState(true, false);
+
+        executor.execute(() -> {
+            try {
+                IrisNotificationListenerService notifSvc = IrisNotificationListenerService.getInstance();
+                org.json.JSONArray notifArr = notifSvc != null ? notifSvc.getActiveNotificationsJson() : null;
+                if (notifArr == null || notifArr.length() == 0) {
+                    final String emptyMsg = "You're all caught up — zero unread notifications.";
+                    mainHandler.post(() -> {
+                        if (!isAuroraAttached) return;
+                        auroraModeState = 3;
+                        updateTopIslandBorderStyle();
+                        if (auroraAiResponseView != null) {
+                            auroraAiResponseView.setVisibility(View.VISIBLE);
+                            auroraAiResponseView.setText(emptyMsg);
+                        }
+                        morphTopIslandToState(true, false);
+                        speakAuroraText(emptyMsg, "AURORA_NOTIF_" + System.currentTimeMillis());
+                    });
+                    return;
+                }
+
+                StringBuilder notifBlock = new StringBuilder();
+                int count = Math.min(12, notifArr.length());
+                for (int i = 0; i < count; i++) {
+                    JSONObject n = notifArr.optJSONObject(i);
+                    if (n == null) continue;
+                    String pkg = n.optString("packageId", n.optString("packageName", ""));
+                    if (pkg.equals(service.getPackageName()) || pkg.contains("systemui")) continue;
+                    String app = n.optString("appName", resolveAppLabel(pkg));
+                    String title = n.optString("title", "");
+                    String text = n.optString("text", "");
+                    if (!title.isEmpty() || !text.isEmpty()) {
+                        notifBlock.append("- [").append(app).append("] ").append(title).append(": ").append(text).append("\n");
+                    }
+                }
+
+                if (notifBlock.length() == 0) {
+                    final String cleanMsg = "You're all caught up — no important unread messages.";
+                    mainHandler.post(() -> {
+                        if (auroraAiResponseView != null) auroraAiResponseView.setText(cleanMsg);
+                        morphTopIslandToState(true, false);
+                        speakAuroraText(cleanMsg, "AURORA_NOTIF_" + System.currentTimeMillis());
+                    });
+                    return;
+                }
+
+                String sysPrompt = "You are IRIS Notification Brain. Group and summarize the user's unread notifications by priority in 2 crisp spoken sentences (messages from people first, then deliveries/alerts). No markdown symbols.";
+                String rawDigest = queryLLMDirect(sysPrompt, "[UNREAD NOTIFICATIONS]:\n" + notifBlock, "Catch me up on my notifications");
+                final String cleanDigest = rawDigest.replaceAll("[*_#`]", "").trim();
+
+                mainHandler.post(() -> {
+                    if (!isAuroraAttached) return;
+                    if (auroraAiResponseView != null) {
+                        auroraAiResponseView.setVisibility(View.VISIBLE);
+                        auroraAiResponseView.setText(cleanDigest);
+                    }
+                    morphTopIslandToState(true, false);
+                    speakAuroraText(cleanDigest, "AURORA_NOTIF_" + System.currentTimeMillis());
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    if (auroraAiResponseView != null) auroraAiResponseView.setText("Could not summarize notifications: " + e.getMessage());
+                    morphTopIslandToState(true, false);
+                });
+            }
+        });
+    }
+
+    // SUPERPOWER 1: Autonomous Multi-Step UI Action Agent ("Do It For Me" Mode)
+    public boolean tryExecuteAutonomousAgentCommand(final String cleanInput) {
+        if (cleanInput == null) return false;
+
+        // Pattern A: "Message <Name> on WhatsApp saying <Message>" / "WhatsApp <Name> that <Message>" / "Send a WhatsApp to <Name> <Message>"
+        Matcher waMatcher = Pattern.compile(
+                "(?i)^(?:send\\s+(?:a\\s+)?(?:whatsapp|message)\\s+to|message|whatsapp|text)\\s+([A-Za-z0-9_\\s]{2,28}?)\\s+(?:on\\s+whatsapp\\s+)?(?:saying|that|with|:)\\s+(.+)$"
+        ).matcher(cleanInput.trim());
+        if (waMatcher.find()) {
+            final String targetContact = waMatcher.group(1).trim();
+            final String messageBody = waMatcher.group(2).trim();
+            final boolean autoSend = cleanInput.toLowerCase().contains("and send");
+            runAutonomousWhatsAppFlow(targetContact, messageBody, autoSend);
+            return true;
+        }
+
+        // Pattern B: "Search YouTube for <Query>" / "Play <Query> on YouTube"
+        Matcher ytMatcher = Pattern.compile(
+                "(?i)^(?:search\\s+youtube\\s+for|play\\s+on\\s+youtube|open\\s+youtube\\s+and\\s+(?:search|play))\\s+(.+)$|^play\\s+(.+?)\\s+on\\s+youtube$"
+        ).matcher(cleanInput.trim());
+        if (ytMatcher.find()) {
+            String q = ytMatcher.group(1) != null ? ytMatcher.group(1).trim() : ytMatcher.group(2).trim();
+            runAutonomousYouTubeFlow(q);
+            return true;
+        }
+
+        // Pattern C: "Navigate to <Place>" / "Directions to <Place>"
+        Matcher mapMatcher = Pattern.compile("(?i)^(?:navigate\\s+to|get\\s+directions\\s+to|directions\\s+to|take\\s+me\\s+to)\\s+(.+)$").matcher(cleanInput.trim());
+        if (mapMatcher.find()) {
+            String place = mapMatcher.group(1).trim();
+            try {
+                Intent mapIntent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=" + URLEncoder.encode(place, "UTF-8")));
+                mapIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                service.startActivity(mapIntent);
+                String msg = "Starting Google Maps navigation to " + place + ".";
+                if (auroraAiResponseView != null) {
+                    auroraAiResponseView.setVisibility(View.VISIBLE);
+                    auroraAiResponseView.setText("⚡ " + msg);
+                }
+                morphTopIslandToState(true, false);
+                speakAuroraText(msg, "AURORA_NAV");
+                return true;
+            } catch (Exception ignored) {}
+        }
+
+        return false;
+    }
+
+    private void runAutonomousYouTubeFlow(final String query) {
+        try {
+            if (auroraStatusBadge != null) auroraStatusBadge.setText("⚡ AGENT 1/2");
+            if (auroraAiResponseView != null) {
+                auroraAiResponseView.setVisibility(View.VISIBLE);
+                auroraAiResponseView.setText("⚡ Step 1/2: Searching YouTube for “" + query + "”...");
+            }
+            morphTopIslandToState(true, false);
+
+            Intent intent = new Intent(Intent.ACTION_SEARCH);
+            intent.setPackage("com.google.android.youtube");
+            intent.putExtra("query", query);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            service.startActivity(intent);
+
+            mainHandler.postDelayed(() -> {
+                if (auroraStatusBadge != null) auroraStatusBadge.setText("⚡ AGENT 2/2");
+                if (auroraAiResponseView != null) {
+                    auroraAiResponseView.setText("✓ Opened YouTube search results for “" + query + "”.");
+                }
+                morphTopIslandToState(true, false);
+                speakAuroraText("Here are the YouTube results for " + query + ".", "AURORA_YT");
+            }, 1400L);
+        } catch (Exception e) {
+            if (auroraAiResponseView != null) auroraAiResponseView.setText("Could not launch YouTube: " + e.getMessage());
+        }
+    }
+
+    private void runAutonomousWhatsAppFlow(final String contactName, final String messageBody, final boolean autoSend) {
+        if (auroraStatusBadge != null) auroraStatusBadge.setText("⚡ STEP 1/3");
+        if (auroraAiResponseView != null) {
+            auroraAiResponseView.setVisibility(View.VISIBLE);
+            auroraAiResponseView.setText("⚡ Step 1/3: Opening WhatsApp for " + contactName + "...");
+        }
+        morphTopIslandToState(true, false);
+
+        try {
+            PackageManager pm = service.getPackageManager();
+            Intent waIntent = pm.getLaunchIntentForPackage("com.whatsapp");
+            if (waIntent != null) {
+                waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                service.startActivity(waIntent);
+            }
+        } catch (Exception ignored) {}
+
+        // Step 2: Locate contact row or tap Search and type contactName
+        mainHandler.postDelayed(() -> {
+            if (auroraStatusBadge != null) auroraStatusBadge.setText("⚡ STEP 2/3");
+            if (auroraAiResponseView != null) {
+                auroraAiResponseView.setText("⚡ Step 2/3: Locating chat with " + contactName + "...");
+            }
+            morphTopIslandToState(true, false);
+
+            boolean clickedDirect = clickNodeMatchingText(contactName);
+            if (!clickedDirect) {
+                // Click Search icon/bar and type contactName
+                clickNodeMatchingText("Search");
+                mainHandler.postDelayed(() -> {
+                    injectText(contactName);
+                    mainHandler.postDelayed(() -> {
+                        clickNodeMatchingText(contactName);
+                    }, 750L);
+                }, 450L);
+            }
+
+            // Step 3: Inject message into chat input box
+            mainHandler.postDelayed(() -> {
+                if (auroraStatusBadge != null) auroraStatusBadge.setText("⚡ STEP 3/3");
+                lastAuroraDraftReply = messageBody;
+                boolean injected = injectText(messageBody);
+                copyToClipboard(messageBody);
+                if (autoSend && injected) {
+                    clickNodeMatchingText("Send");
+                }
+                String doneMsg = injected
+                        ? ("✓ Typed message to " + contactName + ": “" + messageBody + "”")
+                        : ("📋 Copied message for " + contactName + " — tap input box to paste.");
+                if (auroraAiResponseView != null) {
+                    auroraAiResponseView.setText(doneMsg);
+                }
+                if (auroraInjectButton != null) {
+                    auroraInjectButton.setVisibility(View.VISIBLE);
+                }
+                morphTopIslandToState(true, false);
+                speakAuroraText("Message ready for " + contactName + ".", "AURORA_WA_DONE");
+            }, clickedDirect ? 950L : 2100L);
+        }, 1050L);
+    }
+
+    private boolean clickNodeMatchingText(String queryText) {
+        if (queryText == null || queryText.trim().isEmpty()) return false;
+        try {
+            AccessibilityNodeInfo root = service.getRootInActiveWindow();
+            if (root == null) return false;
+            List<AccessibilityNodeInfo> matches = root.findAccessibilityNodeInfosByText(queryText.trim());
+            if (matches != null) {
+                for (AccessibilityNodeInfo node : matches) {
+                    if (node == null || !node.isVisibleToUser()) continue;
+                    if (node.isEditable()) continue;
+                    AccessibilityNodeInfo curr = node;
+                    for (int depth = 0; depth < 5 && curr != null; depth++) {
+                        if (curr.isClickable()) {
+                            return curr.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        }
+                        curr = curr.getParent();
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
     private void executeAuroraScreenQuery(final String userSpokenText) {
         if (userSpokenText == null || userSpokenText.trim().isEmpty()) return;
+        mainHandler.removeCallbacks(clipboardPortalAutoCloseRunnable);
         final String cleanInput = userSpokenText.trim();
 
         // Check for conversational exit commands
         if (cleanInput.matches("(?i)^(?:stop|close|exit|cancel|bye|goodbye|thank\\s+you|thanks\\s+bye|that'?s\\s+all|done|nothing\\s+else)[.!]?$")) {
-            if (auroraUserTranscriptView != null) auroraUserTranscriptView.setText("“" + cleanInput + "”");
+            if (auroraUserTranscriptView != null) auroraUserTranscriptView.setText(cleanInput);
             if (auroraAiResponseView != null) {
                 auroraAiResponseView.setVisibility(View.VISIBLE);
-                auroraAiResponseView.setText("Anytime. Closing Aurora.");
+                auroraAiResponseView.setText("Goodbye.");
             }
-            speakAuroraText("Anytime.", "AURORA_GOODBYE");
-            mainHandler.postDelayed(this::hideAuroraScreenOverlay, 1100L);
+            morphTopIslandToState(true, false);
+            speakAuroraText("Goodbye.", "AURORA_GOODBYE");
+            mainHandler.postDelayed(this::hideAuroraScreenOverlay, 950L);
+            return;
+        }
+
+        // SUPERPOWER 1: Check for Autonomous Multi-Step UI Action commands ("Message X on WhatsApp...", "Search YouTube for...", "Navigate to...")
+        if (tryExecuteAutonomousAgentCommand(cleanInput)) {
+            return;
+        }
+
+        // SUPERPOWER 2: Check for Live Visual Screen Capture voice triggers ("Look at this image/photo", "Solve this screenshot/picture")
+        if (cleanInput.matches("(?i).*(?:\\blook\\s+at\\s+this\\b|\\bin\\s+this\\s+(?:image|photo|picture|screenshot|reel|video|chart|meme)\\b|\\bsolve\\s+this\\s+(?:image|photo|question)\\b|\\bvision\\s+scan\\b).*")) {
+            executeTopIslandVisionScan(cleanInput);
+            return;
+        }
+
+        // SUPERPOWER 3: Check for Cross-App Notification Brain voice triggers ("What did I miss?", "Catch me up", "Read my notifications")
+        if (cleanInput.matches("(?i).*(?:\\bwhat\\s+did\\s+i\\s+miss\\b|\\bcatch\\s+me\\s+up\\b|\\bsummarize\\s+(?:my\\s+)?notifications\\b|\\bunread\\s+notifications\\b).*")) {
+            executeTopIslandNotificationDigest();
             return;
         }
 
@@ -2555,17 +3209,27 @@ public class IrisFloatingCopilot {
         }
         final ScreenContextData ctx = lastAuroraScreenContext != null ? lastAuroraScreenContext : new ScreenContextData();
 
-        auroraModeState = 1; // THINKING (fast swirling aurora)
+        // SUPERPOWER 4: Update & Load Per-Contact Relationship Dossier
+        if (ctx.partnerName != null && !ctx.partnerName.isEmpty()) {
+            updateContactDossier(ctx.partnerName, ctx.detectedWritingDna, ctx.activeCurrentTopic);
+        }
+        final String contactDossierBlock = loadContactDossierBlock(ctx.partnerName);
+
+        auroraModeState = 1; // THINKING
+        updateTopIslandBorderStyle();
         if (auroraUserTranscriptView != null) {
-            auroraUserTranscriptView.setText("“" + cleanInput + "”");
+            auroraUserTranscriptView.setText(cleanInput);
+            auroraUserTranscriptView.setTextColor(Color.parseColor("#88FFFFFF"));
+            auroraUserTranscriptView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
         }
         if (auroraStatusBadge != null) {
-            auroraStatusBadge.setText("✦ IRIS AURORA • Reading " + (ctx.appName != null && !ctx.appName.isEmpty() ? ctx.appName : "Screen") + " & Thinking...");
+            auroraStatusBadge.setText("THINKING");
         }
         if (auroraAiResponseView != null) {
             auroraAiResponseView.setVisibility(View.VISIBLE);
-            auroraAiResponseView.setText("Analyzing live screen context...");
+            auroraAiResponseView.setText("Reading " + (ctx.appName != null && !ctx.appName.isEmpty() ? ctx.appName : "screen") + "...");
         }
+        morphTopIslandToState(true, false);
 
         executor.execute(() -> {
             try {
@@ -2595,14 +3259,19 @@ public class IrisFloatingCopilot {
                     }
                 }
 
-                String auroraSysPrompt = "You are IRIS Aurora, the native in-app screen-reading voice AI assistant running directly on top of the user's active Android app.\n"
+                String clipboardBlock = (!latestExternalClipboard.isEmpty())
+                        ? ("\n[RECENTLY COPIED CLIPBOARD TEXT]:\n" + (latestExternalClipboard.length() > 500 ? latestExternalClipboard.substring(0, 500) : latestExternalClipboard) + "\n")
+                        : "";
+
+                String auroraSysPrompt = "You are IRIS, the native Android Top-Bar Dynamic Island AI assistant running directly at the top of the user's active screen.\n"
+                        + contactDossierBlock
                         + "RULES:\n"
                         + "1. Read the [LIVE SCREEN CONTEXT] carefully to answer the user's question about what is on their screen, what the other person is saying, or what they should do.\n"
-                        + "2. Keep your spoken answer natural, warm, and concise (1 to 3 spoken sentences, no markdown asterisks or hashtags).\n"
-                        + "3. DIRECT IN-APP REPLY INJECTION: Whenever the user asks you to reply, draft a message, tell the chat partner something, or what to say back, write the exact 1st-person message (as 'I'/'me') inside [[INJECT_REPLY: <exact message text to send>]] at the end of your response so IRIS can insert it directly into the app's typing bar.\n"
-                        + "4. CONTINUITY & MEMORY: Maintain full continuity with the previous conversation turns and Long-Term Memory Vault. If the user shares a personal fact or asks you to remember something, append [[MEMORY: <concise fact>]] at the end.";
+                        + "2. Keep your spoken answer natural, warm, and concise (1 to 2 crisp sentences, no markdown asterisks or hashtags) so it fits cleanly in the Top Bar Island.\n"
+                        + "3. DIRECT IN-APP REPLY INJECTION: Whenever the user asks you to reply, draft a message, tell the chat partner something, or what to say back, match the user's learned writing style from [PER-CONTACT RELATIONSHIP DOSSIER] and write the exact 1st-person message (as 'I'/'me') inside [[INJECT_REPLY: <exact message text to send>]] at the end of your response.\n"
+                        + "4. CONTINUITY & MEMORY: Maintain full continuity with the previous conversation turns and Long-Term Memory Vault. If the user shares a personal fact, note, or deadline, or asks you to remember/save something, append [[MEMORY: <concise fact>]] at the end.";
 
-                String fullUserPrompt = "[LIVE SCREEN CONTEXT]:\n" + screenBlock + "\n[USER SPOKEN REQUEST]:\n" + cleanInput;
+                String fullUserPrompt = "[LIVE SCREEN CONTEXT]:\n" + screenBlock + clipboardBlock + "\n[USER SPOKEN REQUEST]:\n" + cleanInput;
                 String rawReply = queryLLMDirect(auroraSysPrompt, fullUserPrompt, cleanInput);
 
                 // Extract [[INJECT_REPLY: ...]] if present
@@ -2636,7 +3305,7 @@ public class IrisFloatingCopilot {
                             boolean injected = injectText(finalDraft);
                             copyToClipboard(finalDraft);
                             if (injected && auroraStatusBadge != null) {
-                                auroraStatusBadge.setText("✦ IRIS AURORA • Reply Inserted into " + (ctx.appName != null ? ctx.appName : "App"));
+                                auroraStatusBadge.setText("INSERTED");
                             }
                         }
                     } else if (userAskedToReply && !displayOut.isEmpty()) {
@@ -2645,19 +3314,23 @@ public class IrisFloatingCopilot {
                             auroraInjectButton.setVisibility(View.VISIBLE);
                         }
                     }
+                    // Spring-morph the Top Bar Island height to fit the AI answer!
+                    morphTopIslandToState(true, false);
                     speakAuroraText(displayOut, "AURORA_TURN_" + System.currentTimeMillis());
                 });
             } catch (Exception e) {
                 mainHandler.post(() -> {
                     if (!isAuroraAttached) return;
                     auroraModeState = 3;
+                    updateTopIslandBorderStyle();
                     if (auroraStatusBadge != null) {
-                        auroraStatusBadge.setText("✦ IRIS AURORA • Ready");
+                        auroraStatusBadge.setText("ERROR");
                     }
                     if (auroraAiResponseView != null) {
                         auroraAiResponseView.setVisibility(View.VISIBLE);
                         auroraAiResponseView.setText("Error: " + e.getMessage());
                     }
+                    morphTopIslandToState(true, false);
                 });
             }
         });
@@ -3526,16 +4199,41 @@ public class IrisFloatingCopilot {
         if (geminiKey.isEmpty()) {
             throw new Exception("Vision Scan requires a Gemini API key in IRIS Settings");
         }
-        String modelId = sanitizeNativeGeminiModel(prefs.getString(KEY_MODEL, "gemini-2.5-flash"));
-        if (modelId.toLowerCase().contains("gemma")) {
-            modelId = "gemini-2.5-flash";
+        String primaryModel = sanitizeNativeGeminiModel(prefs.getString(KEY_MODEL, "gemini-2.5-flash"));
+        if (primaryModel.toLowerCase().contains("gemma")) {
+            primaryModel = "gemini-2.5-flash";
         }
 
+        List<String> visionCandidates = new ArrayList<>();
+        visionCandidates.add(primaryModel);
+        for (String fb : new String[]{"gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-flash-lite-latest"}) {
+            if (!visionCandidates.contains(fb) && !isDiscontinuedNativeGeminiModel(fb)) {
+                visionCandidates.add(fb);
+            }
+        }
+
+        Exception lastErr = null;
+        for (String modelId : visionCandidates) {
+            try {
+                return callGeminiVisionModel(geminiKey.trim(), modelId, visionPrompt, base64Jpeg);
+            } catch (Exception err) {
+                lastErr = err;
+                markNativeModelDiscontinued(modelId, err.getMessage());
+            }
+        }
+        String discovered = discoverActiveGeminiModel(geminiKey.trim(), primaryModel);
+        if (discovered != null && !visionCandidates.contains(discovered)) {
+            return callGeminiVisionModel(geminiKey.trim(), discovered, visionPrompt, base64Jpeg);
+        }
+        throw lastErr != null ? lastErr : new Exception("Gemini Vision failed");
+    }
+
+    private String callGeminiVisionModel(String cleanKey, String modelId, String visionPrompt, String base64Jpeg) throws Exception {
         URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models/" + modelId + ":generateContent");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");
-        conn.setRequestProperty("x-goog-api-key", geminiKey.trim());
+        conn.setRequestProperty("x-goog-api-key", cleanKey);
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(18000);
         conn.setDoOutput(true);
